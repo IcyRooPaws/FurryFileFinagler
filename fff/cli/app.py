@@ -131,6 +131,25 @@ def _cmd_db_copy_data(args) -> int:
     return 0 if ok else 1
 
 
+def _cmd_db_rewrite_test_paths(args) -> int:
+    from fff.common import test_db_paths
+    from fff.common.logging import setup_logging
+
+    log_file = setup_logging("db", "INFO", name="rewrite_test_paths")
+    cfg = fff_config.load()
+    results = test_db_paths.rewrite(cfg, args.db, dry_run=args.dry_run)
+    total = sum(results.values())
+    for key, n in results.items():
+        if n:
+            print(f"  {n:>8}  {key}")
+    print(f"{'Would rewrite' if args.dry_run else 'Rewrote'} {total} stored paths. Log: {log_file}")
+    if not args.dry_run:
+        left = test_db_paths.remaining_prod_paths(cfg, args.db)
+        print("All stored paths now point at test locations." if not left else f"Still pointing at prod: {left}")
+        return 1 if left else 0
+    return 0
+
+
 def _cmd_doctor(args) -> int:
     from fff.cli import doctor
 
@@ -188,6 +207,15 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--yes", action="store_true", help="Don't ask for confirmation")
     p.add_argument("--verbose", action="store_true", help="Log SQL statements")
     p.set_defaults(func=_cmd_db_copy_data)
+    p = db_sub.add_parser(
+        "rewrite-test-paths",
+        help="Point file paths stored in the test_* databases at the test tree (E:/Testing/...)",
+        description="Rewrites every absolute path stored in the test_* databases with the same rule "
+                    "the test environment uses for folders (P:/IPL/x -> E:/Testing/P/IPL/x), so test "
+                    "runs never touch prod files. Run after 'fff db copy-data'. Production is untouched.")
+    p.add_argument("--db", nargs="+", choices=fff_config.MODULES, help="Only these modules (default: all three)")
+    p.add_argument("--dry-run", action="store_true", help="Count without changing anything")
+    p.set_defaults(func=_cmd_db_rewrite_test_paths)
 
     # e621 / fa / gui / web / legacy (ported e621 archive entry points)
     from fff.cli import archive_cmds

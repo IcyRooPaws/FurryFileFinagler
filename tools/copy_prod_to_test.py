@@ -96,8 +96,9 @@ def main(argv=None):
     cfg = fff_config.load()
     roots, total_configured = folder_pairs(cfg)
     if args.only:
-        wanted = {os.path.normcase(os.path.normpath(o)) for o in args.only}
-        roots = [r for r in roots if os.path.normcase(os.path.normpath(r[0])) in wanted]
+        # Any prod folder, including one inside a configured folder (e.g. P:/IPL/- Need to be Sorted)
+        test_cfg = fff_config.deep_merge(cfg, {"environment": "test"})
+        roots = [(o, fff_config.test_path(o, test_cfg), "--only") for o in args.only]
     print(f"{total_configured} configured folders -> {len(roots)} top-level folders to copy")
     print(f"Test root: {fff_config.test_paths_root(cfg)}\n")
 
