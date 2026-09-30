@@ -1,0 +1,91 @@
+# ============================================================
+# TAG-BASED SORTING (fff sort tags / fff sort pools / fff sort workflow)
+# ============================================================
+# Rules query e621_posts_db (filled by 'fff e621 sync') and move matching local files.
+# Copy to config/tag_sorting.yaml. The tag-sort GUI ('fff gui tag-sort-config') edits it for you.
+
+enabled: false
+
+# Sub-folder created under base_directories for rules that use folder_name ("split mode")
+tag_sort_subdirectory: Tag Sorted
+
+# Optional: base folders for split-mode rules, per media type
+# base_directories:
+#   pictures: D:/Media/Pictures
+#   videos: D:/Media/Videos
+#   gifs: D:/Media/Pictures/Gifs
+
+# e621_posts_db connection; null values fall back to the shared database settings
+e621_database:
+  host: null
+  port: null
+  user: null
+  password: null
+  database: e621_posts_db   # use test_e621_posts_db for testing
+
+# Rules run in order; a higher rule's destinations are excluded from later rules.
+#   needed_tags:   all must be present (AND)
+#   can_have_tags: at least one must be present (OR)
+#   exclude_tags:  none may be present
+#   tags + match_all: legacy form (match_all true = AND, false = OR)
+#   pool_ids:      sort a pool's posts (sort_group: pool)
+rules:
+  - rule_id: 00000000-0000-0000-0000-000000000001
+    needed_tags: [yoshi]
+    can_have_tags: []
+    exclude_tags: [mario]
+    tags: []
+    pool_ids: []
+    target_directory: D:/Media/- Fav/Characters/Yoshi
+    folder_name: ''
+    exclude_favorite_artists: true   # skip artists listed in sort_artists.yaml
+    only_fav_directory: false        # only look in the favorites folder
+    enabled: false
+    match_all: false
+    sort_group: character
+    append_media_type_label: false   # add " - Pics/Vids/Gifs" to split-mode folders
+    exclude_from_sync: false
+    sync_master: false
+    match_post_date: false           # set file dates from the post's created_at
+
+  - rule_id: 00000000-0000-0000-0000-000000000002
+    needed_tags: []
+    can_have_tags: []
+    exclude_tags: []
+    tags: []
+    pool_ids: [12345]
+    pool_names:
+      '12345': Example_Pool_Name
+    target_directory: D:/Media/- Fav/Comics/Example Pool
+    folder_name: ''
+    exclude_favorite_artists: true
+    only_fav_directory: false
+    enabled: false
+    match_all: false
+    sort_group: pool
+    append_media_type_label: false
+    exclude_from_sync: false
+    sync_master: false
+    match_post_date: true
+
+  - rule_id: 00000000-0000-0000-0000-000000000003
+    needed_tags: []
+    can_have_tags: [koopa, bowser]
+    exclude_tags: []
+    tags: []
+    pool_ids: []
+    target_directory: ''
+    folder_name: Koopas                # split mode: <base>/<tag_sort_subdirectory>/Koopas
+    exclude_favorite_artists: false
+    only_fav_directory: false
+    enabled: false
+    match_all: false
+    sort_group: character
+    append_media_type_label: true
+    exclude_from_sync: false
+    sync_master: false
+    match_post_date: false
+    sub_rules:                         # applied within the parent's matches
+      - needed_tags: [bowser_jr.]
+        sub_directory: Bowser Jr
+        enabled: false

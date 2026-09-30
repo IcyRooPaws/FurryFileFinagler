@@ -1,0 +1,23 @@
+# Union of reverse-image search, e621 archive and media sorter requirements.
+# py621 dropped: nothing imported it.
+PyYAML>=6.0
+requests>=2.31
+urllib3>=2.0
+mysql-connector-python>=9.0
+beautifulsoup4>=4.12
+Send2Trash>=1.8
+Flask>=3.0
+Pillow>=10.0
+ImageHash>=4.3
+numpy>=1.26
+scipy>=1.11
+PyWavelets>=1.5
+opencv-python>=4.8
+xxhash>=3.0
+colorama>=0.4
+
+# Optional: audio playback in the blacklist review GUI
+# pygame-ce>=2.4
+
+# Dev
+pytest>=8.0

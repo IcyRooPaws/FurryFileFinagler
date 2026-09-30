@@ -1,0 +1,325 @@
+# FurryFileFinagler example configuration. Copy to config.yaml and edit,
+# or run 'fff setup' to build config.yaml from the current features.
+# Regenerate this file from your config with 'fff config make-example --force'.
+# Secrets go in secrets.yaml (see secrets.example.yaml). Relative paths are
+# relative to the project root.
+
+database:
+  host: localhost
+  port: 3306
+  user: your_mysql_user
+databases:
+  fluffle: image_search
+  archive: e621_posts_db
+  sorter: image_sorting_hashes
+e621:
+  user_agent: YourAppName/1.0 (by your_e621_username)
+fluffle:
+  search:
+    image_directories:
+    - D:/Media/- Need to be Sorted/furaffinity
+    - D:/Media/Pictures/Bluesky
+    - C:/Users/you/Downloads/furaffinity
+    recursive_search: true
+    exclude_directories:
+    - thumbnails
+    - cache
+    - .git
+    - Drawings
+    - WPs
+    - Memes
+    - Nintendo
+    - Sort Me
+    preserve_directory_structure: false
+    not_found_directory: D:/Media/Pictures/- No Source
+    deleted_source_directory: D:/Work/reverse search Work/deleted_source
+    other_sourced_directory: D:/Media/Pictures/- Unsorted Pictures
+    other_sourced_backup_directory: D:/Work/reverse search Work/other_sourced_backup
+    move_not_found: true
+    replace_with_source: false
+    allow_reprocessing: true
+    ignore_filename_filter: true
+    max_results_per_image: 10
+    delay_between_searches: 2.0
+    save_json_responses: true
+    file_extensions:
+    - .jpg
+    - .jpeg
+    - .png
+    - .gif
+    - .webp
+  fuzzysearch:
+    enabled: true
+    distance: 3
+  e621:
+    auto_favorite: true
+    download_directory: D:/Media/- Need to be Sorted
+    source_found_directory: D:/Work/reverse search Work/e621_source_found
+    blacklisted_directory: D:/Work/reverse search Work/blacklisted
+    save_json_responses: true
+    blacklist:
+    - example_tag
+  furaffinity:
+    download_directory: D:/Media/- Need to be Sorted
+    source_found_directory: D:/Work/reverse search Work/fa_source_found
+    rename_search_directory: D:/Media
+archive:
+  e621:
+    favorites_username: your_e621_username
+    max_posts: all
+    verify_sources: false
+    save_api_responses: false
+    api_response_folder: data/archive/fav_response
+    deletion_check_batch_limit: 1000
+    api_page_limit: 320
+    bulk_processing_batch_size: 250
+    check_unfavorited_posts: true
+    delete_unfavorited_files: true
+    update_artist_filenames: true
+  download:
+    download_missing_files: true
+    check_sources: false
+    duplicates_directory: data/archive/duplicates
+    cache_directory: data/cache/archive
+    missing_files_directory: D:/Media/- Need to be Sorted
+    all_star_favs: D:/Media/- Fav
+    default: D:/Media/Pictures/- Unsorted Pictures
+    images:
+      safe: D:/Media/Pictures/- SFW Pics
+      explicit: D:/Media/Pictures/- NSFW Pics
+      questionable: D:/Media/Pictures/- NSFW Pics
+    videos:
+      safe: D:/Media/Videos
+      explicit: D:/Media/Videos/NSFW Videos
+      questionable: D:/Media/Videos/NSFW Videos
+    gifs:
+      safe: D:/Media/Pictures/Gifs/SFW Gifs
+      explicit: D:/Media/Pictures/Gifs/NSFW Gifs
+      questionable: D:/Media/Pictures/Gifs/NSFW Gifs
+    extra_search_dirs:
+    - D:/Media/Pictures/Gifs/- Unsorted Gifs
+    - D:/Media/Videos/- Unsorted Videos
+  db_export:
+    directory: data/db_exports
+    download_posts: false
+    download_tags: true
+    download_tag_aliases: true
+    download_tag_implications: true
+    keep_files: false
+    batch_size_posts: 500
+    batch_size_other: 1000
+    progress_interval: 50000
+  log:
+    directory: logs/archive
+  mysql:
+    table: posts
+    image_hash_db:
+      database: image_sorting_hashes
+      tables:
+      - favorites
+      - manual_sort_images
+      - manual_sort_videos
+      - sfw_image
+      - sfw_video
+      - sfw_gif
+      - nsfw_image
+      - nsfw_video
+      - nsfw_gif
+      - archive_explicit_images
+      - archive_explicit_videos
+      - archive_explicit_gifs
+      - archive_sfw_images
+      - archive_sfw_videos
+      - archive_sfw_gifs
+      - other_directories
+  media_hasher_unused:
+    backfill_enabled: false
+    backfill_batch_size: 1000
+    audio_sample_size: 65536
+    batch_processing:
+      chunk_size: 100
+      enabled: true
+      max_workers: 4
+    caching:
+      cache_dir: .medihasher_cache
+      enabled: true
+      max_cache_size: 1000000
+    content_sample_size: 32768
+    duplicate_detection:
+      enabled: true
+      exclude_patterns:
+      - '*.tmp'
+      - '*.cache'
+      - __pycache__/*
+      similarity_threshold: 0.95
+    enabled: true
+    file_types:
+      audio:
+        extensions:
+        - .mp3
+        - .wav
+        - .flac
+        - .ogg
+        - .m4a
+        - .aac
+        - .wma
+        - .opus
+        sample_size: 65536
+      images:
+        extensions:
+        - .jpg
+        - .jpeg
+        - .png
+        - .gif
+        - .bmp
+        - .webp
+        - .tiff
+        - .tif
+        hash_mode: hybrid
+        sensitivity: high
+      video:
+        extensions:
+        - .mp4
+        - .avi
+        - .mkv
+        - .mov
+        - .wmv
+        - .flv
+        - .webm
+        - .m4v
+        hash_mode: content
+    hash_length: 128
+    image_hash_mode: hybrid
+    image_sensitivity: high
+    large_file_threshold: 99999999999
+    logging:
+      backup_count: 3
+      file: medihasher.log
+      level: INFO
+      max_size_mb: 10
+    performance:
+      memory_limit_mb: 512
+      timeout_seconds: 30
+      use_multiprocessing: true
+sorter:
+  SortMobileDownloadFolder:
+    source_directories: 'D:/Media/- Need to be Sorted
+
+      '
+    scan_subdirectories: false
+  archive_directories:
+    premium: null
+    explicit:
+      images: D:/Archive/Pictures/NSFW
+      videos: D:/Archive/Videos/NSFW
+      gifs: D:/Archive/Gifs/NSFW
+    sfw:
+      images: D:/Archive/Pictures/SFW
+      videos: D:/Archive/Videos/SFW
+      gifs: D:/Archive/Gifs/SFW
+  archive_options:
+    enabled: true
+    ignore_premium_directory: true
+    exclude_tag_sorted: true
+    age_days: 365
+    excluded_directories:
+    - Tag Sorted
+    - D:/Media/- Fav
+  destination_directories:
+    nsfw_gif: D:/Media/Pictures/Gifs/NSFW Gifs
+    nsfw_image: D:/Media/Pictures/- NSFW Pics
+    nsfw_video: D:/Media/Videos/NSFW Videos
+    sfw_gif: D:/Media/Pictures/Gifs/SFW Gifs
+    sfw_image: D:/Media/Pictures/- SFW Pics
+    sfw_video: D:/Media/Videos/SFW Videos
+  mysql:
+    image_hash_db:
+      database: image_sorting_hashes
+      tables:
+      - archive_premium
+      - favorites
+      - sfw_gif
+      - sfw_image
+      - sfw_video
+      - nsfw_gif
+      - nsfw_image
+      - nsfw_video
+      - archive_explicit_images
+      - archive_explicit_videos
+      - archive_explicit_gifs
+      - archive_sfw_images
+      - archive_sfw_videos
+      - archive_sfw_gifs
+      - archived_favorites
+  duplicate_manager:
+    directory_priority:
+    - pattern: Premium
+      priority: -1
+    - pattern: '- Fav'
+      priority: 0
+    - pattern: Favorites
+      priority: 0
+    - pattern: '- NSFW Pics'
+      priority: 10
+    - pattern: '- SFW Pics'
+      priority: 10
+    - pattern: Videos
+      priority: 10
+    - pattern: Gifs
+      priority: 10
+    - pattern: Unsorted
+      priority: 90
+    - pattern: Need to be Sorted
+      priority: 95
+    - pattern: Temp
+      priority: 95
+    - pattern: Downloads
+      priority: 95
+    - pattern: Duplicates
+      priority: 99
+    filename_priority:
+    - pattern: explicit
+      priority: 0
+    - pattern: questionable
+      priority: 0
+    - pattern: safe
+      priority: 0
+    - pattern: general
+      priority: 50
+    - pattern: mature
+      priority: 50
+    - pattern: adult
+      priority: 50
+  other:
+    duplicate_directory: D:/Work/Duplicates
+    fav_directory: D:/Media/- Fav
+    artist_directory: D:/Media/- Fav/Artists
+    deleted_from_e621_directory: D:/Media/Pictures/Deleted From e621
+    move_deleted_posts: false
+    archived_favorites_directory: D:/Archive/- Archived Favorites
+    log_directory: logs/sorter
+    log_level: DEBUG
+    manual_sort_directory: D:/Media/Pictures/- Unsorted Pictures
+    manual_sort_video_directory: D:/Media/Videos/- Unsorted Videos
+    manual_sort_gif_directory: D:/Media/Pictures/Gifs/- Unsorted Gifs
+    possible_missing_files_directory: D:/Media/E621 Downloads
+    other_directories_to_hash:
+    - D:/Media
+    - D:/Media/Pictures/Deleted From e621
+    sorting_ignore_directories:
+    - D:/Media/- Fav/- Comics & Image Sets
+    pool_sort_search_ignored_directories: true
+  artist_processing:
+    skip_archives: false
+    artist_check_cache_days: 30
+    force_filesystem_scan: false
+  media_hasher:
+    hash_length: 256
+    audio_sample_size: 65536
+    content_sample_size: 32768
+    large_file_threshold: 99999999999
+    image_hash_mode: hybrid
+    image_sensitivity: high
+    compute_all_hashes: true
+    duplicate_detection:
+      similarity_threshold: 15

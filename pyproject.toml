@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "furryfilefinagler"
+version = "0.1.0"
+description = "Combined reverse-image search, e621 archive and media sorter toolkit"
+requires-python = ">=3.10"
+dependencies = [
+    "PyYAML>=6.0",
+    "requests>=2.31",
+    "urllib3>=2.0",
+    "mysql-connector-python>=9.0",
+    "beautifulsoup4>=4.12",
+    "Send2Trash>=1.8",
+    "Flask>=3.0",
+    "Pillow>=10.0",
+    "ImageHash>=4.3",
+    "numpy>=1.26",
+    "scipy>=1.11",
+    "PyWavelets>=1.5",
+    "opencv-python>=4.8",
+    "xxhash>=3.0",
+    "colorama>=0.4",
+]
+
+[project.optional-dependencies]
+audio = ["pygame-ce>=2.4"]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+fff = "fff.cli.app:main"
+
+[tool.setuptools.packages.find]
+include = ["fff*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

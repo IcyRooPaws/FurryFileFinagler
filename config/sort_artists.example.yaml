@@ -1,0 +1,33 @@
+# Artist sorting (fff sort artists). Copy to config/sort_artists.yaml.
+# Edit with the GUI: fff gui artist-config
+#
+# Files whose names contain an alias are moved to the artist's folder:
+#   target_directory if set, otherwise <sorter.other.artist_directory>/<CanonicalName>.
+#
+# Format:
+#   CanonicalName:
+#     aliases: [alias1, alias2]
+#     target_directory: D:/Media/- Fav/Artists/Special/CanonicalName   # optional
+#     enabled: true                                                    # optional, default true
+# The older plain-list form (CanonicalName: [alias1, alias2]) still works.
+
+ExampleArtist:
+  aliases:
+    - exampleartist
+    - example_artist
+  enabled: true
+
+CustomFolderArtist:
+  aliases:
+    - customfolder
+  target_directory: D:/Media/- Fav/Artists/Top Artists/CustomFolderArtist
+  enabled: true
+
+DisabledArtist:
+  aliases:
+    - disabled_artist
+  enabled: false
+
+LegacyFormatArtist:
+  - legacyartist
+  - legacy_artist

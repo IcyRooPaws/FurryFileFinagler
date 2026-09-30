@@ -1,0 +1,14 @@
+# AI Artist Tags
+# Posts matching any of these tags will be automatically:
+#   - Unfavorited on e621
+#   - Local file deleted (sent to recycle bin)
+#   - Artist name logged to data/ai_artist.md
+# One tag per line. Lines starting with # are comments.
+
+ai_assisted
+ai_generated_audio
+ai_generated_background
+ai_generated_reference
+ai_redraw
+ai_voice
+ai_interpolation

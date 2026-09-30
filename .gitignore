@@ -1,0 +1,19 @@
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+
+# Real config files are never committed; only their *.example.* versions are.
+# ('fff setup' builds the real ones; tests/test_config_examples.py checks every
+# real config file has an example.)
+config/*
+!config/*.example.yaml
+!config/lists/
+config/lists/*
+!config/lists/*.example.txt
+
+# Personal data (AI artist lists, md5 lists, reports) and runtime output
+data/*
+!data/README.md
+logs/

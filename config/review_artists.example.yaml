@@ -1,0 +1,9 @@
+# Artists offered in the artist review GUI (fff gui artist-review).
+# Copy to config/review_artists.yaml. Separate from sort_artists.yaml on purpose.
+#
+# Format: display name -> list of e621 artist tags / aliases
+ExampleArtist:
+- example_artist
+- exampleartist
+AnotherArtist:
+- another_artist
