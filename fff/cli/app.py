@@ -110,6 +110,27 @@ def _cmd_db_copy_schema(args) -> int:
     return 0 if ok else 1
 
 
+def _cmd_db_copy_data(args) -> int:
+    import logging
+
+    from fff.common import schema_copy
+    from fff.common.logging import setup_logging
+
+    log_file = setup_logging("db", "DEBUG" if args.verbose else "INFO", name="copy_data")
+    cfg = fff_config.load()
+    pairs = schema_copy.test_database_pairs(cfg, args.db)
+    print("Will REPLACE the contents of: " + ", ".join(f"{t} (from {p})" for _, p, t in pairs))
+    if not args.dry_run and not args.yes:
+        if input("Type 'copy' to continue: ").strip().lower() != "copy":
+            print("Cancelled.")
+            return 1
+    if args.dry_run:
+        logging.info("DRY RUN MODE - No changes will be made")
+    ok = schema_copy.copy_all_data(cfg, args.db, dry_run=args.dry_run)
+    print(f"{'Done' if ok else 'Finished with errors'}. Log: {log_file}")
+    return 0 if ok else 1
+
+
 def _cmd_doctor(args) -> int:
     from fff.cli import doctor
 
@@ -156,6 +177,17 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--dry-run", action="store_true", help="Show what would be done")
     p.add_argument("--verbose", action="store_true", help="Log SQL statements")
     p.set_defaults(func=_cmd_db_copy_schema)
+    p = db_sub.add_parser(
+        "copy-data",
+        help="Replace the test_* databases with a full copy of production (schema + rows)",
+        description="Refreshes each test_<name> database's structure from production, then copies every "
+                    "table's rows (server-side INSERT ... SELECT). Anything in the test databases is "
+                    "replaced. Production is only read.")
+    p.add_argument("--db", nargs="+", choices=fff_config.MODULES, help="Only these modules (default: all three)")
+    p.add_argument("--dry-run", action="store_true", help="Show row counts without copying")
+    p.add_argument("--yes", action="store_true", help="Don't ask for confirmation")
+    p.add_argument("--verbose", action="store_true", help="Log SQL statements")
+    p.set_defaults(func=_cmd_db_copy_data)
 
     # e621 / fa / gui / web / legacy (ported e621 archive entry points)
     from fff.cli import archive_cmds

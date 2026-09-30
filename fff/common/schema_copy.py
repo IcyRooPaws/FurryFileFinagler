@@ -341,3 +341,69 @@ def copy_all(cfg, modules=None, dry_run=False):
     for module, prod, test in test_database_pairs(cfg, modules):
         ok &= bool(copy_database_schema(cfg, prod, test, dry_run, references=references))
     return ok
+
+
+# --- fff: copy production data into the test databases -------------------------
+
+def copy_database_data(cfg, original_db, test_db, dry_run=False, references=None):
+    """Refresh test_db's schema from original_db, then copy every table's rows.
+
+    Production is only read (INSERT INTO test_db.t SELECT ... FROM original_db.t, server-side).
+    Generated columns are skipped (MySQL computes them). Returns {table: (prod_rows, test_rows)}.
+    """
+    check_target(original_db, test_db, cfg)
+    if not copy_database_schema(cfg, original_db, test_db, dry_run, references=references):
+        return None
+
+    params = fff_config.db_params(cfg, original_db)
+    params.pop("database")
+    conn = mysql.connector.connect(**params)
+    results = {}
+    try:
+        cur = conn.cursor()
+        cur.execute("SET SESSION sql_mode = ''")  # accept legacy zero dates etc. exactly as stored
+        cur.execute("SET SESSION FOREIGN_KEY_CHECKS = 0")
+        cur.execute("SELECT table_name FROM information_schema.tables WHERE table_schema = %s "
+                    "AND table_type = 'BASE TABLE' ORDER BY table_name", (original_db,))
+        tables = [r[0] for r in cur.fetchall()]
+        for table in tables:
+            cur.execute("SELECT column_name FROM information_schema.columns WHERE table_schema = %s "
+                        "AND table_name = %s AND extra NOT LIKE '%VIRTUAL GENERATED%' "
+                        "AND extra NOT LIKE '%STORED GENERATED%' ORDER BY ordinal_position",
+                        (original_db, table))
+            cols = ", ".join(f"`{r[0]}`" for r in cur.fetchall())
+            cur.execute(f"SELECT COUNT(*) FROM `{original_db}`.`{table}`")
+            prod_rows = cur.fetchone()[0]
+            if dry_run:
+                logging.info(f"[DRY RUN] Would copy {prod_rows} rows: {original_db}.{table} -> {test_db}.{table}")
+                results[table] = (prod_rows, None)
+                continue
+            cur.execute(f"INSERT INTO `{test_db}`.`{table}` ({cols}) SELECT {cols} FROM `{original_db}`.`{table}`")
+            conn.commit()
+            cur.execute(f"SELECT COUNT(*) FROM `{test_db}`.`{table}`")
+            test_rows = cur.fetchone()[0]
+            results[table] = (prod_rows, test_rows)
+            level = logging.INFO if test_rows == prod_rows else logging.ERROR
+            logging.log(level, f"  {table}: {test_rows}/{prod_rows} rows")
+        cur.execute("SET SESSION FOREIGN_KEY_CHECKS = 1")
+    finally:
+        conn.close()
+    return results
+
+
+def copy_all_data(cfg, modules=None, dry_run=False):
+    """Copy schema and data for the requested modules. Returns True if every row count matched."""
+    references = {prod: test for _, prod, test in test_database_pairs(cfg)}
+    ok = True
+    for module, prod, test in test_database_pairs(cfg, modules):
+        results = copy_database_data(cfg, prod, test, dry_run, references=references)
+        if results is None:
+            ok = False
+            continue
+        if not dry_run:
+            mismatched = {t: r for t, r in results.items() if r[0] != r[1]}
+            total = sum(r[1] for r in results.values())
+            logging.info(f"{module}: copied {total} rows in {len(results)} tables into {test}"
+                         + (f"; MISMATCHED: {mismatched}" if mismatched else ""))
+            ok &= not mismatched
+    return ok

@@ -47,3 +47,21 @@ def test_copy_refuses_before_connecting(monkeypatch):
     monkeypatch.setattr(schema_copy.mysql.connector, "connect", lambda **k: pytest.fail("connected"))
     with pytest.raises(schema_copy.UnsafeTargetError):
         schema_copy.copy_database_schema(CFG, "e621_posts_db", "e621_posts_db")
+
+
+def test_copy_data_refuses_unsafe_target_before_connecting(monkeypatch):
+    monkeypatch.setattr(schema_copy.mysql.connector, "connect", lambda **k: pytest.fail("connected"))
+    for target in ("e621_posts_db", "image_sorting_hashes", "backup_e621"):
+        with pytest.raises(schema_copy.UnsafeTargetError):
+            schema_copy.copy_database_data(CFG, "e621_posts_db", target)
+
+
+def test_copy_data_cli_requires_confirmation(monkeypatch, capsys):
+    from fff.cli.app import main
+    from fff.common import config as fff_config
+
+    monkeypatch.setattr(fff_config, "load", lambda *a, **k: CFG)
+    monkeypatch.setattr(schema_copy, "copy_all_data", lambda *a, **k: pytest.fail("copied without confirmation"))
+    monkeypatch.setattr("builtins.input", lambda prompt="": "no")
+    assert main(["db", "copy-data", "--db", "archive"]) == 1
+    assert "Cancelled" in capsys.readouterr().out
