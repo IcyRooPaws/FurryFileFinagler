@@ -254,8 +254,9 @@ def get_fa_post_data(post_id: str, cookies: http.cookiejar.CookieJar) -> Optiona
 
         if not download_match:
             # Save HTML for debugging
-            FA_DEBUG_DIR.mkdir(parents=True, exist_ok=True)
-            debug_file = FA_DEBUG_DIR / f'fa_debug_{post_id}_error.html'
+            debug_dir = paths.for_env(FA_DEBUG_DIR)  # fff: data/test/... in the test environment
+            debug_dir.mkdir(parents=True, exist_ok=True)
+            debug_file = debug_dir / f'fa_debug_{post_id}_error.html'
             with open(debug_file, 'w', encoding='utf-8') as f:
                 f.write(html)
             print(f"\n    [DEBUG] Could not find download link for post {post_id} - saved HTML to {debug_file}")

@@ -7,6 +7,7 @@
 # (override per run with FFF_ENV=test or 'fff --env test ...').
 
 environment: prod
+test_paths_root: D:/Example
 database:
   host: localhost
   port: 3306
@@ -134,6 +135,9 @@ archive:
       - archive_sfw_videos
       - archive_sfw_gifs
       - other_directories
+  ai_cleanup:
+    ai_tag_directory: D:/Work/AI
+    ai_artist_directory: D:/Work/AI/AI_Artist_Trash
   media_hasher_unused:
     backfill_enabled: false
     backfill_batch_size: 1000

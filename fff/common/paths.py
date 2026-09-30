@@ -18,10 +18,22 @@ CACHE_DIR = DATA_DIR / "cache"
 LOG_DIR = ROOT / "logs"
 SQL_DIR = ROOT / "sql"
 
+# In the test environment everything under data/ goes here instead (fff.common.config.test_path).
+TEST_DATA_DIR = DATA_DIR / "test"
+
 # Caches that used to live inside each previous component (design note section6).
 E621_PAGE_CACHE = CACHE_DIR / "e621_pages"      # was e621 archive/temp_responses
 E621_POST_CACHE = CACHE_DIR / "e621_posts"      # was reverse search responses/e621_*.json
 FLUFFLE_RESPONSES = CACHE_DIR / "fluffle"       # was reverse search responses/*.json
+
+
+def for_env(path: str | os.PathLike) -> Path:
+    """``path`` as the active environment sees it: under E:/Testing or data/test/ in test."""
+    try:
+        from fff.common import config as fff_config
+        return Path(fff_config.test_path(str(path), fff_config.load()))
+    except Exception:  # no config yet (e.g. before 'fff setup'): prod layout
+        return Path(path)
 
 
 def resolve(path: str | os.PathLike | None, base: Path = ROOT) -> str | None:

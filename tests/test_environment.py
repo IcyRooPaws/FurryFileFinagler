@@ -126,3 +126,87 @@ def test_no_hard_coded_database_names_in_package():
             if DB_NAME.search(line):
                 offenders.append(f"{rel}:{lineno}: {line.strip()}")
     assert not offenders, "use fff_config.database_names(cfg):\n" + "\n".join(offenders)
+
+
+# --- test paths --------------------------------------------------------------------
+
+@pytest.mark.parametrize("prod,test", [
+    ("P:/IPL/Pictures/- SFW Pics", "E:/Testing/P/IPL/Pictures/- SFW Pics"),
+    ("P:\IPL\- Need to be Sorted", "E:\Testing\P\IPL\- Need to be Sorted"),
+    ("E:/Image Sorter Working Folder/AI", "E:/Testing/E/Image Sorter Working Folder/AI"),
+    ("c:/Users/IPL/Downloads", "E:/Testing/C/Users/IPL/Downloads"),
+    ("P:/", "E:/Testing/P"),
+    ("E:/Testing/P/IPL/already", "E:/Testing/P/IPL/already"),      # already under the test root
+    ("logs/sorter", "logs/sorter"),                                  # relative
+    ("https://e621.net/posts", "https://e621.net/posts"),            # not a path
+    ("YourApp/1.0 (by you)", "YourApp/1.0 (by you)"),
+])
+def test_test_path_rerouting(prod, test):
+    assert fff_config.test_path(prod, cfg("test")) == test
+    assert fff_config.test_path(prod, cfg("prod")) == prod
+
+
+def test_project_data_goes_to_data_test():
+    assert fff_config.test_path(str(paths.DATA_DIR / "ai_artist.md"), cfg("test")) == str(paths.TEST_DATA_DIR / "ai_artist.md")
+    assert fff_config.test_path(str(paths.E621_PAGE_CACHE), cfg("test")) == str(paths.TEST_DATA_DIR / "cache" / "e621_pages")
+    already = str(paths.TEST_DATA_DIR / "x.md")
+    assert fff_config.test_path(already, cfg("test")) == already
+    assert fff_config.test_path(str(paths.DATA_DIR / "ai_artist.md"), cfg("prod")) == str(paths.DATA_DIR / "ai_artist.md")
+
+
+def test_other_project_folders_are_not_rerouted():
+    for inside in (str(paths.LISTS_DIR / "ai_tags.txt"), str(paths.LOG_DIR / "archive")):
+        assert fff_config.test_path(inside, cfg("test")) == inside
+
+
+def test_archive_data_paths_follow_environment(monkeypatch):
+    from fff.archive import paths as archive_paths
+
+    monkeypatch.setattr(fff_config, "load", lambda *a, **k: cfg("prod"))
+    assert archive_paths.AI_ARTIST_MD == paths.DATA_DIR / "ai_artist.md"
+    monkeypatch.setattr(fff_config, "load", lambda *a, **k: cfg("test"))
+    assert archive_paths.AI_ARTIST_MD == paths.TEST_DATA_DIR / "ai_artist.md"
+    assert archive_paths.PAGE_CACHE == paths.TEST_DATA_DIR / "cache" / "e621_pages"
+    assert archive_paths.AI_TAGS == paths.LISTS_DIR / "ai_tags.txt"  # config/ stays put
+
+
+def test_custom_root_and_opt_out():
+    assert fff_config.test_path("P:/IPL/x", cfg("test", test_paths_root="D:/Sandbox")) == "D:/Sandbox/P/IPL/x"
+    assert fff_config.test_path("P:/IPL/x", cfg("test", test_paths_root=None)) == "P:/IPL/x"
+
+
+def test_reroute_tree_handles_lists_and_multiline():
+    tree = {"a": ["P:/IPL/one", "rel"], "b": {"src": "P:\IPL\in\n  P:\IPL\two\n"}, "n": 3, "flag": True}
+    out = fff_config.reroute_paths(tree, cfg("test"))
+    assert out == {"a": ["E:/Testing/P/IPL/one", "rel"],
+                   "b": {"src": "E:\Testing\P\IPL\in\n  E:\Testing\P\IPL\two\n"}, "n": 3, "flag": True}
+
+
+def test_real_config_views_have_no_prod_paths_in_test():
+    """With the real config in test mode, every absolute folder is under the test root or this project."""
+    if not (paths.CONFIG_DIR / "config.yaml").exists():
+        pytest.skip("no local config.yaml")
+    real = fff_config.deep_merge(fff_config.load(reload=True), {"environment": "test"})
+    root = fff_config.test_paths_root(real)
+    leaks = []
+
+    def walk(obj, where):
+        if isinstance(obj, dict):
+            for k, v in obj.items():
+                walk(v, f"{where}.{k}")
+        elif isinstance(obj, list):
+            for v in obj:
+                walk(v, where)
+        elif isinstance(obj, str):
+            for line in obj.splitlines() or [obj]:
+                line = line.strip()
+                if not re.match(r"^[A-Za-z]:[\/]", line):
+                    continue
+                in_project = fff_config._under(line, str(paths.ROOT))
+                prod_data = fff_config._under(line, str(paths.DATA_DIR)) and not fff_config._under(line, str(paths.TEST_DATA_DIR))
+                if prod_data or not (fff_config._under(line, root) or in_project):
+                    leaks.append(f"{where}: {line}")
+
+    for module in fff_config.MODULES:
+        walk(fff_config.legacy_view(module, real), module)
+    assert not leaks, "\n".join(leaks)

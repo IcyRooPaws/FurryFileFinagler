@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import copy
 import os
+import re
 from pathlib import Path
 from typing import Any
 
@@ -142,6 +143,61 @@ def database_names(cfg: dict) -> dict[str, str]:
     return {module: database_name(cfg, module) for module in MODULES}
 
 
+# ---------------------------------------------------------------------------
+# Test paths: in the test environment, configured folders move under E:\Testing
+# ---------------------------------------------------------------------------
+# P:\IPL\Pictures\x -> E:\Testing\P\IPL\Pictures\x (the drive letter becomes a folder, so
+# folders on different drives can't collide). The project's own data/ folder goes to
+# data/test/ instead (data/ai_artist.md -> data/test/ai_artist.md). Other folders inside
+# the project (config/, logs/) and folders already under a test location are left alone.
+# ``test_paths_root: null`` turns all rerouting off (the parity sandbox does this).
+
+DEFAULT_TEST_PATHS_ROOT = "E:/Testing"
+_DRIVE_PATH = re.compile(r"^([A-Za-z]):[\\/]")
+
+
+def test_paths_root(cfg: dict) -> str | None:
+    if "test_paths_root" in cfg and cfg["test_paths_root"] is None:
+        return None
+    return cfg.get("test_paths_root") or DEFAULT_TEST_PATHS_ROOT
+
+
+def _under(path: str, root: str) -> bool:
+    p, r = path.replace("\\", "/").rstrip("/").lower(), root.replace("\\", "/").rstrip("/").lower()
+    return p == r or p.startswith(r + "/")
+
+
+def test_path(path, cfg: dict):
+    """``path`` rerouted under the test root in the test environment; unchanged otherwise."""
+    if not isinstance(path, str) or not is_test(cfg):
+        return path
+    root = test_paths_root(cfg)
+    match = _DRIVE_PATH.match(path)
+    if root is None or not match or _under(path, root) or _under(path, str(paths.TEST_DATA_DIR)):
+        return path
+    if _under(path, str(paths.DATA_DIR)):
+        rel = path.replace("\\", "/")[len(str(paths.DATA_DIR)):].lstrip("/")
+        rerouted = str(paths.TEST_DATA_DIR / rel) if rel else str(paths.TEST_DATA_DIR)
+        return rerouted if "\\" in path else rerouted.replace("\\", "/")
+    if _under(path, str(paths.ROOT)):
+        return path
+    rest = path[3:].replace("\\", "/")
+    rerouted = root.replace("\\", "/").rstrip("/") + "/" + match.group(1).upper() + ("/" + rest if rest else "")
+    return rerouted.replace("/", "\\") if "\\" in path else rerouted
+
+
+def reroute_paths(obj, cfg: dict):
+    """Apply ``test_path`` to every absolute path in a config tree (lists and multi-line strings too)."""
+    if isinstance(obj, dict):
+        return {k: reroute_paths(v, cfg) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [reroute_paths(v, cfg) for v in obj]
+    if isinstance(obj, str) and "\n" in obj:
+        return "\n".join(line.replace(line.strip(), test_path(line.strip(), cfg)) if line.strip() else line
+                         for line in obj.split("\n"))
+    return test_path(obj, cfg)
+
+
 def redirect_database(cfg: dict, name: str) -> str:
     """In the test environment, map a production schema name to its test twin (safety net)."""
     if is_test(cfg):
@@ -173,7 +229,8 @@ def legacy_view(module: str, cfg: dict | None = None) -> dict:
     builders = {"fluffle": _fluffle_view, "archive": _archive_view, "sorter": _sorter_view}
     if module not in builders:
         raise ValueError(f"unknown module {module!r}; expected one of {MODULES}")
-    return builders[module](cfg)
+    view = builders[module](cfg)
+    return reroute_paths(view, cfg) if is_test(cfg) else view
 
 
 def _fluffle_view(cfg: dict) -> dict:
@@ -226,6 +283,8 @@ def _archive_view(cfg: dict) -> dict:
     _resolve_keys(view["db_export"], ["directory"])
     _resolve_keys(view["log"], ["directory"])
     _resolve_keys(view["e621"], ["api_response_folder"])
+    # The original kept its page cache in ./temp_responses; api.py reads this runtime key.
+    view["e621"].setdefault("_temp_response_folder", str(paths.E621_PAGE_CACHE))
     return normalize_config_paths(view)
 
 

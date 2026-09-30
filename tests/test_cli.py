@@ -9,7 +9,8 @@ def _help_targets(parser, prefix=()):
     for action in parser._actions:
         if action.__class__.__name__ == "_SubParsersAction":
             for name, sub in action.choices.items():
-                yield from _help_targets(sub, prefix + (name,))
+                if sub.add_help:  # forwarded commands are covered by test_archive_port.py
+                    yield from _help_targets(sub, prefix + (name,))
 
 
 @pytest.mark.parametrize("argv", list(_help_targets(build_parser())), ids=lambda a: " ".join(a) or "fff")
