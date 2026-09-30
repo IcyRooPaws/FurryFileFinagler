@@ -3,7 +3,10 @@
 # Regenerate this file from your config with 'fff config make-example --force'.
 # Secrets go in secrets.yaml (see secrets.example.yaml). Relative paths are
 # relative to the project root.
+# environment: prod | test. test makes every module use test_<name> databases
+# (override per run with FFF_ENV=test or 'fff --env test ...').
 
+environment: prod
 database:
   host: localhost
   port: 3306
@@ -114,7 +117,6 @@ archive:
   mysql:
     table: posts
     image_hash_db:
-      database: image_sorting_hashes
       tables:
       - favorites
       - manual_sort_images
@@ -234,7 +236,6 @@ sorter:
     sfw_video: D:/Media/Videos/SFW Videos
   mysql:
     image_hash_db:
-      database: image_sorting_hashes
       tables:
       - archive_premium
       - favorites

@@ -140,7 +140,7 @@ def run(args) -> int:
         print(f"  {OK if exists else MISSING:<8} {path}   [{label}]")
 
     if not args.skip_db:
-        print("\n== Databases")
+        print(f"\n== Databases ({fff_config.environment(cfg)} environment)")
         for module, name, status in check_databases(cfg):
             print(f"  {module:<8} {name:<22} {status}")
             problems += not status.startswith(OK)

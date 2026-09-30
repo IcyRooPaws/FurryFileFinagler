@@ -10,6 +10,7 @@ project's config.yaml had, so their key lookups work unchanged (design note sect
 from __future__ import annotations
 
 import copy
+import os
 from pathlib import Path
 from typing import Any
 
@@ -90,9 +91,64 @@ def db_params(cfg: dict, database: str) -> dict:
     }
 
 
-def database_name(cfg: dict, module: str) -> str:
-    """Actual schema name for a module, honouring ``databases:`` renames (e.g. test DBs)."""
+# ---------------------------------------------------------------------------
+# Environment toggle: prod or test databases
+# ---------------------------------------------------------------------------
+# ``environment: test`` (or FFF_ENV=test, or ``fff --env test``) makes every module use
+# test_<name> instead of <name>. Precedence: --env > FFF_ENV > config.yaml > "prod".
+
+ENVIRONMENTS = ("prod", "test")
+TEST_PREFIX = "test_"
+_env_override: str | None = None
+
+
+def set_environment(env: str | None) -> None:
+    """Force the environment for this process (the ``--env`` flag). None clears the override."""
+    global _env_override
+    if env is not None and env not in ENVIRONMENTS:
+        raise ConfigError(f"environment must be one of {ENVIRONMENTS}, not {env!r}")
+    _env_override = env
+
+
+def environment(cfg: dict) -> str:
+    env = _env_override or os.environ.get("FFF_ENV") or cfg.get("environment") or "prod"
+    env = str(env).strip().lower()
+    if env not in ENVIRONMENTS:
+        raise ConfigError(f"environment must be one of {ENVIRONMENTS}, not {env!r}")
+    return env
+
+
+def is_test(cfg: dict) -> bool:
+    return environment(cfg) == "test"
+
+
+def prod_database_name(cfg: dict, module: str) -> str:
+    """The production schema name for a module (``databases:`` in config.yaml, else the default)."""
     return cfg.get("databases", {}).get(module, DB_KEYS[module])
+
+
+def database_name(cfg: dict, module: str) -> str:
+    """The schema a module should use right now: ``test_<prod name>`` in the test environment."""
+    name = prod_database_name(cfg, module)
+    if is_test(cfg) and not name.startswith(TEST_PREFIX):
+        return TEST_PREFIX + name
+    return name
+
+
+def database_names(cfg: dict) -> dict[str, str]:
+    """module -> schema for the active environment. Ported code with cross-database SQL
+    (e.g. ``image_sorting_hashes.all_files JOIN e621_posts_db.posts``) must build its
+    table references from this instead of hard-coding the names."""
+    return {module: database_name(cfg, module) for module in MODULES}
+
+
+def redirect_database(cfg: dict, name: str) -> str:
+    """In the test environment, map a production schema name to its test twin (safety net)."""
+    if is_test(cfg):
+        for module in MODULES:
+            if name == prod_database_name(cfg, module):
+                return database_name(cfg, module)
+    return name
 
 
 def e621_credentials(cfg: dict) -> dict:
@@ -151,8 +207,9 @@ def _archive_view(cfg: dict) -> dict:
     mysql = {k: params[k] for k in ("host", "user", "password", "database")}
     mysql["port"] = params["port"]
     mysql.update(src.pop("mysql", {}))
-    image_hash_db = mysql.setdefault("image_hash_db", {})
-    image_hash_db.setdefault("database", database_name(cfg, "sorter"))
+    # The environment decides schema names; any name stored in the config is ignored.
+    mysql["database"] = database_name(cfg, "archive")
+    mysql.setdefault("image_hash_db", {})["database"] = database_name(cfg, "sorter")
 
     view = {
         "e621": deep_merge(src.pop("e621", {}), e621_credentials(cfg)),
@@ -221,8 +278,11 @@ def _sorter_view(cfg: dict) -> dict:
     view = copy.deepcopy(cfg.get("sorter", {}))
     params = db_params(cfg, database_name(cfg, "sorter"))
     mysql = view.setdefault("mysql", {})
-    for key in ("host", "port", "user", "password", "database"):
+    for key in ("host", "port", "user", "password"):
         mysql.setdefault(key, params[key])
+    mysql["database"] = params["database"]  # the environment decides schema names
+    if isinstance(mysql.get("image_hash_db"), dict):
+        mysql["image_hash_db"]["database"] = params["database"]
     other = view.setdefault("other", {})
     other.setdefault("log_directory", str(paths.LOG_DIR / "sorter"))
     _resolve_keys(other, ["log_directory"])

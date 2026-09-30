@@ -35,6 +35,15 @@ with `fff config make-example --force` (it replaces paths and personal values wi
 | `fff setup [--dry-run] [--force]` | Build the unified config from the existing code (read-only on them) |
 | `fff config make-example [--force]` | Write a sanitized `config.example.yaml` from `config.yaml` |
 | `fff config show [--module fluffle\|archive\|sorter]` | Print config, secrets redacted; `--module` shows what that module's ported code sees |
+| `fff db copy-schema [--db ...] [--dry-run]` | Create/refresh empty `test_*` copies of the databases (structure only; re-running empties them) |
 | `fff doctor [--skip-db] [--skip-deps]` | Packages, configured folders, DB connectivity, `all_files` view |
+
+## Test vs production databases
+
+`environment: prod | test` in `config/config.yaml` picks the databases for every module. In `test`,
+each database name gets a `test_` prefix (`test_e621_posts_db`, `test_image_sorting_hashes`,
+`test_image_search`). Override per run with `FFF_ENV=test` or `fff --env test <command>`
+(precedence: `--env` > `FFF_ENV` > config). Commands print a banner on stderr in test mode.
+Create the test databases with `fff db copy-schema`.
 
 Tests: `.venv\Scripts\python -m pytest`
