@@ -32,39 +32,42 @@ def log_dir(tmp_path, monkeypatch):
     return tmp_path / "logs" / "daily"
 
 
-def test_runs_the_three_pipelines_in_order():
+def test_runs_the_same_order_as_the_daily_powershell_script():
+    """fff_daily.ps1: fluffle.py, run.py, e621_main.py, run.py, sync_external_fa_sources.py"""
     run = FakeRunner()
     assert daily.run(parse("daily"), runner=run) == 0
-    assert run.stages() == [["e621", "sync"], ["fluffle", "search"], ["sort", "workflow"]]
+    assert run.stages() == [["fluffle", "search"], ["sort", "workflow"], ["e621", "sync"],
+                            ["sort", "workflow"], ["fa", "sync-external"]]
 
 
 def test_skips_and_skip_favorites():
     run = FakeRunner()
-    assert daily.run(parse("daily", "--skip-fluffle", "--skip-favorites"), runner=run) == 0
-    assert run.stages() == [["e621", "sync", "--skip-favorites"], ["sort", "workflow"]]
+    assert daily.run(parse("daily", "--skip-fluffle", "--skip-fa-sync", "--skip-favorites"), runner=run) == 0
+    assert run.stages() == [["sort", "workflow"], ["e621", "sync", "--skip-favorites"], ["sort", "workflow"]]
     run = FakeRunner()
-    assert daily.run(parse("daily", "--skip-e621", "--skip-fluffle", "--skip-sort"), runner=run) == 0
+    assert daily.run(parse("daily", "--skip-e621", "--skip-fluffle", "--skip-sort", "--skip-fa-sync"), runner=run) == 0
     assert run.calls == []
 
 
 def test_env_and_config_pass_through():
     run = FakeRunner()
-    daily.run(parse("--env", "test", "--config", "x.yaml", "daily", "--skip-fluffle", "--skip-sort"), runner=run)
+    daily.run(parse("--env", "test", "--config", "x.yaml", "daily", "--skip-fluffle", "--skip-sort", "--skip-fa-sync"),
+              runner=run)
     assert run.stages() == [["--env", "test", "--config", "x.yaml", "e621", "sync"]]
 
 
 def test_failure_keeps_going_by_default_but_exits_nonzero(log_dir):
-    run = FakeRunner(codes=[1, 0, 0])
+    run = FakeRunner(codes=[0, 0, 1, 0, 0])  # like the .ps1: a failed stage doesn't stop the run
     assert daily.run(parse("daily"), runner=run) == 1
-    assert len(run.calls) == 3
+    assert len(run.calls) == 5
     summary = next(log_dir.glob("*.log")).read_text(encoding="utf-8")
-    assert "FAIL e621 favorites sync" in summary and "OK   media sorter workflow" in summary
+    assert "FAIL e621 favorites sync" in summary and "OK   media sorter workflow (2nd)" in summary
 
 
 def test_stop_on_error():
     run = FakeRunner(codes=[0, 2, 0])
     assert daily.run(parse("daily", "--stop-on-error"), runner=run) == 1
-    assert run.stages() == [["e621", "sync"], ["fluffle", "search"]]
+    assert run.stages() == [["fluffle", "search"], ["sort", "workflow"]]
 
 
 def test_dry_run_runs_nothing(capsys):
@@ -72,16 +75,17 @@ def test_dry_run_runs_nothing(capsys):
     assert daily.run(parse("--env", "test", "daily", "--dry-run"), runner=run) == 0
     assert run.calls == []
     out = capsys.readouterr().out
-    assert "fff --env test e621 sync" in out and "fff --env test sort workflow" in out
+    assert "1. reverse search reverse image search: fff --env test fluffle search" in out
+    assert "5. External FA sources sync: fff --env test fa sync-external" in out
 
 
-@pytest.mark.parametrize("argv", [s[1] for s in daily.STAGES], ids=lambda a: " ".join(a))
+@pytest.mark.parametrize("argv", sorted({tuple(s[1]) for s in daily.STAGES}), ids=lambda a: " ".join(a))
 def test_each_stage_is_a_real_command(argv, capsys):
     """The stage commands must exist in the CLI (a typo would only show up at 3 a.m.)."""
     from fff.cli.app import main
 
     try:
-        code = main(argv + ["--help"])
+        code = main(list(argv) + ["--help"])
     except SystemExit as exc:  # commands with options declared in fff exit from argparse
         code = exc.code
     assert code == 0

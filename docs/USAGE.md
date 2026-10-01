@@ -36,24 +36,28 @@ Only the examples are committed. If you change the layout of `config.yaml`, run 
 
 ## A typical day
 
-The three pipelines feed each other. Run them in this order:
+The three pipelines feed each other:
 
 ```powershell
-fff e621 sync           # 1. favorites -> e621_posts_db, download missing files, AI cleanup, FA sync
-fff fluffle search      # 2. find sources for inbox images; download e621/FA existing code
-fff sort workflow       # 3. tag sort, sort + hash, artist sort, archive, maintenance
+fff fluffle search      # find sources for inbox images; download e621/FA existing code
+fff sort workflow       # tag sort, sort + hash, artist sort, archive, maintenance
+fff e621 sync           # favorites -> e621_posts_db, download missing files, AI cleanup, FA sync
+fff sort workflow       # sort what the e621 sync downloaded
+fff fa sync-external    # final FA favorites pass
 ```
 
-Or run all three in that order with one command:
+Or run the whole daily sequence with one command. It is the same order as the old
+`fff_daily.ps1`:
 
 ```powershell
-fff daily                         # e621 sync -> fluffle search -> sort workflow
-fff daily --dry-run               # show what would run
+fff daily                  # fluffle search -> sort workflow -> e621 sync -> sort workflow -> fa sync-external
+fff daily --dry-run        # show what would run
 fff daily --skip-fluffle --skip-favorites --stop-on-error
-fff --env test daily              # the same against the test databases and E:\Testing
+fff --env test daily       # the same against the test databases and E:\Testing
+.ff_daily.ps1 -scheduled # what Task Scheduler runs (exit code = failed stages)
 ```
 
-`fff daily` runs each stage as its own `fff` process, passing through `--env` and `--config`. By default it keeps going after a failed stage. It exits non-zero if any stage failed and writes a one-line-per-stage summary to `logs/daily/`. It adds no logic of its own.
+`fff daily` runs each stage as its own `fff` process, passing through `--env` and `--config`. Like the old script, it keeps going after a failed stage. Unlike the old script, it exits non-zero if any stage failed. It writes a one-line-per-stage summary to `logs/daily/`. It adds no logic of its own.
 
 Each command accepts its original flags. For example:
 

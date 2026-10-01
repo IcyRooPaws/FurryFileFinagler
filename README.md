@@ -15,10 +15,8 @@ python -m venv .venv
 fff setup      # builds config/config.yaml + secrets.yaml from the three current features
 fff doctor              # checks packages, folders and all three databases
 
-fff e621 sync           # favorites -> e621_posts_db
-fff fluffle search      # find sources for inbox images
-fff sort workflow       # sort, hash, archive the library
-fff daily               # or: all three, in that order
+fff daily               # the daily run: fluffle search, sort, e621 sync, sort, FA sync
+fff daily --dry-run     # what it would run
 ```
 
 Use `fff --env test <command>` (or `environment: test` in `config/config.yaml`) to run

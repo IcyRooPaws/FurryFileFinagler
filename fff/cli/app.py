@@ -223,7 +223,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     # daily
     from fff.cli import daily
-    p = sub.add_parser("daily", help="Run e621 sync, then fluffle search, then sort workflow",
+    p = sub.add_parser("daily", help="Daily run: fluffle search, sort, e621 sync, sort, FA sync (like the .ps1)",
                        description=daily.__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     daily.add_arguments(p)
     p.set_defaults(func=lambda args: daily.run(args))

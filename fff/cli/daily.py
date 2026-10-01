@@ -1,12 +1,15 @@
-"""``fff daily``: run the three pipelines in order (project notes §7).
+"""``fff daily``: the daily run, in the same order as fff_daily.ps1.
 
-1. ``fff e621 sync``       favorites -> e621_posts_db, downloads, AI cleanup, FA sync
-2. ``fff fluffle search``  sources for inbox images; downloads into the sorter's inbox
-3. ``fff sort workflow``   tag sort, sort + hash, artist sort, archive, maintenance
+1. ``fff fluffle search``     (fluffle.py)            sources for inbox images, downloads existing code
+2. ``fff sort workflow``      (media sorter run.py)    sort what reverse search and earlier runs left
+3. ``fff e621 sync``          (e621_main.py)          favorites -> e621_posts_db, downloads, AI cleanup
+4. ``fff sort workflow``      (media sorter run.py)    sort the files the e621 sync downloaded
+5. ``fff fa sync-external``   (sync_external_fa_sources.py)  final FA favorites pass
 
-Each stage runs as its own ``fff`` process (so their logging setup, signal handlers and
-sys.exit calls can't interfere with each other), with the same --env / --config. It adds
-no logic of its own: running the three commands by hand does exactly the same.
+As in the script, a failed stage doesn't stop the run (unless --stop-on-error). Each stage
+runs as its own ``fff`` process (so their logging setup, signal handlers and sys.exit calls
+can't interfere with each other), with the same --env / --config. It adds no logic of its
+own: running the five commands by hand does exactly the same.
 """
 from __future__ import annotations
 
@@ -17,17 +20,21 @@ from datetime import datetime
 
 from fff.common import paths
 
+# (skip key, fff command, label). Same order as fff_daily.ps1.
 STAGES = [
-    ("e621", ["e621", "sync"], "e621 favorites sync"),
     ("fluffle", ["fluffle", "search"], "reverse search reverse image search"),
-    ("sort", ["sort", "workflow"], "media sorter workflow"),
+    ("sort", ["sort", "workflow"], "media sorter workflow (1st)"),
+    ("e621", ["e621", "sync"], "e621 favorites sync"),
+    ("sort", ["sort", "workflow"], "media sorter workflow (2nd)"),
+    ("fa_sync", ["fa", "sync-external"], "External FA sources sync"),
 ]
 
 
 def add_arguments(p) -> None:
     p.add_argument("--skip-e621", action="store_true", help="Don't run 'fff e621 sync'")
     p.add_argument("--skip-fluffle", action="store_true", help="Don't run 'fff fluffle search'")
-    p.add_argument("--skip-sort", action="store_true", help="Don't run 'fff sort workflow'")
+    p.add_argument("--skip-sort", action="store_true", help="Don't run 'fff sort workflow' (either time)")
+    p.add_argument("--skip-fa-sync", action="store_true", help="Don't run the final 'fff fa sync-external'")
     p.add_argument("--skip-favorites", action="store_true",
                    help="Pass --skip-favorites to 'fff e621 sync' (no favorites fetch)")
     p.add_argument("--stop-on-error", action="store_true",
