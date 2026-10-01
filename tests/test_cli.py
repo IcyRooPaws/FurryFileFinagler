@@ -19,3 +19,47 @@ def test_every_command_has_help(argv, capsys):
         build_parser().parse_args(argv + ["--help"])
     assert exc.value.code == 0
     assert "usage:" in capsys.readouterr().out
+
+
+def _subcommands(parser):
+    for action in parser._actions:
+        if action.__class__.__name__ == "_SubParsersAction":
+            return sorted(set(action.choices))
+    return []
+
+
+def _sort_targets():
+    from fff.sorter.main import build_parser as sorter_parser
+
+    return [["sort", name] for name in _subcommands(sorter_parser())] + [["sort", "workflow"], ["sort", "fa-backlog"]]
+
+
+def _hash_targets():
+    import argparse
+
+    from fff.sorter.handlers.media_hasher import cli
+
+    captured = {}
+    real_parse = argparse.ArgumentParser.parse_args
+
+    def grab(self, *a, **k):  # build the v1 CLI's parser without running it
+        captured["parser"] = self
+        raise SystemExit(0)
+
+    argparse.ArgumentParser.parse_args = grab
+    try:
+        try:
+            cli.main()
+        except SystemExit:
+            pass
+    finally:
+        argparse.ArgumentParser.parse_args = real_parse
+    return [["hash", name] for name in _subcommands(captured["parser"])]
+
+
+@pytest.mark.parametrize("argv", _sort_targets() + _hash_targets(), ids=lambda a: " ".join(a))
+def test_every_sorter_and_hash_subcommand_has_help(argv, capsys):
+    from fff.cli.app import main
+
+    assert main(argv + ["--help"]) == 0
+    assert "usage:" in capsys.readouterr().out
