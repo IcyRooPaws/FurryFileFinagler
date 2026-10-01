@@ -35,12 +35,15 @@ with `fff config make-example --force` (it replaces paths and personal values wi
 | `fff setup [--dry-run] [--force]` | Build the unified config from the existing code (read-only on them) |
 | `fff config make-example [--force]` | Write a sanitized `config.example.yaml` from `config.yaml` |
 | `fff config show [--module fluffle\|archive\|sorter]` | Print config, secrets redacted; `--module` shows what that module's ported code sees |
+| `fff db copy-data [--db ...] [--dry-run]` | Replace the `test_*` databases with a full copy of production |
+| `fff db rewrite-test-paths [--dry-run]` | Point paths stored in the `test_*` databases at `E:/Testing` |
+| `fff config test-dirs [--create]` | Show/create where each configured folder goes in test mode |
 | `fff db copy-schema [--db ...] [--dry-run]` | Create/refresh empty `test_*` copies of the databases (structure only; re-running empties them) |
 | `fff doctor [--skip-db] [--skip-deps]` | Packages, configured folders, DB connectivity, `all_files` view |
 
-### e621 archive, FA, GUIs (implemented in e621 archive)
+### Ported commands (e621 archive and reverse-image search)
 
-Commands marked in project notes §7. Scripts that had their own options take them unchanged (`fff e621 backfill pools --help`).
+The command map is in project notes §7. Scripts that had their own options take them unchanged (`fff e621 backfill pools --help`).
 
 | Command | What it does |
 |---|---|
@@ -75,6 +78,13 @@ Commands marked in project notes §7. Scripts that had their own options take th
 | `fff e621 db-export` | Download e621 DB exports and load them into e621_db_dump_* tables |
 | `fff e621 reset-db` | Drop all e621_posts_db tables (asks to confirm) |
 | `fff db inspect-hashes` | Print the image_sorting_hashes schema and hash columns |
+| `fff fluffle search` | Reverse-search images with reverse search (+FuzzySearch), process e621/FA matches, sort the rest |
+| `fff fluffle process-e621` | Process stored exact e621 matches: favorite, download, move existing code (applies the blacklist) |
+| `fff fluffle process-fa` | Process stored exact FA matches (no e621 match): favorite, download, move existing code |
+| `fff fluffle sync-fa-favorites` | Favorite on FA the images that matched both e621 and FA |
+| `fff fluffle verify-db` | Print recent rows and counts from image_search |
+| `fff fa rename-authors` | Rename *-FA-* files from author name to author id (mappings from the reverse search DB; interactive) |
+| `fff fa rename-authors-manual` | Same, with mappings from config/fa_author_mappings.yaml (interactive) |
 | `fff fa sync-external` | Track FA source links from e621 posts and favorite them on FA |
 | `fff gui blacklist-review` | Review blacklisted posts (auto-deletes critical/AI-tagged posts first) |
 | `fff gui artist-review` | Review posts by artists from review_artists.yaml |

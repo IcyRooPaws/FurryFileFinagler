@@ -30,6 +30,7 @@ class Command:
 
 S = "fff.archive.scripts"
 A = "e621 archive/"
+FL = "reverse-image search/"
 
 COMMANDS = [
     # --- sync ------------------------------------------------------------------
@@ -120,6 +121,27 @@ COMMANDS = [
     Command(("db", "inspect-hashes"), f"{S}.tools.inspect_image_sorting_hashes_db",
             "Print the image_sorting_hashes schema and hash columns", options=[], call="none",
             original=A + "scripts/tools/inspect_image_sorting_hashes_db.py"),
+    # --- reverse search (implemented in reverse-image search) -------------------------------------
+    Command(("fluffle", "search"), "fff.fluffle.search",
+            "Reverse-search images with reverse search (+FuzzySearch), process e621/FA matches, sort the rest",
+            options=[], original=FL + "fluffle.py"),
+    Command(("fluffle", "process-e621"), "fff.fluffle.e621_matches",
+            "Process stored exact e621 matches: favorite, download, move existing code (applies the blacklist)",
+            options=[], original=FL + "scripts/process_e621_matches.py"),
+    Command(("fluffle", "process-fa"), "fff.fluffle.fa_matches",
+            "Process stored exact FA matches (no e621 match): favorite, download, move existing code",
+            options=[], original=FL + "scripts/process_furaffinity_matches.py"),
+    Command(("fluffle", "sync-fa-favorites"), "fff.fluffle.sync_fa_favorites",
+            "Favorite on FA the images that matched both e621 and FA", options=[],
+            original=FL + "scripts/sync_fa_favorites.py"),
+    Command(("fluffle", "verify-db"), "fff.fluffle.verify_database", "Print recent rows and counts from image_search",
+            func="verify_database", options=[], original=FL + "scripts/verify_database.py"),
+    Command(("fa", "rename-authors"), "fff.fluffle.rename_fa_authors",
+            "Rename *-FA-* files from author name to author id (mappings from the reverse search DB; interactive)",
+            options=[], original=FL + "scripts/rename_fa_author_files.py"),
+    Command(("fa", "rename-authors-manual"), "fff.fluffle.rename_fa_authors_manual",
+            "Same, with mappings from config/fa_author_mappings.yaml (interactive)", options=[],
+            original=FL + "scripts/rename_fa_author_manual.py"),
     # --- FA --------------------------------------------------------------------------
     Command(("fa", "sync-external"), "fff.fluffle.sync_external_fa_sources",
             "Track FA source links from e621 posts and favorite them on FA", options=[], call="none",
@@ -144,6 +166,7 @@ GROUP_HELP = {
     ("e621", "favorites"): "Add, swap or look up favorites",
     ("e621", "files"): "Local files of deleted/unfavorited posts",
     ("fa",): "FurAffinity tools",
+    ("fluffle",): "reverse search reverse image search and match processing (was reverse-image search)",
     ("gui",): "Desktop GUIs",
     ("legacy",): "One-off migrations kept from the current features",
 }

@@ -1,0 +1,7 @@
+# Manual FurAffinity author mappings for 'fff fa rename-authors-manual'.
+# Copy to config/fa_author_mappings.yaml. Files named "<author_name>-...-FA-..." get the
+# author name replaced by the author id (the same rename 'fff fa rename-authors' does with
+# the mappings it reads from the reverse search database).
+mappings:
+  - author_id: example_id
+    author_name: ExampleName
