@@ -13,8 +13,6 @@ from fff.common import config as fff_config
 AI_TAGS = paths.LISTS_DIR / "ai_tags.txt"
 BLACKLIST = paths.LISTS_DIR / "blacklist.txt"
 CRITICAL_BLACKLIST = paths.LISTS_DIR / "critical_blacklist.txt"
-KEPT_POSTS = paths.LISTS_DIR / "kept_posts.txt"
-KEPT_POSTS_ARTISTS = paths.LISTS_DIR / "kept_posts_artists.txt"
 REVIEW_ARTISTS = paths.CONFIG_DIR / "review_artists.yaml"
 KEYBINDS = paths.CONFIG_DIR / "keybinds.yaml"
 
@@ -23,6 +21,9 @@ KEYBINDS = paths.CONFIG_DIR / "keybinds.yaml"
 _DATA_PATHS = {
     "AI_ARTIST_MD": paths.DATA_DIR / "ai_artist.md",
     "AI_ARCHIVE_TXT": paths.DATA_DIR / "ai_generated_posts_archive.txt",
+    # The review GUIs write these; the original kept them in config/ (moved to data/ 2026-09-30)
+    "KEPT_POSTS": paths.DATA_DIR / "kept_posts.txt",
+    "KEPT_POSTS_ARTISTS": paths.DATA_DIR / "kept_posts_artists.txt",
     "MD5_SEARCH_DIR": paths.DATA_DIR / "md5_search",
     "REPORTS_DIR": paths.DATA_DIR / "archive" / "reports",
     "TEMP_DOWNLOADS": paths.CACHE_DIR / "archive" / "temp_downloads",

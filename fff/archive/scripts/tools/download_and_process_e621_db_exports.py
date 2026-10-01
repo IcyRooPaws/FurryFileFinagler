@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # fff: implemented in e621 archive/scripts/tools/download_and_process_e621_db_exports.py.
 # fff: logs go to logs/archive/; exports go to db_export.directory (data/db_exports) instead of ./db_exports.
+# fff: fixed: download_file passed timeout= to api_get, which doesn't accept it, so every download failed.
 """
 E621 Database Export Downloader and Processor
 
@@ -86,7 +87,7 @@ def download_file(url, local_path, timeout=300):
 
     try:
         if api_get:
-            response = api_get(url, stream=True, timeout=timeout)
+            response = api_get(url, stream=True)  # fff: api_get has no timeout parameter (was a TypeError)
         else:
             response = requests.get(url, stream=True, timeout=timeout)
         response.raise_for_status()
