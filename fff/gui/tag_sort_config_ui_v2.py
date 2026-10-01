@@ -40,6 +40,7 @@ from typing import Optional, List
 import yaml
 
 from fff.common import config as fff_config
+from fff.gui import theme
 from fff.sorter import paths as sorter_paths
 from fff.sorter.config import DEFAULT_CONFIG_FILE
 
@@ -54,40 +55,44 @@ logger = logging.getLogger(__name__)
 DEFAULT_CONFIG_PATH = sorter_paths.TAG_SORTING
 
 # ---------------------------------------------------------------------------
-# Theme / colour constants  (identical palette to v1)
+# Theme / colour constants  (fff: mapped onto the shared fff.gui.theme palette)
 # ---------------------------------------------------------------------------
 
-BG_COLOR       = '#1e1e2e'
-BG_SURFACE     = '#282840'
-BG_HEADER      = '#161625'
-BG_SIDEBAR     = '#1a1a30'
-BG_PANEL       = '#202035'   # right edit-panel background (slightly lighter)
-TEXT_COLOR     = '#cdd6f4'
-TEXT_DIM       = '#6c7086'
-TEXT_BRIGHT    = '#f5f5ff'
-ACCENT         = '#89b4fa'
-ACCENT_GREEN   = '#a6e3a1'
-ACCENT_RED     = '#f38ba8'
-ACCENT_YELLOW  = '#f9e2af'
-ACCENT_PEACH   = '#fab387'
-ACCENT_MAUVE   = '#cba6f7'
-BORDER_COLOR   = '#45475a'
-ROW_SELECTED   = '#363a5e'
-ROW_HOVER      = '#2e304a'
-DROP_INTO_BG   = '#2d3a2d'   # greenish tint for "drop INTO" highlight
-SCROLLBAR_BG   = '#313244'
-SCROLLBAR_FG   = '#585b70'
+_P = theme.PALETTE
+BG_COLOR       = _P['page']
+BG_SURFACE     = _P['surface']
+BG_HEADER      = _P['surface']
+BG_SIDEBAR     = _P['page']
+BG_PANEL       = _P['page']      # right edit-panel background
+TEXT_COLOR     = _P['ink']
+TEXT_DIM       = _P['muted']
+TEXT_FAINT     = _P['faint']
+TEXT_BRIGHT    = _P['ink']
+ON_ACCENT      = '#FFFFFF'       # text on an accent-coloured fill
+ACCENT         = _P['accent']
+ACCENT_GREEN   = _P['ok']
+ACCENT_RED     = _P['error']
+ACCENT_YELLOW  = _P['warning']
+ACCENT_PEACH   = _P['orange']
+ACCENT_MAUVE   = _P['violet']
+BORDER_COLOR   = _P['line']
+ROW_SELECTED   = _P['selected']
+ROW_HOVER      = _P['hover']
+DROP_INTO_BG   = _P['ok_soft']   # "drop INTO" highlight
+MIRROR_BG      = _P['ok_soft']
+SCROLLBAR_BG   = _P['surface_alt']
+SCROLLBAR_FG   = _P['line_strong']
 
 # Rule type → (accent colour, badge bg, badge fg text)
 TYPE_COLORS = {
-    'AND':    ('#89b4fa', '#2b3d5b', '#89b4fa'),
-    'OR':     ('#fab387', '#4a3328', '#fab387'),
-    'AND+OR': ('#cba6f7', '#3d2d5b', '#cba6f7'),
-    'Legacy': ('#f9e2af', '#4a4228', '#f9e2af'),
-    'POOL':   ('#a6e3a1', '#2d4a2d', '#a6e3a1'),
-    '?':      ('#6c7086', '#363a4a', '#6c7086'),
+    'AND':    (_P['info'], _P['info_soft'], _P['info']),
+    'OR':     (_P['orange'], _P['orange_soft'], _P['orange']),
+    'AND+OR': (_P['violet'], _P['violet_soft'], _P['violet']),
+    'Legacy': (_P['warning'], _P['warning_soft'], _P['warning']),
+    'POOL':   (_P['ok'], _P['ok_soft'], _P['ok']),
+    '?':      (_P['muted'], _P['surface_alt'], _P['muted']),
 }
-ACCENT_TEAL = '#a6e3a1'
+ACCENT_TEAL = _P['ok']
 
 # Tree layout constants
 ROW_HEIGHT    = 34    # px per tree row
@@ -96,23 +101,22 @@ TRIANGLE_W    = 16   # px reserved for expand/collapse triangle
 BADGE_PAD_X   = 6    # horizontal padding inside type badge
 
 # ---------------------------------------------------------------------------
-# ttk styling  (Notebook tabs + scrollbars use native/OS theming by default,
-# which clashes badly with the custom dark palette above — this pins them to
-# the same colours everywhere they're used).
+# ttk styling  (Notebook tabs + scrollbars in the edit panel and dialogs are
+# pinned to the panel colours above so they sit flush with the tk widgets).
 # ---------------------------------------------------------------------------
 
-_dark_ttk_style_ready = False
+_panel_ttk_style_ready = False
 
 
-def _apply_dark_ttk_style() -> None:
-    """Configure the shared ttk.Style with dark Notebook/Scrollbar styles.
+def _apply_panel_ttk_style() -> None:
+    """Configure the shared ttk.Style with the edit panel's Notebook/Scrollbar styles.
 
-    Idempotent and safe to call from every widget that uses a 'Dark.*' style
+    Idempotent and safe to call from every widget that uses a 'Panel.*' style
     (RuleTreePanel, RuleEditPanel, _DemoteDialog) — whichever is constructed
     first performs the real setup, later calls are no-ops.
     """
-    global _dark_ttk_style_ready
-    if _dark_ttk_style_ready:
+    global _panel_ttk_style_ready
+    if _panel_ttk_style_ready:
         return
     s = ttk.Style()
     try:
@@ -120,29 +124,29 @@ def _apply_dark_ttk_style() -> None:
     except Exception:
         pass
 
-    s.configure('Dark.TNotebook',
+    s.configure('Panel.TNotebook',
                 background=BG_PANEL, borderwidth=0, tabmargins=[0, 0, 0, 0],
                 bordercolor=BG_PANEL, darkcolor=BG_PANEL, lightcolor=BG_PANEL)
-    s.configure('Dark.TNotebook.Tab',
-                background=BG_SURFACE, foreground=TEXT_DIM,
-                padding=[12, 5], font=('Segoe UI', 10), borderwidth=0,
-                bordercolor=BG_PANEL, darkcolor=BG_SURFACE, lightcolor=BG_SURFACE)
-    s.map('Dark.TNotebook.Tab',
+    s.configure('Panel.TNotebook.Tab',
+                background=SCROLLBAR_BG, foreground=TEXT_DIM,
+                padding=[12, 5], font=(theme.UI_FONT, 10), borderwidth=0,
+                bordercolor=BG_PANEL, darkcolor=SCROLLBAR_BG, lightcolor=SCROLLBAR_BG)
+    s.map('Panel.TNotebook.Tab',
           background=[('selected', BG_PANEL), ('active', ROW_HOVER)],
           foreground=[('selected', ACCENT), ('active', TEXT_COLOR)],
           bordercolor=[('selected', BG_PANEL)],
           lightcolor=[('selected', BG_PANEL)],
           darkcolor=[('selected', BG_PANEL)])
 
-    s.configure('Dark.Vertical.TScrollbar',
+    s.configure('Panel.Vertical.TScrollbar',
                 background=SCROLLBAR_FG, troughcolor=BG_COLOR,
                 bordercolor=BG_COLOR, arrowcolor=TEXT_DIM,
                 relief='flat', borderwidth=0, arrowsize=12)
-    s.map('Dark.Vertical.TScrollbar',
+    s.map('Panel.Vertical.TScrollbar',
           background=[('active', ACCENT), ('pressed', ACCENT)],
-          arrowcolor=[('active', BG_COLOR), ('pressed', BG_COLOR)])
+          arrowcolor=[('active', ON_ACCENT), ('pressed', ON_ACCENT)])
 
-    _dark_ttk_style_ready = True
+    _panel_ttk_style_ready = True
 
 # ---------------------------------------------------------------------------
 # YAML helpers
@@ -1102,7 +1106,7 @@ class RuleTreePanel(tk.Frame):
 
     def __init__(self, parent, **kw):
         super().__init__(parent, bg=BG_COLOR, **kw)
-        _apply_dark_ttk_style()
+        _apply_panel_ttk_style()
         self.columnconfigure(0, weight=1)
         self.rowconfigure(0, weight=1)
 
@@ -1110,7 +1114,7 @@ class RuleTreePanel(tk.Frame):
             self, bg=BG_COLOR, highlightthickness=0, borderwidth=0)
         self._vscroll = ttk.Scrollbar(
             self, orient='vertical', command=self._canvas.yview,
-            style='Dark.Vertical.TScrollbar')
+            style='Panel.Vertical.TScrollbar')
         self._canvas.configure(yscrollcommand=self._vscroll.set)
         self._canvas.grid(row=0, column=0, sticky='nsew')
         self._vscroll.grid(row=0, column=1, sticky='ns')
@@ -1471,7 +1475,7 @@ class RuleTreePanel(tk.Frame):
             ghost,
             text='  ' + _truncate(node.display_name(), 52) + '  ',
             bg=ROW_SELECTED, fg=TEXT_BRIGHT,
-            font=('Consolas', 10), padx=6, pady=4).pack()
+            font=(theme.MONO_FONT, 10), padx=6, pady=4).pack()
         ghost.geometry(f'+{event.x_root + 14}+{event.y_root + 4}')
         ghost.lift()
         self._drag_ghost = ghost
@@ -1547,7 +1551,7 @@ class RuleTreePanel(tk.Frame):
             msg = 'No rules match filter' if self._filter_text else "No rules here yet — click '+ New Rule' above"
             self._canvas.create_text(
                 w // 2, 40, text=msg,
-                fill=TEXT_DIM, font=('Segoe UI', 11), anchor='center')
+                fill=TEXT_DIM, font=(theme.UI_FONT, 11), anchor='center')
             self._canvas.configure(scrollregion=(0, 0, w, 80))
             return
 
@@ -1689,7 +1693,7 @@ class RuleTreePanel(tk.Frame):
         self._canvas.create_text(
             x + badge_w // 2, badge_y_top + badge_h // 2,
             text=badge_text, fill=badge_fg,
-            font=('Segoe UI', 9, 'bold'), anchor='center',
+            font=(theme.UI_FONT, 9, 'bold'), anchor='center',
             tags=(tag_row, 'badge'))
         x += badge_w + 8
 
@@ -1726,7 +1730,7 @@ class RuleTreePanel(tk.Frame):
         if is_out_of_sync:
             dest_text = f'{dest_text}  ⚠ out of sync' if dest_text else '⚠ out of sync'
 
-        dest_fg   = ACCENT_YELLOW if is_out_of_sync else (TEXT_DIM if enabled else '#4a4a6a')
+        dest_fg   = ACCENT_YELLOW if is_out_of_sync else (TEXT_DIM if enabled else TEXT_FAINT)
         dest_x    = dot_x - dot_r - 6   # right-anchor just before dot
         dest_meas = len(dest_text) * 6 + 8 if dest_text else 0
 
@@ -1734,7 +1738,7 @@ class RuleTreePanel(tk.Frame):
             self._canvas.create_text(
                 dest_x, mid_y,
                 text=dest_text, fill=dest_fg,
-                font=('Segoe UI', 9), anchor='e',
+                font=(theme.UI_FONT, 9), anchor='e',
                 tags=(tag_row, 'dest'))
 
         # ── Tag summary (fills remaining space) ─────────────────────────
@@ -1749,7 +1753,7 @@ class RuleTreePanel(tk.Frame):
         self._canvas.create_text(
             x, mid_y,
             text=tag_display, fill=tag_fg,
-            font=('Consolas', 10), anchor='w',
+            font=(theme.MONO_FONT, 10), anchor='w',
             tags=(tag_row, 'tag_text'))
 
         # ── Bottom separator ─────────────────────────────────────────────
@@ -1790,7 +1794,7 @@ class TagListWidget(tk.Frame):
     def _build(self, label: str, accent: str, height: int) -> None:
         self.columnconfigure(0, weight=1)
         tk.Label(self, text=label, bg=BG_PANEL, fg=accent,
-                 font=('Segoe UI', 9, 'bold')).grid(
+                 font=(theme.UI_FONT, 9, 'bold')).grid(
             row=0, column=0, sticky='w', pady=(0, 2))
 
         list_frame = tk.Frame(self, bg=BG_PANEL)
@@ -1800,13 +1804,13 @@ class TagListWidget(tk.Frame):
 
         self._lb = tk.Listbox(
             list_frame, height=height, selectmode='extended',
-            font=('Consolas', 10), bg=BG_SURFACE, fg=TEXT_COLOR,
-            selectbackground=accent, selectforeground=BG_COLOR,
+            font=(theme.MONO_FONT, 10), bg=BG_SURFACE, fg=TEXT_COLOR,
+            selectbackground=accent, selectforeground=ON_ACCENT,
             relief='flat', highlightthickness=1,
             highlightcolor=accent, highlightbackground=BORDER_COLOR,
             activestyle='none')
         sb = ttk.Scrollbar(list_frame, orient='vertical', command=self._lb.yview,
-                           style='Dark.Vertical.TScrollbar')
+                           style='Panel.Vertical.TScrollbar')
         self._lb.configure(yscrollcommand=sb.set)
         self._lb.grid(row=0, column=0, sticky='nsew')
         sb.grid(row=0, column=1, sticky='ns')
@@ -1820,7 +1824,7 @@ class TagListWidget(tk.Frame):
         self._entry = tk.Entry(
             entry_frame, textvariable=self._entry_var,
             bg=BG_SURFACE, fg=TEXT_COLOR, insertbackground=TEXT_COLOR,
-            relief='flat', font=('Consolas', 10))
+            relief='flat', font=(theme.MONO_FONT, 10))
         self._entry.grid(row=0, column=0, sticky='ew', padx=(0, 2))
         self._entry.bind('<Return>',   lambda _e: self._add())
         self._entry.bind('<KP_Enter>', lambda _e: self._add())
@@ -1832,8 +1836,8 @@ class TagListWidget(tk.Frame):
                                (' − ', self._remove, ACCENT_RED)]:
             b = tk.Button(btn_frame, text=txt, command=cmd,
                           bg=BG_SURFACE, fg=TEXT_COLOR, relief='flat',
-                          font=('Segoe UI', 11, 'bold'), cursor='hand2',
-                          activebackground=abg, activeforeground=BG_COLOR,
+                          font=(theme.UI_FONT, 11, 'bold'), cursor='hand2',
+                          activebackground=abg, activeforeground=ON_ACCENT,
                           borderwidth=0, pady=0)
             b.pack(side='left', padx=1)
             self._buttons.append(b)
@@ -1940,17 +1944,17 @@ class RuleEditPanel(tk.Frame):
 
         self._badge_lbl = tk.Label(
             self._hdr_frame, text='', bg=BG_HEADER, fg=ACCENT,
-            font=('Segoe UI', 9, 'bold'), padx=8, pady=4)
+            font=(theme.UI_FONT, 9, 'bold'), padx=8, pady=4)
         self._badge_lbl.grid(row=0, column=0, padx=(8, 0), pady=8, sticky='w')
 
         self._name_lbl = tk.Label(
             self._hdr_frame, text='', bg=BG_HEADER, fg=TEXT_BRIGHT,
-            font=('Segoe UI', 10), anchor='w', justify='left')
+            font=(theme.UI_FONT, 10), anchor='w', justify='left')
         self._name_lbl.grid(row=0, column=1, sticky='ew', padx=8, pady=8)
 
         # ── Notebook ─────────────────────────────────────────────────────
         self._setup_notebook_style()
-        self._nb = ttk.Notebook(self, style='Dark.TNotebook')
+        self._nb = ttk.Notebook(self, style='Panel.TNotebook')
         self._nb.grid(row=1, column=0, sticky='nsew')
 
         self._tags_tab = tk.Frame(self._nb, bg=BG_PANEL)
@@ -1971,11 +1975,11 @@ class RuleEditPanel(tk.Frame):
         self._empty_lbl = tk.Label(
             self, text='Select a rule to edit',
             bg=BG_PANEL, fg=TEXT_DIM,
-            font=('Segoe UI', 13), justify='center')
+            font=(theme.UI_FONT, 13), justify='center')
         # shown by clear(), hidden by load_node()
 
     def _setup_notebook_style(self) -> None:
-        _apply_dark_ttk_style()
+        _apply_panel_ttk_style()
 
     # ------------------------------------------------------------------
     # Tags tab
@@ -1997,15 +2001,15 @@ class RuleEditPanel(tk.Frame):
         # Mirror / group-only banner — shown for sync-generated mirrors (locked, with a
         # "Jump to Source" link) or for manually-added Group-Sorting-only sub-rules
         # (informational only, fully editable).
-        self._mirror_banner = tk.Frame(p, bg='#2d3a2d')
+        self._mirror_banner = tk.Frame(p, bg=MIRROR_BG)
         self._mirror_lbl = tk.Label(
-            self._mirror_banner, text='', bg='#2d3a2d', fg=ACCENT_TEAL,
-            font=('Segoe UI', 9), justify='left', anchor='w')
+            self._mirror_banner, text='', bg=MIRROR_BG, fg=ACCENT_TEAL,
+            font=(theme.UI_FONT, 9), justify='left', anchor='w')
         self._mirror_lbl.pack(side='left', padx=(8, 4), pady=6, fill='x', expand=True)
         self._jump_to_source_btn = tk.Button(
             self._mirror_banner, text='Jump to Source', command=self._jump_to_source,
             bg=BG_SURFACE, fg=TEXT_COLOR, relief='flat', padx=8, cursor='hand2',
-            font=('Segoe UI', 9), activebackground=ACCENT, activeforeground=BG_COLOR,
+            font=(theme.UI_FONT, 9), activebackground=ACCENT, activeforeground=ON_ACCENT,
             borderwidth=0)
         self._jump_to_source_btn.pack(side='right', padx=8, pady=6)
 
@@ -2028,7 +2032,7 @@ class RuleEditPanel(tk.Frame):
         self._legacy_frame = tk.Frame(p, bg=BG_PANEL)
         self._legacy_lbl = tk.Label(
             self._legacy_frame, text='', bg=BG_PANEL, fg=ACCENT_YELLOW,
-            font=('Segoe UI', 9), justify='left', wraplength=320)
+            font=(theme.UI_FONT, 9), justify='left', wraplength=320)
         self._legacy_lbl.pack(side='left', padx=4)
 
         # Spacer — absorbs all leftover vertical space so the sections above
@@ -2048,7 +2052,7 @@ class RuleEditPanel(tk.Frame):
             p, text='Matches files whose e621 post belongs to any of these pool IDs.\n'
                     'Combined with tags above using OR — a file matches the rule if it\n'
                     'satisfies the tag criteria OR belongs to one of these pools.',
-            bg=BG_PANEL, fg=TEXT_DIM, font=('Segoe UI', 9),
+            bg=BG_PANEL, fg=TEXT_DIM, font=(theme.UI_FONT, 9),
             justify='left', anchor='w')
         self._pools_desc_lbl.grid(row=0, column=0, sticky='ew', padx=10, pady=(10, 6))
 
@@ -2063,11 +2067,11 @@ class RuleEditPanel(tk.Frame):
         fetch_row.grid(row=2, column=0, sticky='ew', padx=10, pady=(0, 4))
         tk.Button(fetch_row, text='Fetch Names from DB', command=self._fetch_pool_names_clicked,
                   bg=BG_SURFACE, fg=TEXT_COLOR, relief='flat', padx=8, cursor='hand2',
-                  font=('Segoe UI', 9), activebackground=ACCENT, activeforeground=BG_COLOR,
+                  font=(theme.UI_FONT, 9), activebackground=ACCENT, activeforeground=ON_ACCENT,
                   borderwidth=0).pack(side='left')
 
         self._pool_names_lbl = tk.Label(
-            p, text='', bg=BG_PANEL, fg=TEXT_DIM, font=('Segoe UI', 9),
+            p, text='', bg=BG_PANEL, fg=TEXT_DIM, font=(theme.UI_FONT, 9),
             justify='left', anchor='nw', wraplength=320)
         self._pool_names_lbl.grid(row=3, column=0, sticky='ew', padx=10, pady=(0, 10))
 
@@ -2085,7 +2089,7 @@ class RuleEditPanel(tk.Frame):
 
         def _lbl(parent, row, text):
             tk.Label(parent, text=text, bg=BG_PANEL, fg=TEXT_DIM,
-                     font=('Segoe UI', 9), anchor='w').grid(
+                     font=(theme.UI_FONT, 9), anchor='w').grid(
                 row=row, column=0, columnspan=2, sticky='w',
                 padx=(12, 8), pady=(12, 0))
 
@@ -2098,12 +2102,12 @@ class RuleEditPanel(tk.Frame):
         self._target_var.trace_add('write', lambda *_: (self._on_field_changed(), self._update_append_media_type_state()))
         tk.Entry(tdir_row, textvariable=self._target_var,
                  bg=BG_SURFACE, fg=TEXT_COLOR, insertbackground=TEXT_COLOR,
-                 relief='flat', font=('Segoe UI', 10)).grid(
+                 relief='flat', font=(theme.UI_FONT, 10)).grid(
             row=0, column=0, sticky='ew', padx=(0, 4))
         tk.Button(tdir_row, text='Browse…', command=self._browse_target,
                   bg=BG_SURFACE, fg=TEXT_COLOR, relief='flat',
-                  font=('Segoe UI', 9), cursor='hand2', padx=8,
-                  activebackground=ACCENT, activeforeground=BG_COLOR,
+                  font=(theme.UI_FONT, 9), cursor='hand2', padx=8,
+                  activebackground=ACCENT, activeforeground=ON_ACCENT,
                   borderwidth=0).grid(row=0, column=1)
 
         count_row = tk.Frame(self._d0_frame, bg=BG_PANEL)
@@ -2111,12 +2115,12 @@ class RuleEditPanel(tk.Frame):
                        padx=(12, 12), pady=(4, 0))
         self._d0_count_lbl = tk.Label(
             count_row, text='', bg=BG_PANEL, fg=ACCENT_TEAL,
-            font=('Segoe UI', 9), justify='left', anchor='w')
+            font=(theme.UI_FONT, 9), justify='left', anchor='w')
         self._d0_count_lbl.pack(side='left')
         tk.Button(count_row, text='Recount', command=self._recount_current,
                   bg=BG_SURFACE, fg=TEXT_COLOR, relief='flat',
-                  font=('Segoe UI', 8), cursor='hand2', padx=6,
-                  activebackground=ACCENT, activeforeground=BG_COLOR,
+                  font=(theme.UI_FONT, 8), cursor='hand2', padx=6,
+                  activebackground=ACCENT, activeforeground=ON_ACCENT,
                   borderwidth=0).pack(side='left', padx=(8, 0))
 
         _lbl(self._d0_frame, 3, 'Folder Name  (relative, used when no Target Directory)')
@@ -2124,7 +2128,7 @@ class RuleEditPanel(tk.Frame):
         self._folder_var.trace_add('write', lambda *_: self._on_field_changed())
         tk.Entry(self._d0_frame, textvariable=self._folder_var,
                  bg=BG_SURFACE, fg=TEXT_COLOR, insertbackground=TEXT_COLOR,
-                 relief='flat', font=('Segoe UI', 10)).grid(
+                 relief='flat', font=(theme.UI_FONT, 10)).grid(
             row=4, column=0, columnspan=2, sticky='ew',
             padx=(12, 12), pady=(2, 0))
 
@@ -2135,7 +2139,7 @@ class RuleEditPanel(tk.Frame):
             variable=self._match_all_var, command=self._on_field_changed,
             bg=BG_PANEL, fg=TEXT_COLOR, selectcolor=BG_SURFACE,
             activebackground=BG_PANEL, activeforeground=ACCENT,
-            font=('Segoe UI', 9)).grid(
+            font=(theme.UI_FONT, 9)).grid(
             row=5, column=0, columnspan=2, sticky='w', padx=12, pady=(14, 0))
 
         self._append_media_type_var = tk.BooleanVar()
@@ -2146,13 +2150,13 @@ class RuleEditPanel(tk.Frame):
             bg=BG_PANEL, fg=TEXT_COLOR, selectcolor=BG_SURFACE,
             activebackground=BG_PANEL, activeforeground=ACCENT,
             disabledforeground=TEXT_DIM,
-            font=('Segoe UI', 9))
+            font=(theme.UI_FONT, 9))
         self._append_media_type_ck.grid(
             row=6, column=0, columnspan=2, sticky='w', padx=12, pady=(8, 0))
         tk.Label(self._d0_frame,
                  text='Only applies when using Folder Name (no Target Directory) with base directories.',
                  bg=BG_PANEL, fg=TEXT_DIM,
-                 font=('Segoe UI', 8), justify='left').grid(
+                 font=(theme.UI_FONT, 8), justify='left').grid(
             row=7, column=0, columnspan=2, sticky='w', padx=(26, 12), pady=(0, 4))
 
         # ── For sub-rules (depth > 0) ──────────────────────────────────────
@@ -2160,14 +2164,14 @@ class RuleEditPanel(tk.Frame):
         self._sub_frame.columnconfigure(1, weight=1)
 
         tk.Label(self._sub_frame, text='Sub-Directory', bg=BG_PANEL, fg=TEXT_DIM,
-                 font=('Segoe UI', 9), anchor='w').grid(
+                 font=(theme.UI_FONT, 9), anchor='w').grid(
             row=0, column=0, columnspan=2, sticky='w',
             padx=(12, 8), pady=(14, 0))
         self._subdir_var = tk.StringVar()
         self._subdir_var.trace_add('write', lambda *_: self._on_field_changed())
         tk.Entry(self._sub_frame, textvariable=self._subdir_var,
                  bg=BG_SURFACE, fg=TEXT_COLOR, insertbackground=TEXT_COLOR,
-                 relief='flat', font=('Segoe UI', 10)).grid(
+                 relief='flat', font=(theme.UI_FONT, 10)).grid(
             row=1, column=0, columnspan=2, sticky='ew',
             padx=(12, 12), pady=(2, 0))
 
@@ -2176,19 +2180,19 @@ class RuleEditPanel(tk.Frame):
                            padx=(12, 12), pady=(4, 0))
         self._sub_count_lbl = tk.Label(
             sub_count_row, text='', bg=BG_PANEL, fg=ACCENT_TEAL,
-            font=('Segoe UI', 9), justify='left', anchor='w')
+            font=(theme.UI_FONT, 9), justify='left', anchor='w')
         self._sub_count_lbl.pack(side='left')
         tk.Button(sub_count_row, text='Recount', command=self._recount_current,
                   bg=BG_SURFACE, fg=TEXT_COLOR, relief='flat',
-                  font=('Segoe UI', 8), cursor='hand2', padx=6,
-                  activebackground=ACCENT, activeforeground=BG_COLOR,
+                  font=(theme.UI_FONT, 8), cursor='hand2', padx=6,
+                  activebackground=ACCENT, activeforeground=ON_ACCENT,
                   borderwidth=0).pack(side='left', padx=(8, 0))
 
         tk.Label(self._sub_frame,
                  text='Files matching this rule go into a sub-folder\n'
                       'of the parent rule\'s target directory.',
                  bg=BG_PANEL, fg=TEXT_DIM,
-                 font=('Segoe UI', 9), justify='left').grid(
+                 font=(theme.UI_FONT, 9), justify='left').grid(
             row=3, column=0, columnspan=2, sticky='w',
             padx=(12, 12), pady=(8, 0))
 
@@ -2209,7 +2213,7 @@ class RuleEditPanel(tk.Frame):
             variable=self._enabled_var, command=self._on_field_changed,
             bg=BG_PANEL, fg=TEXT_COLOR, selectcolor=BG_SURFACE,
             activebackground=BG_PANEL, activeforeground=ACCENT,
-            font=('Segoe UI', 10)).grid(
+            font=(theme.UI_FONT, 10)).grid(
             row=0, column=0, sticky='w', padx=16, pady=(16, 0))
 
         self._exclfav_ck = tk.Checkbutton(
@@ -2217,7 +2221,7 @@ class RuleEditPanel(tk.Frame):
             variable=self._exclfav_var, command=self._on_field_changed,
             bg=BG_PANEL, fg=TEXT_COLOR, selectcolor=BG_SURFACE,
             activebackground=BG_PANEL, activeforeground=ACCENT,
-            font=('Segoe UI', 10))
+            font=(theme.UI_FONT, 10))
         self._exclfav_ck.grid(row=1, column=0, sticky='w', padx=16, pady=(14, 0))
 
         self._onlyfav_ck = tk.Checkbutton(
@@ -2225,7 +2229,7 @@ class RuleEditPanel(tk.Frame):
             variable=self._onlyfav_var, command=self._on_field_changed,
             bg=BG_PANEL, fg=TEXT_COLOR, selectcolor=BG_SURFACE,
             activebackground=BG_PANEL, activeforeground=ACCENT,
-            font=('Segoe UI', 10))
+            font=(theme.UI_FONT, 10))
         self._onlyfav_ck.grid(row=2, column=0, sticky='w', padx=16, pady=(14, 0))
 
         self._pool_var = tk.BooleanVar(value=False)
@@ -2234,7 +2238,7 @@ class RuleEditPanel(tk.Frame):
             variable=self._pool_var, command=self._on_pool_toggled,
             bg=BG_PANEL, fg=TEXT_COLOR, selectcolor=BG_SURFACE,
             activebackground=BG_PANEL, activeforeground=ACCENT_TEAL,
-            font=('Segoe UI', 10))
+            font=(theme.UI_FONT, 10))
         self._pool_ck.grid(row=3, column=0, sticky='w', padx=16, pady=(14, 0))
 
         self._special_var = tk.BooleanVar(value=False)
@@ -2243,7 +2247,7 @@ class RuleEditPanel(tk.Frame):
             variable=self._special_var, command=self._on_special_toggled,
             bg=BG_PANEL, fg=TEXT_COLOR, selectcolor=BG_SURFACE,
             activebackground=BG_PANEL, activeforeground=ACCENT_YELLOW,
-            font=('Segoe UI', 10))
+            font=(theme.UI_FONT, 10))
         self._special_ck.grid(row=4, column=0, sticky='w', padx=16, pady=(14, 0))
 
         self._match_post_date_var = tk.BooleanVar(value=False)
@@ -2253,21 +2257,21 @@ class RuleEditPanel(tk.Frame):
             variable=self._match_post_date_var, command=self._on_match_post_date_toggled,
             bg=BG_PANEL, fg=TEXT_COLOR, selectcolor=BG_SURFACE,
             activebackground=BG_PANEL, activeforeground=ACCENT_TEAL,
-            justify='left', font=('Segoe UI', 10))
+            justify='left', font=(theme.UI_FONT, 10))
         self._match_post_date_ck.grid(row=5, column=0, sticky='w', padx=16, pady=(14, 0))
 
         self._post_date_opts_frame = tk.Frame(p, bg=BG_PANEL)
         self._post_date_opts_frame.grid(row=6, column=0, sticky='ew', padx=16, pady=(6, 0))
         self._post_date_apply_btn = tk.Button(
             self._post_date_opts_frame, text='Apply Post Dates Now', command=self._apply_post_dates_now,
-            bg=ACCENT_TEAL, fg=BG_COLOR, relief='flat', padx=10, pady=2,
-            cursor='hand2', font=('Segoe UI', 9, 'bold'),
-            activebackground=ACCENT_TEAL, activeforeground=BG_COLOR,
+            bg=ACCENT_TEAL, fg=ON_ACCENT, relief='flat', padx=10, pady=2,
+            cursor='hand2', font=(theme.UI_FONT, 9, 'bold'),
+            activebackground=ACCENT_TEAL, activeforeground=ON_ACCENT,
             borderwidth=0)
         self._post_date_apply_btn.pack(side='left')
         self._post_date_status_lbl = tk.Label(
             self._post_date_opts_frame, text='', bg=BG_PANEL, fg=TEXT_DIM,
-            font=('Segoe UI', 9), justify='left', anchor='w', wraplength=320)
+            font=(theme.UI_FONT, 9), justify='left', anchor='w', wraplength=320)
         self._post_date_status_lbl.pack(side='left', padx=(10, 0))
 
         tk.Frame(p, bg=BORDER_COLOR, height=1).grid(
@@ -2279,7 +2283,7 @@ class RuleEditPanel(tk.Frame):
             variable=self._exclude_sync_var, command=self._on_field_changed,
             bg=BG_PANEL, fg=TEXT_COLOR, selectcolor=BG_SURFACE,
             activebackground=BG_PANEL, activeforeground=ACCENT,
-            font=('Segoe UI', 10))
+            font=(theme.UI_FONT, 10))
         self._exclude_sync_ck.grid(row=8, column=0, sticky='w', padx=16, pady=(0, 0))
 
         self._sync_master_var = tk.BooleanVar(value=False)
@@ -2288,7 +2292,7 @@ class RuleEditPanel(tk.Frame):
             variable=self._sync_master_var, command=self._on_sync_master_toggled,
             bg=BG_PANEL, fg=TEXT_COLOR, selectcolor=BG_SURFACE,
             activebackground=BG_PANEL, activeforeground=ACCENT_TEAL,
-            font=('Segoe UI', 10, 'bold'))
+            font=(theme.UI_FONT, 10, 'bold'))
         self._sync_master_ck.grid(row=9, column=0, sticky='w', padx=16, pady=(14, 0))
 
         self._sync_opts_frame = tk.Frame(p, bg=BG_PANEL)
@@ -2296,12 +2300,12 @@ class RuleEditPanel(tk.Frame):
         self._sync_opts_frame.columnconfigure(1, weight=1)
 
         tk.Label(self._sync_opts_frame, text='Prefix:', bg=BG_PANEL, fg=TEXT_DIM,
-                 font=('Segoe UI', 9)).grid(row=0, column=0, sticky='w')
+                 font=(theme.UI_FONT, 9)).grid(row=0, column=0, sticky='w')
         self._sync_prefix_var = tk.StringVar()
         self._sync_prefix_var.trace_add('write', lambda *_: self._on_field_changed())
         tk.Entry(self._sync_opts_frame, textvariable=self._sync_prefix_var, width=16,
                  bg=BG_SURFACE, fg=TEXT_COLOR, insertbackground=TEXT_COLOR,
-                 relief='flat', font=('Segoe UI', 10)).grid(
+                 relief='flat', font=(theme.UI_FONT, 10)).grid(
             row=0, column=1, sticky='w', padx=(6, 12))
 
         self._sync_position_var = tk.StringVar(value='before')
@@ -2311,25 +2315,25 @@ class RuleEditPanel(tk.Frame):
                 variable=self._sync_position_var, command=self._on_field_changed,
                 bg=BG_PANEL, fg=TEXT_COLOR, selectcolor=BG_SURFACE,
                 activebackground=BG_PANEL, activeforeground=ACCENT,
-                font=('Segoe UI', 9)).grid(row=0, column=2 + i, sticky='w', padx=(0, 8))
+                font=(theme.UI_FONT, 9)).grid(row=0, column=2 + i, sticky='w', padx=(0, 8))
 
         self._sync_status_lbl = tk.Label(
             self._sync_opts_frame, text='', bg=BG_PANEL, fg=ACCENT_YELLOW,
-            font=('Segoe UI', 9), justify='left', anchor='w', wraplength=320)
+            font=(theme.UI_FONT, 9), justify='left', anchor='w', wraplength=320)
         self._sync_status_lbl.grid(row=1, column=0, columnspan=4, sticky='ew', pady=(8, 0))
 
         self._manage_sync_exclusions_btn = tk.Button(
             self._sync_opts_frame, text='Manage excluded rules…',
             command=self._manage_sync_exclusions,
             bg=BG_SURFACE, fg=TEXT_COLOR, relief='flat', padx=8, pady=2,
-            cursor='hand2', font=('Segoe UI', 9),
-            activebackground=ACCENT, activeforeground=BG_COLOR, borderwidth=0)
+            cursor='hand2', font=(theme.UI_FONT, 9),
+            activebackground=ACCENT, activeforeground=ON_ACCENT, borderwidth=0)
         self._manage_sync_exclusions_btn.grid(row=2, column=2, columnspan=2, sticky='e', pady=(8, 0))
 
         tk.Button(self._sync_opts_frame, text='Sync Now', command=self._sync_now,
-                  bg=ACCENT_TEAL, fg=BG_COLOR, relief='flat', padx=10, pady=2,
-                  cursor='hand2', font=('Segoe UI', 9, 'bold'),
-                  activebackground=ACCENT_TEAL, activeforeground=BG_COLOR,
+                  bg=ACCENT_TEAL, fg=ON_ACCENT, relief='flat', padx=10, pady=2,
+                  cursor='hand2', font=(theme.UI_FONT, 9, 'bold'),
+                  activebackground=ACCENT_TEAL, activeforeground=ON_ACCENT,
                   borderwidth=0).grid(row=3, column=0, columnspan=2, sticky='w', pady=(8, 0))
 
     def _manage_sync_exclusions(self) -> None:
@@ -2802,7 +2806,7 @@ class TagSortConfigApp:
 
         tk.Label(header, text='  Tag Sort Configuration',
                  bg=BG_HEADER, fg=TEXT_BRIGHT,
-                 font=('Segoe UI', 14, 'bold')).grid(
+                 font=(theme.UI_FONT, 14, 'bold')).grid(
             row=0, column=0, sticky='w', pady=8, padx=(4, 0))
 
         btn_bar = tk.Frame(header, bg=BG_HEADER)
@@ -2813,8 +2817,8 @@ class TagSortConfigApp:
             fg = BG_COLOR if accent else TEXT_COLOR
             b  = tk.Button(btn_bar, text=text, command=cmd, bg=bg, fg=fg,
                            relief='flat', padx=12, pady=2, cursor='hand2',
-                           font=('Segoe UI', 10, 'bold' if accent else 'normal'),
-                           activebackground=ACCENT, activeforeground=BG_COLOR,
+                           font=(theme.UI_FONT, 10, 'bold' if accent else 'normal'),
+                           activebackground=ACCENT, activeforeground=ON_ACCENT,
                            borderwidth=0)
             orig_bg = bg
             b.bind('<Enter>', lambda e, w=b: w.configure(bg=ACCENT))
@@ -2824,8 +2828,8 @@ class TagSortConfigApp:
         self._add_rule_btn = tk.Button(
             btn_bar, text='+ New Rule', command=self._cmd_add_top_level,
             bg=BG_SURFACE, fg=ACCENT_GREEN, relief='flat', padx=12, pady=2,
-            cursor='hand2', font=('Segoe UI', 10, 'bold'),
-            activebackground=ACCENT_GREEN, activeforeground=BG_COLOR, borderwidth=0)
+            cursor='hand2', font=(theme.UI_FONT, 10, 'bold'),
+            activebackground=ACCENT_GREEN, activeforeground=ON_ACCENT, borderwidth=0)
         self._add_rule_btn.pack(side='left', padx=(4, 4))
 
         # ── Maintenance actions — visually set apart from core editing above ──
@@ -2835,15 +2839,15 @@ class TagSortConfigApp:
         self._count_btn = tk.Button(
             btn_bar, text='Count Files', command=self._count_all_directories,
             bg=BG_SURFACE, fg=TEXT_COLOR, relief='flat', padx=12, pady=2,
-            cursor='hand2', font=('Segoe UI', 10),
-            activebackground=ACCENT_TEAL, activeforeground=BG_COLOR, borderwidth=0)
+            cursor='hand2', font=(theme.UI_FONT, 10),
+            activebackground=ACCENT_TEAL, activeforeground=ON_ACCENT, borderwidth=0)
         self._count_btn.pack(side='left', padx=(0, 4))
 
         self._sync_all_btn = tk.Button(
             btn_bar, text='Sync Now', command=self._cmd_sync_all_masters,
             bg=BG_SURFACE, fg=TEXT_COLOR, relief='flat', padx=12, pady=2,
-            cursor='hand2', font=('Segoe UI', 10),
-            activebackground=ACCENT_TEAL, activeforeground=BG_COLOR, borderwidth=0)
+            cursor='hand2', font=(theme.UI_FONT, 10),
+            activebackground=ACCENT_TEAL, activeforeground=ON_ACCENT, borderwidth=0)
         self._sync_all_btn.pack(side='left', padx=(0, 4))
 
         # ── Rare one-off migration helper — dimmer, kept apart from routine ops ──
@@ -2853,23 +2857,23 @@ class TagSortConfigApp:
         self._migrate_special_btn = tk.Button(
             btn_bar, text='Move Pre-Group → Special', command=self._cmd_migrate_pre_group_to_special,
             bg=BG_HEADER, fg=TEXT_DIM, relief='flat', padx=12, pady=2,
-            cursor='hand2', font=('Segoe UI', 9),
-            activebackground=ACCENT_YELLOW, activeforeground=BG_COLOR, borderwidth=0)
+            cursor='hand2', font=(theme.UI_FONT, 9),
+            activebackground=ACCENT_YELLOW, activeforeground=ON_ACCENT, borderwidth=0)
         self._migrate_special_btn.pack(side='left', padx=(0, 4))
 
         self._dirty_lbl = tk.Label(header, text='', bg=BG_HEADER,
-                                   fg=ACCENT_YELLOW, font=('Segoe UI', 10, 'bold'))
+                                   fg=ACCENT_YELLOW, font=(theme.UI_FONT, 10, 'bold'))
         self._dirty_lbl.grid(row=0, column=2, sticky='w', padx=(8, 0))
 
         filter_frame = tk.Frame(header, bg=BG_HEADER)
         filter_frame.grid(row=0, column=3, sticky='e', padx=(0, 12), pady=8)
         tk.Label(filter_frame, text='Filter:', bg=BG_HEADER, fg=TEXT_DIM,
-                 font=('Segoe UI', 10)).pack(side='left', padx=(0, 4))
+                 font=(theme.UI_FONT, 10)).pack(side='left', padx=(0, 4))
         self._filter_var = tk.StringVar()
         self._filter_var.trace_add('write', lambda *_: self._on_filter())
         tk.Entry(filter_frame, textvariable=self._filter_var,
                  bg=BG_SURFACE, fg=TEXT_COLOR, insertbackground=TEXT_COLOR,
-                 relief='flat', font=('Segoe UI', 10), width=22).pack(side='left')
+                 relief='flat', font=(theme.UI_FONT, 10), width=22).pack(side='left')
 
         # ── Global settings bar (row 1) ─────────────────────────────────
         gbar = tk.Frame(self.root, bg=BG_SURFACE)
@@ -2881,17 +2885,17 @@ class TagSortConfigApp:
             variable=self._gs_enabled_var, command=self._on_gs_changed,
             bg=BG_SURFACE, fg=TEXT_COLOR, selectcolor=BG_COLOR,
             activebackground=BG_SURFACE, activeforeground=ACCENT,
-            font=('Segoe UI', 10)).pack(side='left', padx=(10, 14), pady=5)
+            font=(theme.UI_FONT, 10)).pack(side='left', padx=(10, 14), pady=5)
 
         tk.Frame(gbar, bg=BORDER_COLOR, width=1).pack(side='left', fill='y', pady=4)
 
         tk.Label(gbar, text='  Subdirectory:', bg=BG_SURFACE, fg=TEXT_DIM,
-                 font=('Segoe UI', 9)).pack(side='left')
+                 font=(theme.UI_FONT, 9)).pack(side='left')
         self._gs_subdir_var = tk.StringVar()
         self._gs_subdir_var.trace_add('write', lambda *_: self._on_gs_changed())
         tk.Entry(gbar, textvariable=self._gs_subdir_var, width=20,
                  bg=BG_COLOR, fg=TEXT_COLOR, insertbackground=TEXT_COLOR,
-                 relief='flat', font=('Segoe UI', 10)).pack(
+                 relief='flat', font=(theme.UI_FONT, 10)).pack(
             side='left', padx=(4, 14), pady=5)
 
         tk.Frame(gbar, bg=BORDER_COLOR, width=1).pack(side='left', fill='y', pady=4)
@@ -2901,7 +2905,7 @@ class TagSortConfigApp:
             gbar, text='  DB Settings \u25ba  ',
             command=self._toggle_db_settings,
             bg=BG_SURFACE, fg=TEXT_DIM, relief='flat',
-            font=('Segoe UI', 9), cursor='hand2',
+            font=(theme.UI_FONT, 9), cursor='hand2',
             activebackground=BG_COLOR, activeforeground=ACCENT,
             borderwidth=0)
         self._db_toggle_btn.pack(side='left', padx=(8, 0), pady=5)
@@ -2919,14 +2923,14 @@ class TagSortConfigApp:
             ('Database', 'database', 18),
         ]):
             tk.Label(db_fields, text=lbl + ':', bg=BG_SURFACE, fg=TEXT_DIM,
-                     font=('Segoe UI', 9)).grid(row=0, column=col * 2,
+                     font=(theme.UI_FONT, 9)).grid(row=0, column=col * 2,
                                                 sticky='w', padx=(8, 2))
             v = tk.StringVar()
             v.trace_add('write', lambda *_: self._on_gs_changed())
             self._db_vars[key] = v
             tk.Entry(db_fields, textvariable=v, width=w,
                      bg=BG_COLOR, fg=TEXT_COLOR, insertbackground=TEXT_COLOR,
-                     relief='flat', font=('Segoe UI', 9),
+                     relief='flat', font=(theme.UI_FONT, 9),
                      show='*' if key == 'password' else '').grid(
                 row=0, column=col * 2 + 1, sticky='ew', padx=(0, 4))
 
@@ -2951,7 +2955,7 @@ class TagSortConfigApp:
             b = tk.Button(
                 tab_bar, text=TAB_LABELS[key], command=lambda k=key: self._switch_tab(k),
                 bg=BG_HEADER, fg=TEXT_DIM, relief='flat', padx=12, pady=6,
-                cursor='hand2', font=('Segoe UI', 10),
+                cursor='hand2', font=(theme.UI_FONT, 10),
                 activebackground=ROW_HOVER, activeforeground=TEXT_BRIGHT, borderwidth=0)
             b.pack(side='left')
             self._tab_buttons[key] = b
@@ -2978,7 +2982,7 @@ class TagSortConfigApp:
         # ── Status bar (row 3) ──────────────────────────────────────────
         self._status_var = tk.StringVar(value='Ready')
         tk.Label(self.root, textvariable=self._status_var, anchor='w',
-                 bg=BG_HEADER, fg=TEXT_DIM, font=('Segoe UI', 9),
+                 bg=BG_HEADER, fg=TEXT_DIM, font=(theme.UI_FONT, 9),
                  padx=10, pady=2).grid(row=3, column=0, sticky='ew')
 
     # ------------------------------------------------------------------
@@ -3308,7 +3312,7 @@ class TagSortConfigApp:
                 text=f'{TAB_LABELS[key]} ({counts[key]})',
                 bg=BG_SURFACE if active else BG_HEADER,
                 fg=ACCENT if active else TEXT_DIM,
-                font=('Segoe UI', 10, 'bold' if active else 'normal'))
+                font=(theme.UI_FONT, 10, 'bold' if active else 'normal'))
 
     def _on_rule_category_changed(self, node: RuleNode) -> None:
         """A rule's Special/Sync-Master flag was toggled — follow it to its new tab."""
@@ -3856,7 +3860,7 @@ class TagSortConfigApp:
             text='Select rules that this Sync Master should skip.\n'
                  'The selection affects this group only.',
             bg=BG_PANEL, fg=TEXT_COLOR, justify='left', anchor='w',
-            font=('Segoe UI', 10)).pack(fill='x', padx=12, pady=(12, 8))
+            font=(theme.UI_FONT, 10)).pack(fill='x', padx=12, pady=(12, 8))
 
         list_frame = tk.Frame(dialog, bg=BG_PANEL)
         list_frame.pack(fill='both', expand=True, padx=12)
@@ -3865,8 +3869,8 @@ class TagSortConfigApp:
         listbox = tk.Listbox(
             list_frame, selectmode='multiple', yscrollcommand=scrollbar.set,
             bg=BG_SURFACE, fg=TEXT_COLOR, selectbackground=ACCENT,
-            selectforeground=BG_COLOR, relief='flat', borderwidth=0,
-            font=('Segoe UI', 10), activestyle='none')
+            selectforeground=ON_ACCENT, relief='flat', borderwidth=0,
+            font=(theme.UI_FONT, 10), activestyle='none')
         listbox.pack(side='left', fill='both', expand=True)
         scrollbar.config(command=listbox.yview)
 
@@ -3898,7 +3902,7 @@ class TagSortConfigApp:
             cursor='hand2', borderwidth=0).pack(side='right', padx=(6, 0))
         tk.Button(
             buttons, text='Save', command=save_exclusions,
-            bg=ACCENT, fg=BG_COLOR, relief='flat', padx=10, pady=3,
+            bg=ACCENT, fg=ON_ACCENT, relief='flat', padx=10, pady=3,
             cursor='hand2', borderwidth=0).pack(side='right')
 
         dialog.protocol('WM_DELETE_WINDOW', dialog.destroy)
@@ -4037,7 +4041,7 @@ class _DemoteDialog(tk.Toplevel):
         self.columnconfigure(0, weight=1)
 
         tk.Label(self, text='Select parent rule:', bg=BG_COLOR, fg=ACCENT,
-                 font=('Segoe UI', 11, 'bold')).grid(
+                 font=(theme.UI_FONT, 11, 'bold')).grid(
             row=0, column=0, sticky='w', padx=12, pady=(12, 4))
 
         lb_frame = tk.Frame(self, bg=BG_COLOR)
@@ -4046,12 +4050,12 @@ class _DemoteDialog(tk.Toplevel):
         self.rowconfigure(1, weight=1)
 
         self._lb = tk.Listbox(lb_frame, height=8, selectmode='single',
-                              font=('Consolas', 10), bg=BG_SURFACE, fg=TEXT_COLOR,
-                              selectbackground=ACCENT, selectforeground=BG_COLOR,
+                              font=(theme.MONO_FONT, 10), bg=BG_SURFACE, fg=TEXT_COLOR,
+                              selectbackground=ACCENT, selectforeground=ON_ACCENT,
                               relief='flat', highlightthickness=1,
                               highlightcolor=ACCENT, highlightbackground=BORDER_COLOR)
         sb = ttk.Scrollbar(lb_frame, orient='vertical', command=self._lb.yview,
-                           style='Dark.Vertical.TScrollbar')
+                           style='Panel.Vertical.TScrollbar')
         self._lb.configure(yscrollcommand=sb.set)
         self._lb.grid(row=0, column=0, sticky='nsew')
         sb.grid(row=0, column=1, sticky='ns')
@@ -4061,23 +4065,23 @@ class _DemoteDialog(tk.Toplevel):
         dir_row.grid(row=2, column=0, sticky='ew', padx=12, pady=(8, 4))
         dir_row.columnconfigure(1, weight=1)
         tk.Label(dir_row, text='Sub-directory name:', bg=BG_COLOR, fg=ACCENT,
-                 font=('Segoe UI', 11, 'bold')).grid(row=0, column=0, sticky='w', padx=(0, 8))
+                 font=(theme.UI_FONT, 11, 'bold')).grid(row=0, column=0, sticky='w', padx=(0, 8))
         self._sub_var = tk.StringVar()
         tk.Entry(dir_row, textvariable=self._sub_var,
                  bg=BG_SURFACE, fg=TEXT_COLOR, insertbackground=TEXT_COLOR,
-                 relief='flat', font=('Segoe UI', 11)).grid(row=0, column=1, sticky='ew')
+                 relief='flat', font=(theme.UI_FONT, 11)).grid(row=0, column=1, sticky='ew')
 
         btn_row = tk.Frame(self, bg=BG_COLOR)
         btn_row.grid(row=3, column=0, sticky='e', padx=12, pady=(4, 12))
         tk.Button(btn_row, text='  OK  ', command=self._ok,
-                  bg=ACCENT, fg=BG_COLOR, relief='flat', padx=12, pady=3,
-                  font=('Segoe UI', 10, 'bold'), cursor='hand2',
-                  activebackground=ACCENT, activeforeground=BG_COLOR,
+                  bg=ACCENT, fg=ON_ACCENT, relief='flat', padx=12, pady=3,
+                  font=(theme.UI_FONT, 10, 'bold'), cursor='hand2',
+                  activebackground=ACCENT, activeforeground=ON_ACCENT,
                   borderwidth=0).pack(side='left', padx=(0, 6))
         tk.Button(btn_row, text='Cancel', command=self.destroy,
                   bg=BG_SURFACE, fg=TEXT_COLOR, relief='flat', padx=12, pady=3,
-                  font=('Segoe UI', 10), cursor='hand2',
-                  activebackground=ACCENT, activeforeground=BG_COLOR,
+                  font=(theme.UI_FONT, 10), cursor='hand2',
+                  activebackground=ACCENT, activeforeground=ON_ACCENT,
                   borderwidth=0).pack(side='left')
 
     def _populate(self):
@@ -4179,18 +4183,21 @@ def _self_test(config_path: Path) -> None:
     print('\nPhase 1 data layer: ALL CHECKS PASSED')
 
 
+def build(host, config_path: Optional[Path] = None) -> 'TagSortConfigApp':
+    """Build the editor into ``host`` (a manager ToolHost or a themed Tk root)."""
+    return TagSortConfigApp(host, Path(config_path or DEFAULT_CONFIG_PATH))
+
+
 def launch(config_path: Optional[Path] = None) -> None:
     """Launch the Tag Sort Config UI v2."""
-    if config_path is None:
-        config_path = DEFAULT_CONFIG_PATH
-
     root = tk.Tk()
     try:
         root.tk.call('tk', 'scaling', 1.0)
     except Exception:
         pass
+    theme.apply(root)
 
-    TagSortConfigApp(root, Path(config_path))
+    build(root, config_path)
     root.mainloop()
 
 

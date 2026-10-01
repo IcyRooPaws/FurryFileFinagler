@@ -9,7 +9,7 @@ Interactive tool to review posts by favorite artists defined in `artists.yaml`
 
 Flow:
 - Load `artists.yaml` mapping (DisplayName -> [aliases])
-- Present a small selection UI to choose one artist (display names are shown)
+- Present a selection panel to choose one artist (display names are shown)
 - Build SQL LIKE patterns for aliases and fetch posts that have matching artist names in the DB
 - Filter posts without accessible images and previously "kept" posts
 - Launch the existing `BlacklistReviewUI` to review the posts (re-using UI from `blacklist_review_ui.py`)
@@ -17,7 +17,6 @@ Flow:
 """
 
 import os
-import sys
 import logging
 import tkinter as tk
 from tkinter import ttk, messagebox
@@ -29,6 +28,7 @@ from fff.archive import paths as archive_paths
 from fff.archive.config import load_config
 from fff.archive.db import connect_to_mysql
 from fff.archive.logging_setup import setup_logging
+from fff.gui import host as tool_host, theme
 
 # Import utilities and UI from blacklist_review_ui
 from fff.gui.blacklist_review_ui import (
@@ -37,6 +37,7 @@ from fff.gui.blacklist_review_ui import (
     load_kept_posts,
     filter_kept_posts,
     filter_posts_with_accessible_images,
+    load_review_keybindings,
 )
 
 
@@ -62,70 +63,57 @@ def load_artists_yaml(path="artists.yaml"):
         return None
 
 
-def choose_artist_gui(artists_map):
-    """Show a simple selection window and return chosen (display_name, alias_list) or (None, None) if canceled."""
-    root = tk.Tk()
-    root.title("Select Artist to Review")
-    root.geometry("520x420")
+class ArtistPicker(ttk.Frame):
+    """Search-and-pick list of artists; calls ``on_choose(display_name)`` or ``on_cancel()``."""
 
-    ttk.Label(root, text="Select an artist to review:", font=("Arial", 12, "bold")).pack(pady=(10, 6))
+    def __init__(self, parent, artists_map, on_choose, on_cancel):
+        super().__init__(parent, padding=(18, 14))
+        self.artists_map = artists_map
+        self.on_choose = on_choose
 
-    search_var = tk.StringVar()
+        ttk.Label(self, text="Select an artist to review", style="Heading.TLabel").pack(anchor="w")
+        ttk.Label(self, text=f"{len(artists_map)} artists from review_artists.yaml. Type to filter.",
+                  style="Muted.TLabel").pack(anchor="w", pady=(2, 10))
 
-    def on_search(*_):
-        q = search_var.get().strip().lower()
-        lb.delete(0, tk.END)
-        for name in sorted(artists_map.keys()):
+        self.search_var = tk.StringVar()
+        search_entry = ttk.Entry(self, textvariable=self.search_var)
+        search_entry.pack(fill="x")
+        self.search_var.trace_add("write", lambda *_: self._refresh())
+
+        frame = ttk.Frame(self)
+        frame.pack(fill="both", expand=True, pady=8)
+        self.listbox = tk.Listbox(frame, activestyle="none")
+        self.listbox.pack(side="left", fill="both", expand=True)
+        scroll = ttk.Scrollbar(frame, orient="vertical", command=self.listbox.yview)
+        scroll.pack(side="right", fill="y")
+        self.listbox.config(yscrollcommand=scroll.set)
+        self.listbox.bind("<Double-Button-1>", lambda _e: self._choose())
+        self.listbox.bind("<Return>", lambda _e: self._choose())
+        search_entry.bind("<Return>", lambda _e: self._choose())
+
+        buttons = ttk.Frame(self)
+        buttons.pack(fill="x")
+        ttk.Button(buttons, text="Load Posts for Selected Artist", style="Primary.TButton",
+                   command=self._choose).pack(side="left")
+        ttk.Button(buttons, text="Cancel", command=on_cancel).pack(side="right")
+        self._refresh()
+        search_entry.focus_set()
+
+    def _refresh(self):
+        q = self.search_var.get().strip().lower()
+        self.listbox.delete(0, tk.END)
+        for name in sorted(self.artists_map):
             if not q or q in name.lower():
-                lb.insert(tk.END, name)
+                self.listbox.insert(tk.END, name)
+        if self.listbox.size() == 1:
+            self.listbox.selection_set(0)
 
-    search_entry = ttk.Entry(root, textvariable=search_var)
-    search_entry.pack(fill="x", padx=12)
-    search_var.trace_add('write', on_search)
-
-    frame = ttk.Frame(root)
-    frame.pack(fill="both", expand=True, padx=12, pady=8)
-
-    lb = tk.Listbox(frame, activestyle="dotbox")
-    lb.pack(side="left", fill="both", expand=True)
-
-    scroll = ttk.Scrollbar(frame, orient="vertical", command=lb.yview)
-    scroll.pack(side="right", fill="y")
-    lb.config(yscrollcommand=scroll.set)
-
-    # Populate listbox
-    for name in sorted(artists_map.keys()):
-        lb.insert(tk.END, name)
-
-    chosen = {'name': None}
-
-    def do_load():
-        sel = lb.curselection()
+    def _choose(self):
+        sel = self.listbox.curselection()
         if not sel:
-            messagebox.showinfo("Select Artist", "Please select an artist from the list.")
+            messagebox.showinfo("Select Artist", "Please select an artist from the list.", parent=self)
             return
-        index = sel[0]
-        name = lb.get(index)
-        chosen['name'] = name
-        root.destroy()
-
-    def do_cancel():
-        root.destroy()
-
-    btn_frame = ttk.Frame(root)
-    btn_frame.pack(fill="x", padx=12, pady=(0, 12))
-
-    load_btn = ttk.Button(btn_frame, text="Load Posts for Selected Artist", command=do_load)
-    load_btn.pack(side="left")
-
-    cancel_btn = ttk.Button(btn_frame, text="Cancel", command=do_cancel)
-    cancel_btn.pack(side="right")
-
-    root.mainloop()
-
-    if not chosen['name']:
-        return None, None
-    return chosen['name'], artists_map.get(chosen['name'], [])
+        self.on_choose(self.listbox.get(sel[0]))
 
 
 def fetch_posts_by_artist(conn, alias_list):
@@ -165,72 +153,96 @@ def fetch_posts_by_artist(conn, alias_list):
         cursor.close()
 
 
-def main(argv=None):  # fff: argv is ignored (no options); lets the CLI call it uniformly
+def _load_artist_posts(aliases):
+    """Off the Tk thread: connect and collect this artist's reviewable posts."""
+    config = load_config()
+    conn = connect_to_mysql(config.get("mysql", {}))
+    if conn is None:
+        raise RuntimeError("Failed to connect to database")
+    try:
+        posts = fetch_posts_by_artist(conn, aliases)
+        posts = filter_posts_with_accessible_images(posts)
+        posts = filter_kept_posts(posts, load_kept_posts(str(archive_paths.KEPT_POSTS_ARTISTS)))
+    except BaseException:
+        conn.close()
+        raise
+    return {"conn": conn, "posts": posts, "e621_config": config.get("e621", {}),
+            "keybinds": load_review_keybindings()}
+
+
+def build(host):
+    """Pick an artist, then review their posts, all inside ``host`` (ToolHost or Tk root)."""
     setup_logging(str(archive_paths.LOG_DIR))  # fff: was ./logs (CWD)
     logging.info("Starting Artist Review UI")
 
-    config = load_config()
-    mysql_config = config.get("mysql", {})
-    e621_config = config.get("e621", {})
-
-    conn = connect_to_mysql(mysql_config)
-    if conn is None:
-        messagebox.showerror("Error", "Failed to connect to database")
-        sys.exit(1)
+    def close():
+        tool_host.close(host)
 
     artists_yaml_path = archive_paths.REVIEW_ARTISTS
     artists_map = load_artists_yaml(str(artists_yaml_path))
     if artists_map is None:
-        messagebox.showerror("Error", f"Failed to load {artists_yaml_path}")
-        conn.close()
-        sys.exit(1)
+        tool_host.message_panel(host, "Artist review could not start",
+                                f"Failed to load {artists_yaml_path}", tone="warning",
+                                actions=(("Close", close),))
+        return
 
-    display_name, aliases = choose_artist_gui(artists_map)
-    if not display_name:
+    def chosen(display_name):
+        aliases = artists_map.get(display_name, [])
+        logging.info("Selected artist: %s (aliases: %s)", display_name, aliases)
+        picker.destroy()
+        loading = tool_host.message_panel(host, f"Loading {display_name}",
+                                          "Finding this artist's posts in the archive…", busy=True)
+
+        def failed(exc):
+            loading.destroy()
+            logging.error("Artist review could not load posts: %s", exc)
+            tool_host.message_panel(host, "Artist review could not start", str(exc), tone="warning",
+                                    actions=(("Close", close),))
+
+        def ready(loaded):
+            loading.destroy()
+            tool_host.on_destroy(host, loaded["conn"].close)
+            posts = loaded["posts"]
+            logging.info("Found %s posts for artist %s", len(posts), display_name)
+            if not posts:
+                tool_host.message_panel(host, "No posts to review",
+                                        f"No posts found for artist {display_name} with accessible images.",
+                                        actions=(("Close", close),))
+                return
+            # Use the BlacklistReviewUI but set the context label to indicate artist review
+            BlacklistReviewUI(
+                host,
+                posts,
+                loaded["conn"],
+                loaded["e621_config"],
+                loaded["keybinds"],
+                window_title=f"Artist Review: {display_name}",
+                context_label_text=f"Artist: {display_name}",
+                context_label_color=theme.PALETTE["accent"],
+                kept_file=str(archive_paths.KEPT_POSTS_ARTISTS),
+            )
+
+        tool_host.run_in_background(host, lambda: _load_artist_posts(aliases), ready, failed)
+
+    def cancelled():
         logging.info("Artist selection canceled by user")
-        conn.close()
-        sys.exit(0)
+        close()
 
-    logging.info("Selected artist: %s (aliases: %s)", display_name, aliases)
+    picker = ArtistPicker(host, artists_map, chosen, cancelled)
+    picker.place(relx=0.5, rely=0, relwidth=0.6, relheight=1, anchor="n")
 
-    posts = fetch_posts_by_artist(conn, aliases)
-    logging.info("Found %s posts for artist %s", len(posts), display_name)
 
-    posts = filter_posts_with_accessible_images(posts)
-
-    kept_posts_artists_path = archive_paths.KEPT_POSTS_ARTISTS
-    kept_posts = load_kept_posts(str(kept_posts_artists_path))
-    posts = filter_kept_posts(posts, kept_posts)
-
-    if not posts:
-        message = f"No posts found for artist {display_name} with accessible images."
-        messagebox.showinfo("No Posts", message)
-        conn.close()
-        sys.exit(0)
-
-    keybinds_path = archive_paths.KEYBINDS
-    if keybinds_path.exists():
-        keybinds = load_keybindings(str(keybinds_path))
-    else:
-        keybinds = load_keybindings("keybinds.yaml")
-
+def main(argv=None):  # fff: argv is ignored (no options); lets the CLI call it uniformly
     root = tk.Tk()
-    # Use the BlacklistReviewUI but set the context label to indicate artist review
-    app = BlacklistReviewUI(
-        root,
-        posts,
-        conn,
-        e621_config,
-        keybinds,
-        window_title=f"Artist Review: {display_name}",
-        context_label_text=f"Artist: {display_name}",
-        context_label_color="blue",
-        kept_file=str(kept_posts_artists_path),
-    )
-
+    theme.apply(root)
+    root.title("Artist Review")
+    root.geometry("1200x900")
+    build(root)
     root.mainloop()
-
-    conn.close()
+    try:
+        root.destroy()  # quit_app only stops the loop; this closes the connection (on_destroy)
+    except tk.TclError:
+        pass
     logging.info("Artist Review UI closed")
 
 

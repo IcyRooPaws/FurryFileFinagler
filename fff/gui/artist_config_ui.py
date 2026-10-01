@@ -22,6 +22,7 @@ from typing import Optional
 
 import yaml
 
+from fff.gui import theme
 from fff.sorter import paths as sorter_paths
 
 logger = logging.getLogger(__name__)
@@ -156,7 +157,7 @@ class ArtistEditorDialog(tk.Toplevel):
         alias_frame.columnconfigure(0, weight=1)
         alias_frame.rowconfigure(0, weight=1)
 
-        self._aliases_lb = tk.Listbox(alias_frame, height=10, selectmode='extended', font=('TkDefaultFont', 9))
+        self._aliases_lb = tk.Listbox(alias_frame, height=10, selectmode='extended', font=theme.font(9))
         self._aliases_lb.grid(row=0, column=0, sticky='nsew')
 
         alias_scroll = ttk.Scrollbar(alias_frame, orient='vertical', command=self._aliases_lb.yview)
@@ -187,7 +188,7 @@ class ArtistEditorDialog(tk.Toplevel):
         self._format_hint = ttk.Label(
             target_frame,
             text='Legacy format saves only aliases. Advanced format saves aliases plus enabled/target settings.',
-            foreground='gray'
+            foreground=theme.PALETTE['muted']
         )
         self._format_hint.grid(row=1, column=0, columnspan=2, sticky='w', pady=(6, 0))
 
@@ -301,13 +302,13 @@ class ArtistConfigApp:
         toolbar = ttk.Frame(self.root, padding=(6, 4))
         toolbar.grid(row=0, column=0, sticky='ew')
 
-        ttk.Label(toolbar, text='Artist Configuration', font=('TkDefaultFont', 12, 'bold')).pack(
+        ttk.Label(toolbar, text='Artist Configuration', style='Heading.TLabel').pack(
             side='left', padx=(0, 20))
         ttk.Button(toolbar, text='Save', command=self._save).pack(side='left', padx=(0, 4))
         ttk.Button(toolbar, text='Reload', command=self._reload).pack(side='left', padx=(0, 4))
         ttk.Button(toolbar, text='Sort A-Z', command=self._sort_artists).pack(side='left', padx=(0, 4))
 
-        self._dirty_label = ttk.Label(toolbar, text='', foreground='red')
+        self._dirty_label = ttk.Label(toolbar, text='', style='Error.TLabel')
         self._dirty_label.pack(side='left', padx=(8, 0))
 
         body = ttk.LabelFrame(self.root, text='Artists', padding=8)
@@ -332,7 +333,7 @@ class ArtistConfigApp:
         vsb.grid(row=0, column=1, sticky='ns')
 
         self._tree.bind('<Double-1>', lambda e: self._edit_artist())
-        self._tree.tag_configure('disabled', foreground='grey')
+        self._tree.tag_configure('disabled', foreground=theme.PALETTE['faint'])
 
         btn_frame = ttk.Frame(body)
         btn_frame.grid(row=0, column=1, sticky='n', padx=(8, 0))
@@ -547,18 +548,21 @@ class ArtistConfigApp:
         self.root.destroy()
 
 
+def build(host, config_path: Optional[Path] = None) -> 'ArtistConfigApp':
+    """Build the editor into ``host`` (a manager ToolHost or a themed Tk root)."""
+    return ArtistConfigApp(host, Path(config_path or DEFAULT_CONFIG_PATH))
+
+
 def launch(config_path: Optional[Path] = None):
     """Launch the artist configuration UI."""
-    if config_path is None:
-        config_path = DEFAULT_CONFIG_PATH
-
     root = tk.Tk()
     try:
         root.tk.call('tk', 'scaling', 1.0)
     except Exception:
         pass
+    theme.apply(root)
 
-    ArtistConfigApp(root, Path(config_path))
+    build(root, config_path)
     root.mainloop()
 
 

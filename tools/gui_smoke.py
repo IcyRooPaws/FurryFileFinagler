@@ -3,7 +3,8 @@
     python tools/gui_smoke.py [--shots DIR] [name ...]
 
 Each GUI runs in its own process with FFF_ENV=test and all HTTP stubbed (no e621/FA calls):
-it is built with real test data, processes events for a few seconds (its widget tree is
+it is built with real test data inside a manager ToolHost (the way the FFF Manager embeds
+it), processes events for a few seconds (its widget tree is
 counted; --shots also saves a screenshot, window brought to the front first) and is
 closed. Any Tk callback exception or error fails the check. The config editors work on
 temporary copies of the YAML files and must leave them byte-for-byte unchanged. The Flask
@@ -22,7 +23,7 @@ import traceback
 from pathlib import Path
 
 FFF = Path(__file__).resolve().parents[1]
-CHECKS = ["tag-sort-config", "artist-config", "duplicates", "blacklist-review", "artist-review-ui",
+CHECKS = ["manager", "tag-sort-config", "artist-config", "duplicates", "blacklist-review", "artist-review-ui",
           "post-id-review", "archive-browser"]
 
 
@@ -96,12 +97,20 @@ def child(name, shot_dir):
             errors.append(f"HTTP 5xx: {statuses}")
         return result
 
+    from fff.gui import theme
+    from fff.gui.host import ToolHost
+
     root = tk.Tk()
+    theme.apply(root)
+    root.geometry("1400x900")
+    host = ToolHost(root, on_title=lambda text: result.__setitem__("tool_title", text))
+    host.pack(fill="both", expand=True)
     watched = {}
     if name == "manager":
         from fff.gui import manager_ui
 
-        manager_ui.main(root=root, run_mainloop=False)
+        host.destroy()
+        app = manager_ui.build(root)
         stop_button = next((widget for widget in _walk(root)
                             if widget.winfo_class() == "TButton"
                             and widget.cget("text") == "Stop Web UI"), None)
@@ -111,7 +120,23 @@ def child(name, shot_dir):
             errors.append("Stop Web UI button should start disabled")
         else:
             result["stop_web_ui_button"] = "disabled until gallery starts"
-        app = None
+        pages = [("page", i) for i in range(len(manager_ui.PAGES))] + [("tool", t.key) for t in manager_ui.TOOLS]
+        for key in pages:
+            app.show(key)
+            root.update()
+        from fff.sorter import paths as sorter_paths
+
+        # Tag rules opens without side effects (it writes only on Save); prove it on the real file.
+        watched[sorter_paths.TAG_SORTING] = hashlib.md5(sorter_paths.TAG_SORTING.read_bytes()).hexdigest()
+        app.open_tool(next(t for t in manager_ui.TOOLS if t.key == "tag-rules"))
+        root.update()
+        result["pages_visited"] = len(pages)
+        result["open_tools"] = sorted(app.tool_hosts)
+        if "tag-rules" not in app.tool_hosts:
+            errors.append("Tag rules did not open inside the manager")
+        app.show(("page", 0))
+        root.update()
+        app.show(("tool", "tag-rules"))
     elif name == "tag-sort-config":
         from fff.gui.tag_sort_config_ui_v2 import TagSortConfigApp
         from fff.sorter import paths as sorter_paths
@@ -119,7 +144,7 @@ def child(name, shot_dir):
         copy = tmp / "tag_sorting.yaml"
         shutil.copy2(sorter_paths.TAG_SORTING, copy)
         watched[copy] = hashlib.md5(copy.read_bytes()).hexdigest()
-        app = TagSortConfigApp(root, copy)
+        app = TagSortConfigApp(host, copy)
     elif name == "artist-config":
         from fff.gui.artist_config_ui import ArtistConfigApp
         from fff.sorter import paths as sorter_paths
@@ -127,11 +152,11 @@ def child(name, shot_dir):
         copy = tmp / "sort_artists.yaml"
         shutil.copy2(sorter_paths.SORT_ARTISTS, copy)
         watched[copy] = hashlib.md5(copy.read_bytes()).hexdigest()
-        app = ArtistConfigApp(root, copy)
+        app = ArtistConfigApp(host, copy)
     elif name == "duplicates":
         from fff.gui.duplicate_manager_ui import DuplicateManagerGUI
 
-        app = DuplicateManagerGUI(root)
+        app = DuplicateManagerGUI(host)
     elif name in ("blacklist-review", "artist-review-ui"):
         from fff.archive.config import load_config
         from fff.gui.blacklist_review_ui import BlacklistReviewUI
@@ -140,13 +165,14 @@ def child(name, shot_dir):
         result["posts"] = len(posts)
         kwargs = {} if name == "blacklist-review" else {
             "window_title": "Artist Review UI", "context_label_text": "Artist:", "context_label_color": "blue"}
-        app = BlacklistReviewUI(root, posts, conn, load_config()["e621"], kept_file=str(tmp / "kept.txt"), **kwargs)
+        app = BlacklistReviewUI(host, posts, conn, load_config()["e621"], kept_file=str(tmp / "kept.txt"), **kwargs)
     elif name == "post-id-review":
         from fff.archive.scripts.database.validate_post_ids_in_filenames import MismatchReviewUI
 
         _, posts = _sample_posts(2)
         groups = [{"file_path": p["file_path"], "filename": os.path.basename(p["file_path"]),
                    "filename_id": p["id"], "posts": [p["id"], p["id"] + 1]} for p in posts]
+        host.destroy()  # still a standalone window (run from 'fff e621 verify post-ids --review')
         app = MismatchReviewUI(root, groups)
     else:
         raise SystemExit(f"unknown check {name}")

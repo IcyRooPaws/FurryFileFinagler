@@ -27,7 +27,6 @@ Customize keybindings in keybinds.yaml
 """
 
 import os
-import sys
 import logging
 import time
 import threading
@@ -48,6 +47,7 @@ from fff.archive.config import load_config
 from fff.archive.db import connect_to_mysql, record_ai_flagged_artists
 from fff.archive.logging_setup import setup_logging
 from fff.archive.api import api_get
+from fff.gui import host as tool_host, theme
 
 # Try to import cv2 for video support
 try:
@@ -114,7 +114,7 @@ class BlacklistReviewUI:
         *,
         window_title="Blacklist Review UI",
         context_label_text="Blacklisted Tags:",
-        context_label_color="red",
+        context_label_color=theme.PALETTE["error"],
         kept_file="kept_posts.txt"
     ):
         self.master = master
@@ -162,7 +162,7 @@ class BlacklistReviewUI:
         self.info_frame = ttk.Frame(master, padding="10")
         self.info_frame.grid(row=0, column=0, sticky="ew")
 
-        self.progress_label = ttk.Label(self.info_frame, text="", font=("Arial", 12))
+        self.progress_label = ttk.Label(self.info_frame, text="", font=theme.font(12))
         self.progress_label.pack()
 
         # Main content frame
@@ -177,7 +177,7 @@ class BlacklistReviewUI:
         self.canvas_frame.grid_rowconfigure(0, weight=1)
         self.canvas_frame.grid_columnconfigure(0, weight=1)
 
-        self.canvas = tk.Canvas(self.canvas_frame, bg="gray25")
+        self.canvas = tk.Canvas(self.canvas_frame, bg=theme.PALETTE["media"])
         self.scrollbar_y = ttk.Scrollbar(self.canvas_frame, orient="vertical", command=self.canvas.yview)
         self.scrollbar_x = ttk.Scrollbar(self.canvas_frame, orient="horizontal", command=self.canvas.xview)
 
@@ -194,15 +194,15 @@ class BlacklistReviewUI:
         self.info_panel.grid(row=0, column=1, sticky="nsew")
 
         # Post info
-        ttk.Label(self.info_panel, text="Post Information", font=("Arial", 14, "bold")).pack(pady=(0, 10))
+        ttk.Label(self.info_panel, text="Post Information", font=theme.font(14, "bold")).pack(pady=(0, 10))
 
-        self.post_id_label = ttk.Label(self.info_panel, text="", font=("Arial", 11))
+        self.post_id_label = ttk.Label(self.info_panel, text="", font=theme.font(11))
         self.post_id_label.pack(anchor="w", pady=2)
 
-        self.file_name_label = ttk.Label(self.info_panel, text="", font=("Arial", 10), wraplength=300)
+        self.file_name_label = ttk.Label(self.info_panel, text="", font=theme.font(10), wraplength=300)
         self.file_name_label.pack(anchor="w", pady=2)
 
-        self.rating_label = ttk.Label(self.info_panel, text="", font=("Arial", 10))
+        self.rating_label = ttk.Label(self.info_panel, text="", font=theme.font(10))
         self.rating_label.pack(anchor="w", pady=2)
 
         ttk.Separator(self.info_panel, orient="horizontal").pack(fill="x", pady=10)
@@ -211,16 +211,17 @@ class BlacklistReviewUI:
         self.context_label = ttk.Label(
             self.info_panel,
             text=context_label_text,
-            font=("Arial", 12, "bold"),
+            font=theme.font(12, "bold"),
             foreground=context_label_color
         )
         self.context_label.pack(pady=(0, 5))
 
-        self.tags_text = tk.Text(self.info_panel, height=15, width=35, wrap="word", font=("Arial", 10))
+        self.tags_text = tk.Text(self.info_panel, height=15, width=35, wrap="word", font=theme.font(10),
+                                 padx=6, pady=4)
         self.tags_text.pack(fill="both", expand=True, pady=(0, 10))
 
         # E621 link
-        self.link_label = ttk.Label(self.info_panel, text="", font=("Arial", 9), foreground="blue", cursor="hand2")
+        self.link_label = ttk.Label(self.info_panel, text="", font=theme.font(9), foreground=theme.PALETTE["accent"], cursor="hand2")
         self.link_label.pack(pady=5)
         self.link_label.bind("<Button-1>", self.open_e621_link)
 
@@ -257,7 +258,7 @@ class BlacklistReviewUI:
         self.mute_check.grid(row=0, column=1, padx=2)
 
         # Audio indicator
-        self.audio_label = ttk.Label(self.video_controls_frame, text="", font=("Arial", 9))
+        self.audio_label = ttk.Label(self.video_controls_frame, text="", font=theme.font(9))
         self.audio_label.grid(row=0, column=2, padx=5)
 
         # Navigation and action buttons (with custom keybind labels)
@@ -279,11 +280,12 @@ class BlacklistReviewUI:
         self.quit_button.pack(side="right", padx=5)
 
         # Statistics label
-        self.stats_label = ttk.Label(self.button_frame, text="", font=("Arial", 10))
+        self.stats_label = ttk.Label(self.button_frame, text="", font=theme.font(10))
         self.stats_label.pack(side="right", padx=20)
 
         # Keyboard bindings (bind all custom keys)
         self._setup_keybindings()
+        master.protocol("WM_DELETE_WINDOW", self.quit_app)
 
         # Load first post
         self.load_post()
@@ -477,7 +479,7 @@ class BlacklistReviewUI:
                     canvas_width // 2,
                     canvas_height // 2,
                     text=f"VIDEO FILE\n\n{os.path.basename(file_path)}\n\nInstall opencv-python to preview",
-                    font=("Arial", 14),
+                    font=theme.font(14),
                     fill="white",
                     justify="center"
                 )
@@ -503,11 +505,11 @@ class BlacklistReviewUI:
                 # Update audio indicator
                 if self.video_has_audio:
                     if HAS_PYGAME:
-                        self.audio_label.config(text="[AUDIO] Has Audio", foreground="green")
+                        self.audio_label.config(text="[AUDIO] Has Audio", foreground=theme.PALETTE["ok"])
                     else:
-                        self.audio_label.config(text="[AUDIO] Has Audio (pygame required)", foreground="orange")
+                        self.audio_label.config(text="[AUDIO] Has Audio (pygame required)", foreground=theme.PALETTE["warning"])
                 else:
-                    self.audio_label.config(text="[MUTE] No Audio", foreground="gray")
+                    self.audio_label.config(text="[MUTE] No Audio", foreground=theme.PALETTE["muted"])
 
                 # Enable play button
                 self.play_button.config(state="normal")
@@ -525,7 +527,7 @@ class BlacklistReviewUI:
                 canvas_width // 2,
                 canvas_height // 2,
                 text=f"VIDEO FILE\n\n{os.path.basename(file_path)}\n\n(Preview unavailable)",
-                font=("Arial", 14),
+                font=theme.font(14),
                 fill="white",
                 justify="center"
             )
@@ -581,7 +583,7 @@ class BlacklistReviewUI:
                     canvas_width // 2,
                     canvas_height // 2,
                     text=f"VIDEO FILE\n\nURL: {url[:60]}...\n\n(Preview from URL not supported)",
-                    font=("Arial", 12),
+                    font=theme.font(12),
                     fill="white",
                     justify="center"
                 )
@@ -621,7 +623,7 @@ class BlacklistReviewUI:
                         canvas_width // 2,
                         canvas_height // 2,
                         text=f"VIDEO FILE\n\n(Content-Type: {content_type})\n\n(Preview from URL not supported)",
-                        font=("Arial", 12),
+                        font=theme.font(12),
                         fill="white",
                         justify="center"
                     )
@@ -634,7 +636,7 @@ class BlacklistReviewUI:
                         canvas_width // 2,
                         canvas_height // 2,
                         text=f"ERROR: Received {content_type}\ninstead of image/video\n\nURL may be invalid or content deleted",
-                        font=("Arial", 12),
+                        font=theme.font(12),
                         fill="red",
                         justify="center"
                     )
@@ -647,7 +649,7 @@ class BlacklistReviewUI:
                         canvas_width // 2,
                         canvas_height // 2,
                         text=f"UNSUPPORTED FORMAT\n\nContent-Type: {content_type}\nSize: {content_length} bytes\n\nCannot display this file",
-                        font=("Arial", 12),
+                        font=theme.font(12),
                         fill="orange",
                         justify="center"
                     )
@@ -664,10 +666,10 @@ class BlacklistReviewUI:
             canvas_width = self.canvas.winfo_width()
             canvas_height = self.canvas.winfo_height()
 
-            # Validate canvas dimensions
-            if canvas_width <= 0:
+            # Validate canvas dimensions (1x1 = not laid out yet, e.g. the first post)
+            if canvas_width <= 1:
                 canvas_width = 800
-            if canvas_height <= 0:
+            if canvas_height <= 1:
                 canvas_height = 600
 
             # Validate image dimensions
@@ -716,7 +718,7 @@ class BlacklistReviewUI:
                 text_item = self.canvas.create_text(
                     text_x, text_y,
                     text="VIDEO PREVIEW (First Frame)",
-                    font=("Arial", 12, "bold"),
+                    font=theme.font(12, "bold"),
                     fill="white"
                 )
                 # Create background rectangle for text
@@ -731,7 +733,7 @@ class BlacklistReviewUI:
                     self.canvas.create_text(
                         text_x, text_y,
                         text="VIDEO PREVIEW (First Frame)",
-                        font=("Arial", 12, "bold"),
+                        font=theme.font(12, "bold"),
                         fill="white"
                     )
 
@@ -747,7 +749,7 @@ class BlacklistReviewUI:
             self.canvas.winfo_width() // 2,
             self.canvas.winfo_height() // 2,
             text="No image available",
-            font=("Arial", 16),
+            font=theme.font(16),
             fill="white"
         )
 
@@ -902,7 +904,7 @@ class BlacklistReviewUI:
             text=f"Review Complete!\n\n"
                  f"Kept: {self.kept_count}\n"
                  f"Deleted: {self.deleted_count}",
-            font=("Arial", 20, "bold"),
+            font=theme.font(20, "bold"),
             fill="white",
             justify="center"
         )
@@ -1509,106 +1511,129 @@ def auto_delete_ai_tagged_posts(conn, e621_config, ai_tags, ai_artist_log_path):
     return deleted_count
 
 
-def main(argv=None):  # fff: argv is ignored (no options); lets the CLI call it uniformly
-    # Setup logging
-    log_dir = str(archive_paths.LOG_DIR)
-    setup_logging(log_dir)
+class ReviewSetupError(Exception):
+    """Preparing a review failed in a way the user should see (no DB, no blacklist, ...)."""
 
+
+def load_review_keybindings():
+    keybinds_path = archive_paths.KEYBINDS
+    if keybinds_path.exists():
+        return load_keybindings(str(keybinds_path))
+    # Fall back to root directory for backwards compatibility
+    return load_keybindings("keybinds.yaml")
+
+
+def prepare_review() -> dict:
+    """Connect, run the critical/AI auto-deletes and collect the posts to review.
+
+    Runs off the Tk thread (no widgets or message boxes here). Returns the connection, the
+    posts and the summary counts; the caller owns (and must close) ``conn``.
+    """
+    setup_logging(str(archive_paths.LOG_DIR))
     logging.info("Starting Blacklist Review UI")
 
-    # Load config
     config = load_config()
     mysql_config = config.get("mysql", {})
     e621_config = config.get("e621", {})
 
-    # Connect to database
     conn = connect_to_mysql(mysql_config)
     if conn is None:
-        messagebox.showerror("Error", "Failed to connect to database")
-        sys.exit(1)
+        raise ReviewSetupError("Failed to connect to database")
+    try:
+        # Load critical blacklist tags and auto-delete
+        critical_blacklist_tags = load_blacklist_tags(str(archive_paths.CRITICAL_BLACKLIST))
+        auto_deleted_count = 0
+        if critical_blacklist_tags:
+            logging.info(f"Found {len(critical_blacklist_tags)} critical blacklist tags")
+            auto_deleted_count = auto_delete_critical_posts(conn, e621_config, critical_blacklist_tags)
+        else:
+            logging.info("No critical blacklist tags found (critical_blacklist.txt not found or empty)")
 
-    # Load critical blacklist tags and auto-delete
-    critical_blacklist_path = archive_paths.CRITICAL_BLACKLIST
-    critical_blacklist_tags = load_blacklist_tags(str(critical_blacklist_path))
-    auto_deleted_count = 0
-    if critical_blacklist_tags and len(critical_blacklist_tags) > 0:
-        logging.info(f"Found {len(critical_blacklist_tags)} critical blacklist tags")
-        auto_deleted_count = auto_delete_critical_posts(conn, e621_config, critical_blacklist_tags)
-    else:
-        logging.info("No critical blacklist tags found (critical_blacklist.txt not found or empty)")
+        # Load AI tags and auto-delete, logging artists
+        ai_tags = load_blacklist_tags(str(archive_paths.AI_TAGS))
+        ai_deleted_count = 0
+        if ai_tags:
+            logging.info("Found %d AI tags", len(ai_tags))
+            ai_deleted_count = auto_delete_ai_tagged_posts(conn, e621_config, ai_tags,
+                                                           str(archive_paths.AI_ARTIST_MD))
+        else:
+            logging.info("No AI tags found (ai_tags.txt not found or empty)")
 
-    # Load AI tags and auto-delete, logging artists
-    ai_tags_path = archive_paths.AI_TAGS
-    ai_tags = load_blacklist_tags(str(ai_tags_path))
-    ai_deleted_count = 0
-    if ai_tags and len(ai_tags) > 0:
-        logging.info("Found %d AI tags", len(ai_tags))
-        ai_artist_log = str(archive_paths.AI_ARTIST_MD)
-        ai_deleted_count = auto_delete_ai_tagged_posts(conn, e621_config, ai_tags, ai_artist_log)
-    else:
-        logging.info("No AI tags found (ai_tags.txt not found or empty)")
+        # Load regular blacklist tags from file
+        blacklist_tags = load_blacklist_tags(str(archive_paths.BLACKLIST))
+        if not blacklist_tags:
+            logging.error("No blacklist tags loaded")
+            raise ReviewSetupError("No blacklist tags found in config/blacklist.txt")
 
-    # Load regular blacklist tags from file
-    blacklist_path = archive_paths.BLACKLIST
-    blacklist_tags = load_blacklist_tags(str(blacklist_path))
-    if blacklist_tags is None or len(blacklist_tags) == 0:
-        logging.error("No blacklist tags loaded")
-        messagebox.showerror("Error", "No blacklist tags found in config/blacklist.txt")
+        logging.info(f"Fetching posts with {len(blacklist_tags)} blacklisted tags...")
+        posts = fetch_blacklisted_posts(conn, blacklist_tags)
+        logging.info(f"Found {len(posts)} posts with blacklisted tags")
+
+        # Filter out posts without accessible images, then previously kept posts
+        posts = filter_posts_with_accessible_images(posts)
+        kept_posts = load_kept_posts(str(archive_paths.KEPT_POSTS))
+        posts = filter_kept_posts(posts, kept_posts)
+    except BaseException:
         conn.close()
-        sys.exit(1)
-
-    # Fetch posts
-    logging.info(f"Fetching posts with {len(blacklist_tags)} blacklisted tags...")
-    posts = fetch_blacklisted_posts(conn, blacklist_tags)
-
-    logging.info(f"Found {len(posts)} posts with blacklisted tags")
-
-    # Filter out posts without accessible images
-    posts = filter_posts_with_accessible_images(posts)
-
-    # Load and filter out previously kept posts
-    kept_posts_path = archive_paths.KEPT_POSTS
-    kept_posts = load_kept_posts(str(kept_posts_path))
-    posts = filter_kept_posts(posts, kept_posts)
-
-    if not posts:
-        message = "No posts found with blacklisted tags and accessible images!"
-        if auto_deleted_count > 0:
-            message += f"\n\n{auto_deleted_count} posts were auto-deleted from critical blacklist."
-        if kept_posts:
-            message += f"\n\n{len(kept_posts)} previously kept posts were filtered out."
-        messagebox.showinfo("No Posts", message)
-        conn.close()
-        sys.exit(0)
+        raise
 
     logging.info(f"Showing {len(posts)} posts with accessible images")
     if auto_deleted_count > 0:
         logging.info(f"Note: {auto_deleted_count} posts were auto-deleted from critical blacklist before UI")
+    return {"conn": conn, "e621_config": e621_config, "posts": posts, "kept_posts": kept_posts,
+            "auto_deleted": auto_deleted_count, "ai_deleted": ai_deleted_count,
+            "keybinds": load_review_keybindings()}
 
-    # Load keybindings
-    keybinds_path = archive_paths.KEYBINDS
-    if keybinds_path.exists():
-        keybinds = load_keybindings(str(keybinds_path))
-    else:
-        # Fall back to root directory for backwards compatibility
-        keybinds = load_keybindings("keybinds.yaml")
 
-    # Create GUI
+def build(host):
+    """Prepare in the background, then show the review in ``host`` (ToolHost or Tk root)."""
+    loading = tool_host.message_panel(
+        host, "Preparing blacklist review",
+        "Connecting to the archive, removing critical/AI-tagged posts and collecting posts to review…",
+        busy=True)
+
+    def failed(exc):
+        loading.destroy()
+        logging.error("Blacklist review could not start: %s", exc)
+        tool_host.message_panel(host, "Blacklist review could not start", str(exc), tone="warning",
+                                actions=(("Close", lambda: tool_host.close(host)),))
+
+    def ready(prepared):
+        loading.destroy()
+        conn = prepared["conn"]
+        tool_host.on_destroy(host, conn.close)
+        posts = prepared["posts"]
+        if not posts:
+            message = "No posts found with blacklisted tags and accessible images!"
+            if prepared["auto_deleted"] > 0:
+                message += f"\n\n{prepared['auto_deleted']} posts were auto-deleted from critical blacklist."
+            if prepared["kept_posts"]:
+                message += f"\n\n{len(prepared['kept_posts'])} previously kept posts were filtered out."
+            tool_host.message_panel(host, "No posts to review", message,
+                                    actions=(("Close", lambda: tool_host.close(host)),))
+            return
+        BlacklistReviewUI(host, posts, conn, prepared["e621_config"], prepared["keybinds"],
+                          kept_file=str(archive_paths.KEPT_POSTS))
+        if prepared["auto_deleted"] > 0:
+            messagebox.showinfo(
+                "Critical Blacklist Processed",
+                f"{prepared['auto_deleted']} posts with critical blacklist tags were automatically deleted.\n\n"
+                f"Now showing {len(posts)} posts for manual review.", parent=host)
+
+    tool_host.run_in_background(host, prepare_review, ready, failed)
+
+
+def main(argv=None):  # fff: argv is ignored (no options); lets the CLI call it uniformly
     root = tk.Tk()
-    app = BlacklistReviewUI(root, posts, conn, e621_config, keybinds, kept_file=str(kept_posts_path))
-
-    # Show auto-delete summary if any were deleted
-    if auto_deleted_count > 0:
-        messagebox.showinfo(
-            "Critical Blacklist Processed",
-            f"{auto_deleted_count} posts with critical blacklist tags were automatically deleted.\n\n"
-            f"Now showing {len(posts)} posts for manual review."
-        )
-
+    theme.apply(root)
+    root.title("Blacklist Review UI")
+    root.geometry("1200x900")
+    build(root)
     root.mainloop()
-
-    # Cleanup
-    conn.close()
+    try:
+        root.destroy()  # quit_app only stops the loop; this closes the connection (on_destroy)
+    except tk.TclError:
+        pass
     logging.info("Application closed")
 
 

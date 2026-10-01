@@ -32,10 +32,10 @@
 
 ### Desktop tools and gallery
 
-- Open the unified control center with `fff gui manager` (or run `manager.bat` on Windows) to browse workflows, launch commands, and open the focused tools below.
-- Configure tag-sorting and favorite-artist rules with desktop editors.
-- Review blacklisted posts, artist-related posts, and duplicate files in desktop interfaces.
-- Browse the archive through a local Flask web gallery.
+- Open the FFF Manager with `fff gui manager` (or run `manager.bat` on Windows). It is one window for everything: workflow pages run commands and show their output in an Activity log, and the tools below open inside the window, stay open as you switch pages, and can be popped out into a separate window.
+- Tools: Settings (config and credentials), Tag rules and Artist rules editors, Duplicates, Blacklist review and Artist review. Each tool still runs on its own too (`fff setup`, `fff gui tag-sort-config`, ...), with the same look.
+- The manager's environment selector restarts it in `prod` or `test`; workflows and tools then use that environment.
+- Browse the archive through a local Flask web gallery (e621 Archive page → Open archive gallery).
 
 ### Daily workflow
 
@@ -85,5 +85,5 @@ The setup UI starts from the committed examples. It stores credentials separatel
 ```powershell
 .venv\Scripts\python -m pytest                     # unit and CLI tests
 $env:FFF_INTEGRATION=1; .venv\Scripts\python -m pytest -m integration   # test databases only
-python tools/gui_smoke.py manager                   # smoke-test the unified manager window
+python tools/gui_smoke.py manager                   # smoke-test the manager: every page, plus an embedded tool
 ```

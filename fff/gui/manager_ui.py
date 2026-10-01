@@ -1,6 +1,12 @@
-"""Unified desktop control center for FFF workflows and tools."""
+"""Unified desktop control center for FFF workflows and tools.
+
+Workflows are CLI commands run as child processes (output in the Activity log). Tools are
+the desktop editors and reviewers; they open inside this window (see fff.gui.host), stay
+alive while you move between pages, and can also be popped out into their own window.
+"""
 from __future__ import annotations
 
+import importlib
 import queue
 import subprocess
 import sys
@@ -28,6 +34,16 @@ class Page:
     actions: tuple[Action, ...]
 
 
+@dataclass(frozen=True)
+class Tool:
+    key: str
+    title: str
+    detail: str
+    module: str                 # has build(host)
+    command: tuple[str, ...]    # the standalone 'fff ...' command (for "Open in new window")
+    warning: str | None = None  # shown before opening; opening asks for confirmation
+
+
 PAGES = (
     Page("Overview", "Health checks and the daily workflow.", (
         Action("Check setup", "Check Python packages and configured folders.", ("doctor", "--skip-db")),
@@ -35,7 +51,6 @@ PAGES = (
         Action("Preview daily workflow", "Show the stages without running them.", ("daily", "--dry-run")),
         Action("Run daily workflow", "Search, sync, and sort using the current configuration.",
                ("daily",), changes_data=True),
-        Action("Configure FFF", "Open guided setup for settings and credentials.", ("setup",), changes_data=True),
     )),
     Page("e621 Archive", "Favorites, post records, file links, and archive maintenance.", (
         Action("Sync favorites", "Refresh e621 favorites, downloads, and post metadata.",
@@ -45,12 +60,14 @@ PAGES = (
         Action("Find deleted-post files", "Search for local files belonging to deleted posts.",
                ("e621", "files", "find-deleted")),
         Action("Review unfavorited files", "Choose whether to archive or delete local files.",
-             ("e621", "files", "unfavorited"), changes_data=True, interactive=True),
+               ("e621", "files", "unfavorited"), changes_data=True, interactive=True),
         Action("Verify file paths", "Check and repair paths stored for e621 posts.",
                ("e621", "verify", "file-paths"), changes_data=True),
         Action("Favorite from MD5 list", "Look up hashes from data/md5_search/md5.txt.",
                ("e621", "favorites", "from-md5"), changes_data=True),
         Action("View takedowns", "Inspect deletion and takedown details.", ("e621", "report", "takedowns")),
+        Action("Open archive gallery", "Browse the local archive in your web browser.",
+               ("web",), browser_url="http://127.0.0.1:5000"),
     )),
     Page("Source Search", "Find image sources and process e621 or FurAffinity matches.", (
         Action("Search inbox folders", "Run reverse-image and FuzzySearch on configured folders.",
@@ -64,7 +81,7 @@ PAGES = (
         Action("Sync FA source links", "Read FA links from e621 posts and favorite missing FA favorites.",
                ("fa", "sync-external"), changes_data=True),
         Action("Rename FA authors", "Rename files using author IDs from the search database.",
-             ("fa", "rename-authors"), changes_data=True, interactive=True),
+               ("fa", "rename-authors"), changes_data=True, interactive=True),
     )),
     Page("Library", "Sort, hash, archive, and maintain local media.", (
         Action("Run sorting workflow", "Run tag sorting, file sorting, artist sorting, archiving, and maintenance.",
@@ -75,195 +92,350 @@ PAGES = (
         Action("Archive old files", "Move eligible files to configured archive folders.",
                ("sort", "archive"), changes_data=True),
         Action("Hash files", "Calculate and update configured file hashes.", ("hash",), changes_data=True),
-        Action("Manage duplicates", "Open the duplicate review interface.", ("gui", "duplicates"),
-               changes_data=True),
     )),
-    Page("Review & Configure", "Open the desktop editors and review interfaces.", (
-        Action("Edit tag-sorting rules", "Open the tag-sorting configuration editor.", ("gui", "tag-sort-config"),
-               changes_data=True),
-        Action("Edit artist rules", "Open the favorite-artist configuration editor.", ("gui", "artist-config"),
-               changes_data=True),
-        Action("Review artists", "Review archive posts by configured artists.", ("gui", "artist-review"),
-               changes_data=True),
-        Action("Review blacklisted posts", "Critical/AI-tagged posts may be unfavorited and sent to Recycle Bin.",
-               ("gui", "blacklist-review"), changes_data=True),
-        Action("Open archive gallery", "Browse the local archive in your web browser.",
-               ("web",), browser_url="http://127.0.0.1:5000"),
-    )),
-    Page("Settings & Databases", "Inspect configuration and manage the test environment.", (
+    Page("Databases", "Inspect configuration and manage the test environment.", (
         Action("Show configuration", "Display current settings with credentials redacted.", ("config", "show")),
         Action("Show test folders", "Compare production and test folder paths.", ("config", "test-dirs")),
         Action("Inspect hash database", "Print hash database schema and columns.", ("db", "inspect-hashes")),
         Action("Copy database schema", "Refresh test databases from production schema only.",
                ("db", "copy-schema"), changes_data=True),
         Action("Copy database data", "Replace test database contents with production data.",
-             ("db", "copy-data"), changes_data=True, interactive=True),
+               ("db", "copy-data"), changes_data=True, interactive=True),
     )),
 )
 
+TOOLS = (
+    Tool("settings", "Settings", "Edit config.yaml and credentials, then run first-time checks.",
+         "fff.gui.setup_ui", ("setup",)),
+    Tool("tag-rules", "Tag rules", "Edit the e621 tag-sorting rules in tag_sorting.yaml.",
+         "fff.gui.tag_sort_config_ui_v2", ("gui", "tag-sort-config")),
+    Tool("artist-rules", "Artist rules", "Edit the favorite-artist sorting rules in sort_artists.yaml.",
+         "fff.gui.artist_config_ui", ("gui", "artist-config")),
+    Tool("duplicates", "Duplicates", "Scan for duplicate files and choose which copies to keep.",
+         "fff.gui.duplicate_manager_ui", ("gui", "duplicates"),
+         warning="Deleting, moving or merging duplicates changes files and database rows."),
+    Tool("blacklist-review", "Blacklist review", "Review archive posts that carry blacklisted tags.",
+         "fff.gui.blacklist_review_ui", ("gui", "blacklist-review"),
+         warning="Opening this first unfavorites every post with a critical or AI tag and sends "
+                 "its file to the Recycle Bin. Delete does the same for the post on screen."),
+    Tool("artist-review", "Artist review", "Review archive posts by the artists in review_artists.yaml.",
+         "fff.gui.artists_review_ui", ("gui", "artist-review"),
+         warning="Delete unfavorites the post on e621 and sends its file to the Recycle Bin."),
+)
 
-def main(argv=None, *, root=None, run_mainloop: bool = True) -> int:
-    import tkinter as tk
-    from tkinter import messagebox, ttk
 
-    palette = {"page": "#F1F6F6", "surface": "#FFFFFF", "sidebar": "#183B45",
-               "sidebar_text": "#E5F0F0", "ink": "#19343B", "muted": "#60777D",
-               "accent": "#087F8C", "accent_hover": "#066A75", "line": "#D4E0E2",
-               "ok": "#18794E", "warning": "#A45B08", "error": "#B42318"}
+def current_environment() -> str:
+    from fff.common import config as fff_config
 
-    root = tk.Tk() if root is None else root
-    root.title("FFF Manager")
-    root.geometry("1220x860")
-    root.minsize(940, 680)
-    root.configure(background=palette["page"])
-
-    style = ttk.Style(root)
     try:
-        style.theme_use("clam")
-    except tk.TclError:
-        pass
-    style.configure("TFrame", background=palette["page"])
-    style.configure("Surface.TFrame", background=palette["surface"])
-    style.configure("TLabel", background=palette["page"], foreground=palette["ink"],
-                    font=("Segoe UI", 10))
-    style.configure("Muted.TLabel", foreground=palette["muted"], font=("Segoe UI", 9))
-    style.configure("Title.TLabel", font=("Segoe UI Semibold", 21), foreground=palette["ink"])
-    style.configure("Sidebar.TFrame", background=palette["sidebar"])
-    style.configure("SidebarTitle.TLabel", background=palette["sidebar"], foreground="#FFFFFF",
-                    font=("Segoe UI Semibold", 16))
-    style.configure("SidebarHint.TLabel", background=palette["sidebar"], foreground="#B9D0D2",
-                    font=("Segoe UI", 9))
-    style.configure("Primary.TButton", background=palette["accent"], foreground="#FFFFFF",
-                    padding=(14, 8), font=("Segoe UI Semibold", 10), borderwidth=0)
-    style.map("Primary.TButton", background=[("active", palette["accent_hover"])])
-    style.configure("Tool.TButton", padding=(12, 7), font=("Segoe UI Semibold", 9))
+        return fff_config.environment(fff_config.load())
+    except Exception:  # no config yet (first run): the Settings tool creates it
+        return "prod"
 
-    shell = ttk.Frame(root)
-    shell.pack(fill="both", expand=True)
-    sidebar = ttk.Frame(shell, width=225, style="Sidebar.TFrame", padding=(18, 22))
-    sidebar.pack(side="left", fill="y")
-    sidebar.pack_propagate(False)
-    ttk.Label(sidebar, text="FFF MANAGER", style="SidebarTitle.TLabel").pack(anchor="w")
-    ttk.Label(sidebar, text="Archive · Search · Library", style="SidebarHint.TLabel").pack(
-        anchor="w", pady=(4, 24))
-    ttk.Label(sidebar, text="WORKSPACES", style="SidebarHint.TLabel").pack(anchor="w", pady=(0, 8))
 
-    main_area = ttk.Frame(shell, padding=(26, 20, 26, 16))
-    main_area.pack(side="left", fill="both", expand=True)
-    header = ttk.Frame(main_area)
-    header.pack(fill="x", pady=(0, 14))
-    title_label = ttk.Label(header, text="Overview", style="Title.TLabel")
-    title_label.pack(side="left", anchor="w")
-    environment = tk.StringVar(value="prod")
-    stop_web_requested = False
-    env_box = ttk.Combobox(header, textvariable=environment, values=("prod", "test"),
-                           state="readonly", width=10)
-    env_box.pack(side="right", padx=(8, 0))
-    ttk.Label(header, text="Environment").pack(side="right")
-    subtitle_label = ttk.Label(main_area, text="Choose a workflow or open a focused tool.",
-                               style="Muted.TLabel")
-    subtitle_label.pack(anchor="w", pady=(0, 14))
+class ManagerApp:
+    def __init__(self, root):
+        import tkinter as tk
+        from tkinter import ttk
 
-    content = ttk.Frame(main_area)
-    content.pack(fill="both", expand=True)
-    activity = ttk.LabelFrame(main_area, text="Activity", padding=(10, 8))
-    activity.pack(fill="x", pady=(14, 0))
-    activity.columnconfigure(0, weight=1)
-    activity.rowconfigure(0, weight=1)
-    output = tk.Text(activity, height=9, wrap="word", state="disabled", relief="flat",
-                     background=palette["surface"], foreground=palette["ink"],
-                     font=("Cascadia Mono", 9), padx=6, pady=6)
-    output.grid(row=0, column=0, sticky="nsew")
-    output.tag_configure("ok", foreground=palette["ok"])
-    output.tag_configure("warning", foreground=palette["warning"])
-    output.tag_configure("error", foreground=palette["error"])
-    output_scroll = ttk.Scrollbar(activity, orient="vertical", command=output.yview)
-    output_scroll.grid(row=0, column=1, sticky="ns")
-    output.configure(yscrollcommand=output_scroll.set)
-    status = tk.StringVar(value="Ready")
-    status_label = ttk.Label(main_area, textvariable=status, style="Muted.TLabel")
-    status_label.pack(anchor="w", pady=(7, 0))
+        from fff.gui import theme
 
-    nav_buttons = []
-    events: queue.Queue = queue.Queue()
-    active_process: subprocess.Popen | None = None
-    current_action: Action | None = None
-    stop_web_button = ttk.Button(header, text="Stop Web UI", style="Tool.TButton",
-                                 state="disabled")
-    stop_web_button.pack(side="right", padx=(0, 18))
+        self.tk, self.ttk = tk, ttk
+        self.root = root
+        self.palette = theme.PALETTE
+        theme.apply(root)
+        root.title("FFF Manager")
+        width = min(1480, max(root.winfo_screenwidth() - 60, 1000))
+        height = min(920, max(root.winfo_screenheight() - 80, 700))
+        root.geometry(f"{width}x{height}")
+        root.minsize(1000, 680)
 
-    def stop_web_ui() -> None:
-        nonlocal stop_web_requested
-        if active_process is None or current_action is None or current_action.browser_url is None:
+        self.environment = current_environment()
+        self.events: queue.Queue = queue.Queue()
+        self.active_process: subprocess.Popen | None = None
+        self.current_action: Action | None = None
+        self.stop_web_requested = False
+        self.closing = False
+        self.run_buttons = []
+        self.nav_buttons: dict[tuple[str, object], object] = {}
+        self.page_views: dict[int, object] = {}
+        self.tool_intros: dict[str, object] = {}
+        self.tool_hosts: dict[str, object] = {}
+        self.tool_apps: dict[str, object] = {}
+        self.current: tuple[str, object] = ("page", 0)
+
+        self._build_shell()
+        root.protocol("WM_DELETE_WINDOW", self.close_manager)
+        self.show(("page", 0))
+        self._poll_events()
+
+    # --- layout -----------------------------------------------------------------------------
+
+    def _build_shell(self) -> None:
+        tk, ttk, p = self.tk, self.ttk, self.palette
+        shell = ttk.Frame(self.root)
+        shell.pack(fill="both", expand=True)
+
+        sidebar = ttk.Frame(shell, width=220, style="Sidebar.TFrame", padding=(14, 20, 14, 16))
+        sidebar.pack(side="left", fill="y")
+        sidebar.pack_propagate(False)
+        ttk.Label(sidebar, text="FFF MANAGER", style="SidebarTitle.TLabel").pack(anchor="w", padx=4)
+        ttk.Label(sidebar, text="Archive · Search · Library", style="SidebarHint.TLabel").pack(
+            anchor="w", padx=4, pady=(2, 18))
+        ttk.Label(sidebar, text="WORKFLOWS", style="SidebarHint.TLabel").pack(anchor="w", padx=4, pady=(0, 4))
+        for index, page in enumerate(PAGES):
+            self._nav_button(sidebar, ("page", index), page.title)
+        ttk.Label(sidebar, text="TOOLS", style="SidebarHint.TLabel").pack(anchor="w", padx=4, pady=(18, 4))
+        for tool in TOOLS:
+            self._nav_button(sidebar, ("tool", tool.key), tool.title)
+
+        env_box = ttk.Frame(sidebar, style="Sidebar.TFrame")
+        env_box.pack(side="bottom", fill="x", padx=4)
+        ttk.Label(env_box, text="ENVIRONMENT", style="SidebarHint.TLabel").pack(anchor="w", pady=(0, 4))
+        self.env_var = tk.StringVar(value=self.environment)
+        env_combo = ttk.Combobox(env_box, textvariable=self.env_var, values=("prod", "test"),
+                                 state="readonly", width=10)
+        env_combo.pack(anchor="w", fill="x")
+        env_combo.bind("<<ComboboxSelected>>", self._switch_environment)
+
+        main = ttk.Frame(shell, padding=(24, 18, 24, 12))
+        main.pack(side="left", fill="both", expand=True)
+        header = ttk.Frame(main)
+        header.pack(fill="x")
+        self.title_label = ttk.Label(header, text="", style="Title.TLabel")
+        self.title_label.pack(side="left", anchor="w")
+        self.stop_web_button = ttk.Button(header, text="Stop Web UI", style="Tool.TButton",
+                                          state="disabled", command=self.stop_web_ui)
+        self.stop_web_button.pack(side="right")
+        self.close_tool_button = ttk.Button(header, text="Close tool", style="Tool.TButton",
+                                            command=self.close_current_tool)
+        self.subtitle_label = ttk.Label(main, text="", style="Muted.TLabel")
+        self.subtitle_label.pack(anchor="w", pady=(0, 12))
+
+        self.body = ttk.Frame(main)
+        self.body.pack(fill="both", expand=True)
+        self.status = tk.StringVar(value="Ready")
+        ttk.Label(main, textvariable=self.status, style="Muted.TLabel").pack(anchor="w", pady=(8, 0))
+
+        # Workflow pages share one view: the cards of the selected page above the Activity log.
+        self.workflow_view = ttk.Frame(self.body)
+        self.cards_holder = ttk.Frame(self.workflow_view)
+        self.cards_holder.pack(fill="both", expand=True)
+        activity = ttk.LabelFrame(self.workflow_view, text="Activity", padding=(10, 8))
+        activity.pack(fill="x", pady=(12, 0))
+        activity.columnconfigure(0, weight=1)
+        self.output = tk.Text(activity, height=9, wrap="word", state="disabled", font="TkFixedFont",
+                              padx=6, pady=6)
+        self.output.grid(row=0, column=0, sticky="nsew")
+        for tag in ("ok", "warning", "error"):
+            self.output.tag_configure(tag, foreground=p[tag])
+        scroll = ttk.Scrollbar(activity, orient="vertical", command=self.output.yview)
+        scroll.grid(row=0, column=1, sticky="ns")
+        self.output.configure(yscrollcommand=scroll.set)
+
+    def _nav_button(self, parent, key, text) -> None:
+        button = self.ttk.Button(parent, text=text, style="Nav.TButton", command=lambda: self.show(key))
+        button.pack(fill="x", pady=1)
+        self.nav_buttons[key] = button
+
+    def _page_view(self, index: int):
+        if index in self.page_views:
+            return self.page_views[index]
+        ttk = self.ttk
+        view = ttk.Frame(self.cards_holder)
+        for col in range(2):
+            view.columnconfigure(col, weight=1, uniform="cards")
+        for action_index, action in enumerate(PAGES[index].actions):
+            row, col = divmod(action_index, 2)
+            card = ttk.Frame(view, style="Card.TFrame", padding=(14, 10))
+            card.grid(row=row, column=col, sticky="nsew", padx=(0, 10) if col == 0 else (0, 0), pady=(0, 10))
+            card.columnconfigure(0, weight=1)
+            ttk.Label(card, text=action.title, style="CardTitle.TLabel").grid(row=0, column=0, sticky="w")
+            ttk.Label(card, text=action.detail, style="CardBody.TLabel", wraplength=380,
+                      justify="left").grid(row=1, column=0, sticky="w", pady=(2, 0))
+            if action.changes_data:
+                ttk.Label(card, text="Changes files or databases", style="CardWarning.TLabel").grid(
+                    row=2, column=0, sticky="w", pady=(4, 0))
+            button = ttk.Button(card, text="Open" if action.browser_url else "Run",
+                                style="Primary.TButton" if not action.changes_data else "TButton",
+                                command=lambda a=action: self.run_action(a))
+            button.grid(row=0, column=1, rowspan=3, sticky="e", padx=(12, 0))
+            if self.active_process is not None:
+                button.configure(state="disabled")
+            self.run_buttons.append(button)
+        self.page_views[index] = view
+        return view
+
+    def _tool_intro(self, tool: Tool):
+        if tool.key in self.tool_intros:
+            return self.tool_intros[tool.key]
+        ttk = self.ttk
+        intro = ttk.Frame(self.body)
+        card = ttk.Frame(intro, style="Card.TFrame", padding=(22, 18))
+        card.pack(anchor="nw", fill="x")
+        ttk.Label(card, text=tool.title, style="CardTitle.TLabel").pack(anchor="w")
+        ttk.Label(card, text=tool.detail, style="CardBody.TLabel", wraplength=640, justify="left").pack(
+            anchor="w", pady=(4, 0))
+        if tool.warning:
+            ttk.Label(card, text=tool.warning, style="CardWarning.TLabel", wraplength=640,
+                      justify="left").pack(anchor="w", pady=(8, 0))
+        buttons = ttk.Frame(card, style="Surface.TFrame")
+        buttons.pack(anchor="w", pady=(14, 0))
+        ttk.Button(buttons, text=f"Open {tool.title.lower()}", style="Primary.TButton",
+                   command=lambda: self.open_tool(tool)).pack(side="left")
+        ttk.Button(buttons, text="Open in a separate window",
+                   command=lambda: self.open_tool_window(tool)).pack(side="left", padx=(8, 0))
+        self.tool_intros[tool.key] = intro
+        return intro
+
+    # --- navigation ---------------------------------------------------------------------------
+
+    def show(self, key) -> None:
+        if self.closing:
             return
-        if active_process.poll() is None:
-            stop_web_requested = True
-            status.set("Stopping local archive gallery…")
-            log_line("Stopping local archive gallery…", "warning")
-            stop_web_button.configure(state="disabled")
-            active_process.terminate()
+        self.current = key
+        for nav_key, button in self.nav_buttons.items():
+            button.configure(style="ActiveNav.TButton" if nav_key == key else "Nav.TButton")
+        for child in self.body.winfo_children():
+            child.pack_forget()
+        for child in self.cards_holder.winfo_children():
+            child.pack_forget()
+        self.close_tool_button.pack_forget()
 
-    stop_web_button.configure(command=stop_web_ui)
+        kind, value = key
+        if kind == "page":
+            page = PAGES[value]
+            self.title_label.configure(text=page.title)
+            self.subtitle_label.configure(text=page.detail)
+            self._page_view(value).pack(fill="both", expand=True)
+            self.workflow_view.pack(fill="both", expand=True)
+            return
+        tool = self._tool(value)
+        self.title_label.configure(text=tool.title)
+        host = self.tool_hosts.get(tool.key)
+        if host is None:
+            self.subtitle_label.configure(text=tool.detail)
+            self._tool_intro(tool).pack(fill="both", expand=True)
+        else:
+            self.subtitle_label.configure(text=host.title() or tool.detail)
+            self.close_tool_button.pack(side="right", padx=(0, 8))
+            host.pack(fill="both", expand=True)
+            host.focus_set()
 
-    def log_line(text: str, tag: str = "") -> None:
-        output.configure(state="normal")
-        output.insert("end", text + "\n", tag)
-        output.see("end")
-        output.configure(state="disabled")
+    @staticmethod
+    def _tool(key: str) -> Tool:
+        return next(tool for tool in TOOLS if tool.key == key)
 
-    def poll_events() -> None:
-        nonlocal active_process, current_action, stop_web_requested
+    def _refresh_nav_label(self, tool: Tool) -> None:
+        open_mark = "  ●" if tool.key in self.tool_hosts else ""
+        self.nav_buttons[("tool", tool.key)].configure(text=tool.title + open_mark)
+
+    # --- embedded tools -----------------------------------------------------------------------
+
+    def open_tool(self, tool: Tool) -> None:
+        from tkinter import messagebox
+
+        from fff.gui import host as tool_host
+
+        if tool.key in self.tool_hosts:
+            self.show(("tool", tool.key))
+            return
+        if tool.warning and not messagebox.askyesno(
+                f"Open {tool.title}", f"{tool.detail}\n\n{tool.warning}\n\nContinue?", parent=self.root):
+            return
+
+        def title_changed(text: str) -> None:
+            if self.current == ("tool", tool.key):
+                self.subtitle_label.configure(text=text or tool.detail)
+
+        host = tool_host.ToolHost(self.body, on_title=title_changed)
+        self.tool_hosts[tool.key] = host
+        tool_host.on_destroy(host, lambda: self._tool_closed(tool))
+        self._refresh_nav_label(tool)
+        self.show(("tool", tool.key))
+        self.status.set(f"Opening {tool.title}…")
+        self.root.update_idletasks()
         try:
-            while True:
-                event, value = events.get_nowait()
-                if event == "line":
-                    text = value.rstrip("\r\n")
-                    log_line(text, "error" if "error" in text.lower() or "fail" in text.lower() else "")
-                elif event == "browser":
-                    webbrowser.open(value)
-                elif event == "done":
-                    action = current_action
-                    active_process = None
-                    current_action = None
-                    stop_web_button.configure(state="disabled")
-                    if stop_web_requested:
-                        stop_web_requested = False
-                        status.set("Archive gallery stopped")
-                        log_line("\nArchive gallery stopped.", "ok")
-                    elif value == 0:
-                        status.set(f"Finished: {action.title if action else 'command'}")
-                        log_line(f"\nFinished successfully (exit {value}).", "ok")
-                    else:
-                        status.set(f"Command exited with code {value}")
-                        log_line(f"\nCommand exited with code {value}.", "error")
-                    for button in run_buttons:
-                        button.configure(state="normal")
-        except queue.Empty:
-            pass
-        root.after(100, poll_events)
+            self.tool_apps[tool.key] = importlib.import_module(tool.module).build(host)
+        except Exception as exc:  # show the failure where the tool would have been
+            for child in host.winfo_children():
+                child.destroy()
+            tool_host.message_panel(host, f"{tool.title} could not open", f"{type(exc).__name__}: {exc}",
+                                    tone="warning", actions=(("Close", host.destroy),))
+            self.status.set(f"{tool.title} could not open")
+            return
+        self.status.set(f"{tool.title} is open")
 
-    run_buttons = []
+    def _tool_closed(self, tool: Tool) -> None:
+        self.tool_hosts.pop(tool.key, None)
+        self.tool_apps.pop(tool.key, None)
+        if self.closing:
+            return
+        try:
+            self._refresh_nav_label(tool)
+        except self.tk.TclError:  # the whole window is being torn down
+            self.closing = True
+            return
+        self.status.set(f"{tool.title} closed")
+        if self.current == ("tool", tool.key):
+            self.show(self.current)
 
-    def run_action(action: Action) -> None:
-        nonlocal active_process, current_action, stop_web_requested
-        if active_process is not None and active_process.poll() is None:
-            messagebox.showinfo("FFF Manager", "A command is already running.", parent=root)
+    def close_current_tool(self) -> None:
+        kind, key = self.current
+        host = self.tool_hosts.get(key) if kind == "tool" else None
+        if host is not None:
+            host.request_close()
+
+    def close_all_tools(self) -> bool:
+        """Close every open tool (each may ask to save). False if one stayed open."""
+        for key, host in list(self.tool_hosts.items()):
+            self.show(("tool", key))
+            if not host.request_close():
+                return False
+        return True
+
+    def open_tool_window(self, tool: Tool) -> None:
+        try:
+            subprocess.Popen(self._fff_command(tool.command), cwd=paths.ROOT,
+                             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        except OSError as exc:
+            self.status.set(f"Could not open {tool.title}: {exc}")
+            return
+        self.status.set(f"Opened {tool.title} in a separate window")
+
+    # --- workflow commands --------------------------------------------------------------------
+
+    def _fff_command(self, args: tuple[str, ...]) -> list[str]:
+        return [sys.executable, "-m", "fff", "--env", self.environment, *args]
+
+    def log_line(self, text: str, tag: str = "") -> None:
+        self.output.configure(state="normal")
+        self.output.insert("end", text + "\n", tag)
+        self.output.see("end")
+        self.output.configure(state="disabled")
+
+    def _set_run_buttons(self, state: str) -> None:
+        for button in self.run_buttons:
+            button.configure(state=state)
+
+    def run_action(self, action: Action) -> None:
+        from tkinter import messagebox
+
+        if self.active_process is not None and self.active_process.poll() is None:
+            messagebox.showinfo("FFF Manager", "A command is already running.", parent=self.root)
             return
         if action.changes_data and not messagebox.askyesno(
                 "Confirm action",
-                f"{action.title}\n\n{action.detail}\n\nThis may contact live services or change database/files. Continue?",
-                parent=root):
+                f"{action.title}\n\n{action.detail}\n\nThis may contact live services or change "
+                f"database/files ({self.environment} environment). Continue?",
+                parent=self.root):
             return
 
-        command = [sys.executable, "-m", "fff"]
-        if environment.get() == "test":
-            command.extend(("--env", "test"))
-        command.extend(action.command)
-        log_line(f"\n> {' '.join(command)}", "warning" if action.changes_data else "")
-        status.set(f"Running: {action.title}")
-        for button in run_buttons:
-            button.configure(state="disabled")
-        current_action = action
+        command = self._fff_command(action.command)
+        self.log_line(f"\n> {' '.join(command)}", "warning" if action.changes_data else "")
+        self.status.set(f"Running: {action.title}")
+        self._set_run_buttons("disabled")
+        self.current_action = action
         try:
             creationflags = getattr(subprocess, "CREATE_NEW_CONSOLE", 0) if action.interactive \
                 else getattr(subprocess, "CREATE_NO_WINDOW", 0)
@@ -271,75 +443,123 @@ def main(argv=None, *, root=None, run_mainloop: bool = True) -> int:
             if not action.interactive:
                 process_options.update(stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
                                        encoding="utf-8", errors="replace", bufsize=1)
-            active_process = subprocess.Popen(command, **process_options)
+            self.active_process = subprocess.Popen(command, **process_options)
         except OSError as exc:
-            active_process = None
-            current_action = None
-            status.set("Could not start command")
-            log_line(f"Could not start command: {exc}", "error")
-            for button in run_buttons:
-                button.configure(state="normal")
+            self.active_process = None
+            self.current_action = None
+            self.status.set("Could not start command")
+            self.log_line(f"Could not start command: {exc}", "error")
+            self._set_run_buttons("normal")
             return
 
-        process = active_process
         if action.browser_url:
-            stop_web_requested = False
-            stop_web_button.configure(state="normal")
-            root.after(1200, lambda url=action.browser_url: webbrowser.open(url))
+            self.stop_web_requested = False
+            self.stop_web_button.configure(state="normal")
+            self.root.after(1200, lambda url=action.browser_url: webbrowser.open(url))
 
         def worker(child: subprocess.Popen) -> None:
             if child.stdout is not None:
                 for line in child.stdout:
-                    events.put(("line", line))
-            events.put(("done", child.wait()))
+                    self.events.put(("line", line))
+            self.events.put(("done", child.wait()))
 
-        threading.Thread(target=worker, args=(process,), name="fff-manager-command", daemon=True).start()
+        threading.Thread(target=worker, args=(self.active_process,), name="fff-manager-command",
+                         daemon=True).start()
 
-    def show_page(index: int) -> None:
-        run_buttons.clear()
-        for widget in content.winfo_children():
-            widget.destroy()
-        for nav_index, button in enumerate(nav_buttons):
-            button.configure(style="ActiveNav.TButton" if nav_index == index else "Nav.TButton")
-        page = PAGES[index]
-        title_label.configure(text=page.title)
-        subtitle_label.configure(text=page.detail)
-        for col in range(2):
-            content.columnconfigure(col, weight=1)
-        for action_index, action in enumerate(page.actions):
-            row, col = divmod(action_index, 2)
-            card = ttk.LabelFrame(content, text=action.title, padding=(14, 11))
-            card.grid(row=row, column=col, sticky="nsew", padx=(0, 10) if col == 0 else (0, 0),
-                      pady=(0, 10))
-            ttk.Label(card, text=action.detail, style="Muted.TLabel", wraplength=350,
-                      justify="left").pack(anchor="w", fill="x", pady=(0, 11))
-            button = ttk.Button(card, text="Open" if action.command[:1] == ("gui",) or action.command == ("web",)
-                                else "Run", style="Tool.TButton", command=lambda a=action: run_action(a))
-            button.pack(anchor="e")
-            run_buttons.append(button)
+    def stop_web_ui(self) -> None:
+        if self.active_process is None or self.current_action is None or self.current_action.browser_url is None:
+            return
+        if self.active_process.poll() is None:
+            self.stop_web_requested = True
+            self.status.set("Stopping local archive gallery…")
+            self.log_line("Stopping local archive gallery…", "warning")
+            self.stop_web_button.configure(state="disabled")
+            self.active_process.terminate()
 
-    style.configure("Nav.TButton", background=palette["sidebar"], foreground=palette["sidebar_text"],
-                    anchor="w", padding=(10, 8), font=("Segoe UI", 10), borderwidth=0)
-    style.map("Nav.TButton", background=[("active", palette["accent_hover"])])
-    style.configure("ActiveNav.TButton", background=palette["accent"], foreground="#FFFFFF",
-                    anchor="w", padding=(10, 8), font=("Segoe UI Semibold", 10), borderwidth=0)
-    for index, page in enumerate(PAGES):
-        button = ttk.Button(sidebar, text=page.title, style="Nav.TButton",
-                            command=lambda i=index: show_page(i))
-        button.pack(fill="x", pady=2)
-        nav_buttons.append(button)
+    def _poll_events(self) -> None:
+        try:
+            while True:
+                event, value = self.events.get_nowait()
+                if event == "line":
+                    text = value.rstrip("\r\n")
+                    lowered = text.lower()
+                    self.log_line(text, "error" if "error" in lowered or "fail" in lowered else "")
+                elif event == "done":
+                    action = self.current_action
+                    self.active_process = None
+                    self.current_action = None
+                    self.stop_web_button.configure(state="disabled")
+                    if self.stop_web_requested:
+                        self.stop_web_requested = False
+                        self.status.set("Archive gallery stopped")
+                        self.log_line("\nArchive gallery stopped.", "ok")
+                    elif value == 0:
+                        self.status.set(f"Finished: {action.title if action else 'command'}")
+                        self.log_line(f"\nFinished successfully (exit {value}).", "ok")
+                    else:
+                        self.status.set(f"Command exited with code {value}")
+                        self.log_line(f"\nCommand exited with code {value}.", "error")
+                    self._set_run_buttons("normal")
+        except queue.Empty:
+            pass
+        if not self.closing:
+            self.root.after(100, self._poll_events)
 
-    def close_manager() -> None:
-        if active_process is not None and active_process.poll() is None:
-            if not messagebox.askyesno("Command running", "Close the manager and stop the active command?",
-                                       parent=root):
-                return
-            active_process.terminate()
-        root.destroy()
+    # --- environment and shutdown -------------------------------------------------------------
 
-    root.protocol("WM_DELETE_WINDOW", close_manager)
-    show_page(0)
-    poll_events()
+    def _switch_environment(self, _event=None) -> None:
+        from tkinter import messagebox
+
+        target = self.env_var.get()
+        if target == self.environment:
+            return
+        if self.active_process is not None and self.active_process.poll() is None:
+            messagebox.showinfo("FFF Manager", "Wait for the running command to finish first.", parent=self.root)
+            self.env_var.set(self.environment)
+            return
+        if not messagebox.askyesno(
+                "Switch environment",
+                f"Restart the manager in the {target} environment?\n\nOpen tools are closed first.",
+                parent=self.root):
+            self.env_var.set(self.environment)
+            return
+        if not self.close_all_tools():
+            self.env_var.set(self.environment)
+            return
+        try:
+            subprocess.Popen([sys.executable, "-m", "fff", "--env", target, "gui", "manager"], cwd=paths.ROOT,
+                             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        except OSError as exc:
+            messagebox.showerror("Switch environment", f"Could not restart the manager: {exc}", parent=self.root)
+            self.env_var.set(self.environment)
+            return
+        self.closing = True
+        self.root.destroy()
+
+    def close_manager(self) -> None:
+        from tkinter import messagebox
+
+        running = self.active_process is not None and self.active_process.poll() is None
+        if running and not messagebox.askyesno(
+                "Command running", "Close the manager and stop the active command?", parent=self.root):
+            return
+        if not self.close_all_tools():
+            return
+        if running:
+            self.active_process.terminate()
+        self.closing = True
+        self.root.destroy()
+
+
+def build(root) -> ManagerApp:
+    return ManagerApp(root)
+
+
+def main(argv=None, *, root=None, run_mainloop: bool = True) -> int:
+    import tkinter as tk
+
+    root = tk.Tk() if root is None else root
+    build(root)
     if run_mainloop:
         root.mainloop()
     return 0

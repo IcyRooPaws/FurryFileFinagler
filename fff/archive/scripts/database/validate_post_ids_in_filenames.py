@@ -40,6 +40,7 @@ from fff.archive.db import (
     normalize_file_path
 )
 from fff.archive.logging_setup import setup_logging
+from fff.gui import theme
 
 
 def group_mismatches(mismatches):
@@ -148,7 +149,7 @@ class MismatchReviewUI:
         master.title("Review Filename Post ID Mismatches")
         master.geometry("900x500")
 
-        self.progress = ttk.Label(master, font=("Arial", 12, "bold"))
+        self.progress = ttk.Label(master, style="Heading.TLabel")
         self.progress.pack(pady=(12, 4))
         self.details = ttk.Label(master, justify="left", anchor="w")
         self.details.pack(fill="x", padx=18, pady=6)
@@ -331,6 +332,7 @@ Examples:
 
             fetch_review_candidates(conn, groups)
             root = tk.Tk()
+            theme.apply(root)
             review_ui = MismatchReviewUI(root, groups)
             root.mainloop()
 

@@ -30,6 +30,7 @@ import tempfile
 import hashlib
 
 # Import project-owned sorter handlers directly.
+from fff.gui import theme
 from fff.sorter.handlers import DatabaseManager
 from fff.sorter.handlers.utils import Config
 from fff.sorter import paths as sorter_paths
@@ -1410,7 +1411,7 @@ class DuplicateManagerGUI:
     def create_control_panel(self, parent):
         """Create the control panel on the left side."""
         # ===== STEP 1: Detection Method =====
-        scan_frame = ttk.LabelFrame(parent, text="1⃣ Detection", padding=2)
+        scan_frame = ttk.LabelFrame(parent, text="1 · Detection", padding=2)
         scan_frame.pack(fill='x', pady=(0, 2))
 
         # Detection mode selector (shortened labels)
@@ -1440,7 +1441,7 @@ class DuplicateManagerGUI:
             values=[ht[1] for ht in hash_types],
             state='readonly',
             width=22,
-            font=('TkDefaultFont', 9)
+            font=theme.font(9)
         )
         hash_combo.set(self.hash_type_mapping.get(self.hash_column, hash_types[0][1]))
         hash_combo.pack(fill='x', pady=(0, 2))
@@ -1453,7 +1454,7 @@ class DuplicateManagerGUI:
         threshold_control = ttk.Frame(self.similarity_frame)
         threshold_control.pack(fill='x')
 
-        ttk.Label(threshold_control, text="Min:", font=('TkDefaultFont', 8)).pack(side='left', padx=(0, 1))
+        ttk.Label(threshold_control, text="Min:", font=theme.font(8)).pack(side='left', padx=(0, 1))
 
         self.similarity_threshold = tk.IntVar(value=97)
         similarity_scale = ttk.Scale(
@@ -1466,7 +1467,7 @@ class DuplicateManagerGUI:
         )
         similarity_scale.pack(side='left', fill='x', expand=True, padx=(0, 1))
 
-        self.similarity_label = ttk.Label(threshold_control, text="97%", width=3, font=('TkDefaultFont', 8, 'bold'))
+        self.similarity_label = ttk.Label(threshold_control, text="97%", width=3, font=theme.font(8, 'bold'))
         self.similarity_label.pack(side='left')
         self.similarity_frame.pack_forget()  # Hidden by default
 
@@ -1495,19 +1496,19 @@ class DuplicateManagerGUI:
         results_frame = ttk.Frame(scan_frame)
         results_frame.pack(fill='x')
 
-        ttk.Label(results_frame, text="Groups:", font=('TkDefaultFont', 8)).pack(side='left')
-        ttk.Label(results_frame, textvariable=self.total_duplicates, font=('TkDefaultFont', 8, 'bold')).pack(side='left', padx=(1, 4))
-        ttk.Label(results_frame, text="Files:", font=('TkDefaultFont', 8)).pack(side='left')
-        ttk.Label(results_frame, textvariable=self.total_files, font=('TkDefaultFont', 8, 'bold')).pack(side='left', padx=(1, 4))
-        ttk.Label(results_frame, text="Batch:", font=('TkDefaultFont', 8)).pack(side='left')
+        ttk.Label(results_frame, text="Groups:", font=theme.font(8)).pack(side='left')
+        ttk.Label(results_frame, textvariable=self.total_duplicates, font=theme.font(8, 'bold')).pack(side='left', padx=(1, 4))
+        ttk.Label(results_frame, text="Files:", font=theme.font(8)).pack(side='left')
+        ttk.Label(results_frame, textvariable=self.total_files, font=theme.font(8, 'bold')).pack(side='left', padx=(1, 4))
+        ttk.Label(results_frame, text="Batch:", font=theme.font(8)).pack(side='left')
         self.batch_size_var = tk.IntVar(value=50)
         self.batch_spin = ttk.Spinbox(results_frame, from_=10, to=500, increment=10,
-                                 textvariable=self.batch_size_var, width=3, font=('TkDefaultFont', 8))
+                                 textvariable=self.batch_size_var, width=3, font=theme.font(8))
         self.batch_spin.pack(side='left', padx=(1, 0))
 
         # Scanning status indicator
         self.scanning_note = ttk.Label(scan_frame, text="[IDEA] Groups appear as found!",
-                                       font=('TkDefaultFont', 8), foreground='#666', wraplength=220)
+                                       font=theme.font(8), foreground=theme.PALETTE['muted'], wraplength=220)
 
         # Auto Handle All button (only visible for view modes)
         self.auto_handle_all_button = ttk.Button(scan_frame, text="🤖 Auto Handle All",
@@ -1516,12 +1517,12 @@ class DuplicateManagerGUI:
         # Will be shown/hidden based on hash_column selection
 
         # ===== STEP 2: Navigation =====
-        nav_frame = ttk.LabelFrame(parent, text="2⃣ Navigation", padding=2)
+        nav_frame = ttk.LabelFrame(parent, text="2 · Navigation", padding=2)
         nav_frame.pack(fill='x', pady=(0, 2))
 
         # Current group indicator
         ttk.Label(nav_frame, textvariable=self.current_group_var,
-                 font=('TkDefaultFont', 8, 'bold')).pack(pady=(0, 2))
+                 font=theme.font(8, 'bold')).pack(pady=(0, 2))
 
         # Navigation buttons - compact row
         nav_buttons = ttk.Frame(nav_frame)
@@ -1539,7 +1540,7 @@ class DuplicateManagerGUI:
                   command=self.next_group, width=6).pack(side='left')
 
         # ===== Quick Tools =====
-        tools_frame = ttk.LabelFrame(parent, text="3⃣ Tools", padding=2)
+        tools_frame = ttk.LabelFrame(parent, text="3 · Tools", padding=2)
         tools_frame.pack(fill='x', pady=(0, 2))
 
         # Single row of tool buttons
@@ -1562,7 +1563,7 @@ class DuplicateManagerGUI:
         log_frame = ttk.LabelFrame(parent, text="[Clipboard] Log", padding=1)
         log_frame.pack(fill='both', expand=True, pady=(0, 2))
 
-        self.log_text = tk.Text(log_frame, height=3, wrap='word', font=('Courier', 8), width=25)
+        self.log_text = tk.Text(log_frame, height=3, wrap='word', font=theme.mono(8), width=25)
         log_scroll = ttk.Scrollbar(log_frame, orient='vertical', command=self.log_text.yview)
         self.log_text.configure(yscrollcommand=log_scroll.set)
 
@@ -1574,7 +1575,7 @@ class DuplicateManagerGUI:
         status_frame.pack(fill='x')
 
         self.status_label = ttk.Label(status_frame, textvariable=self.status_text,
-                                      relief='sunken', anchor='w', padding=1, font=('TkDefaultFont', 8), wraplength=240)
+                                      relief='sunken', anchor='w', padding=1, font=theme.font(8), wraplength=240)
         self.status_label.pack(fill='x')
 
     def create_preview_panel(self, parent):
@@ -1584,23 +1585,23 @@ class DuplicateManagerGUI:
         header_frame.pack(fill='x', pady=(0, 10))
 
         ttk.Label(header_frame, text="[SNAPSHOT] Duplicate Files - Create Hybrid",
-                 font=('TkDefaultFont', 11, 'bold')).pack(anchor='w')
+                 font=theme.font(11, 'bold')).pack(anchor='w')
 
         instruction_text = ("Review files and select attributes for the hybrid:\n"
                           "* Content (Pixels) - Which file's actual image/video to use\n"
                           "* Filename, Location, Date - Mix and match from any file\n"
                           "Click 'Process' to create hybrid and move remaining duplicates")
         ttk.Label(header_frame, text=instruction_text,
-                 font=('TkDefaultFont', 8),
-                 foreground='#555',
+                 font=theme.font(8),
+                 foreground=theme.PALETTE['muted'],
                  justify='left').pack(anchor='w', pady=(5, 0))
 
         # Hash info (shown when viewing a group)
         hash_frame = ttk.Frame(parent)
         hash_frame.pack(fill='x', pady=(0, 10))
 
-        ttk.Label(hash_frame, text="[KEY] Hash:", font=('TkDefaultFont', 9, 'bold')).pack(side='left')
-        self.hash_label = ttk.Label(hash_frame, text="", font=('TkMonospaceFont', 8), foreground='#666')
+        ttk.Label(hash_frame, text="[KEY] Hash:", font=theme.font(9, 'bold')).pack(side='left')
+        self.hash_label = ttk.Label(hash_frame, text="", font=theme.mono(8), foreground=theme.PALETTE['muted'])
         self.hash_label.pack(side='left', padx=(5, 0))
 
         # Scrollable frame for file previews
@@ -2507,7 +2508,7 @@ class DuplicateManagerGUI:
         sorted_files = group.get_priority_sorted_files()
         if len(sorted_files) < 2:
             ttk.Label(self.scrollable_frame, text="Not enough files to compare",
-                     font=('TkDefaultFont', 10)).pack(pady=20)
+                     font=theme.font(10)).pack(pady=20)
             return
 
         # Get up to 4 files to compare
@@ -2622,12 +2623,12 @@ class DuplicateManagerGUI:
 
         attr_label = ttk.Label(self.scrollable_frame,
                                text="Choose which attributes to keep from each option",
-                               font=('TkDefaultFont', 9, 'bold'))
+                               font=theme.font(9, 'bold'))
         attr_label.pack(pady=(10, 2), anchor='w')
 
         attr_note = ttk.Label(self.scrollable_frame,
                               text="Extension follows the content source automatically.",
-                              font=('TkDefaultFont', 7), foreground='#666')
+                              font=theme.font(7), foreground=theme.PALETTE['muted'])
         attr_note.pack(anchor='w', pady=(0, 5))
 
         grid_frame = ttk.Frame(self.scrollable_frame)
@@ -2637,7 +2638,7 @@ class DuplicateManagerGUI:
         for i in range(num_files):
             grid_frame.columnconfigure(i + 1, weight=2)
 
-        ttk.Label(grid_frame, text="Attribute", font=('TkDefaultFont', 8, 'bold')).grid(
+        ttk.Label(grid_frame, text="Attribute", font=theme.font(8, 'bold')).grid(
             row=0, column=0, sticky='w', padx=4, pady=(0, 4))
 
         for idx in range(num_files):
@@ -2646,7 +2647,7 @@ class DuplicateManagerGUI:
                 header_text = "Keep · recommended"
             elif num_files > 1:
                 header_text = f"Option {idx + 1}"
-            ttk.Label(grid_frame, text=header_text, font=('TkDefaultFont', 8, 'bold')).grid(
+            ttk.Label(grid_frame, text=header_text, font=theme.font(8, 'bold')).grid(
                 row=0, column=idx + 1, sticky='w', padx=4, pady=(0, 4))
 
         ttk.Separator(grid_frame, orient='horizontal').grid(
@@ -2654,7 +2655,7 @@ class DuplicateManagerGUI:
 
         def _add_radio_row(row_idx: int, label_text: str, variable: tk.StringVar,
                            recommended_idx: int, value_factory) -> None:
-            ttk.Label(grid_frame, text=label_text, font=('TkDefaultFont', 8)).grid(
+            ttk.Label(grid_frame, text=label_text, font=theme.font(8)).grid(
                 row=row_idx, column=0, sticky='w', padx=4, pady=2)
             for idx, file_info in enumerate(files_to_display):
                 base_text = value_factory(idx, file_info)
@@ -2725,7 +2726,7 @@ class DuplicateManagerGUI:
         tree.column('table', width=90, anchor='center')
         tree.column('modified', width=110, anchor='center')
 
-        tree.tag_configure('primary', font=('TkDefaultFont', 9, 'bold'))
+        tree.tag_configure('primary', font=theme.font(9, 'bold'))
 
         scrollbar = ttk.Scrollbar(table_frame, orient='vertical', command=tree.yview)
         tree.configure(yscrollcommand=scrollbar.set)
@@ -2746,7 +2747,7 @@ class DuplicateManagerGUI:
         tree.bind('<Double-1>', lambda e, t=tree: self._on_tree_double_click(e, t, sorted_files))
 
         ttk.Label(table_frame, text="Double-click a row to open the file",
-                  font=('TkDefaultFont', 7), foreground='#666').grid(row=1, column=0, sticky='w', pady=(3, 0))
+                  font=theme.font(7), foreground=theme.PALETTE['muted']).grid(row=1, column=0, sticky='w', pady=(3, 0))
 
         # === ACTION BUTTONS ===
         action_frame = ttk.Frame(self.scrollable_frame)
@@ -2773,7 +2774,7 @@ class DuplicateManagerGUI:
             remaining_count = len(sorted_files) - num_files
             info_label = ttk.Label(self.scrollable_frame,
                                   text=f"[INFO] Note: {remaining_count} additional duplicate(s) not shown will be moved to duplicates folder",
-                                  font=('TkDefaultFont', 8), foreground='#666')
+                                  font=theme.font(8), foreground=theme.PALETTE['muted'])
             info_label.pack(pady=(10, 0))
 
     def _create_file_info_display(self, parent: ttk.Frame, file_info: Dict):
@@ -2782,19 +2783,19 @@ class DuplicateManagerGUI:
         info_frame.pack(fill='x', pady=(0, 10))
 
         ttk.Label(info_frame, text=f"[FOLDER] {os.path.basename(file_info['file_path'])}",
-                 font=('TkDefaultFont', 9, 'bold'), wraplength=380).pack(anchor='w')
+                 font=theme.font(9, 'bold'), wraplength=380).pack(anchor='w')
 
         ttk.Label(info_frame, text=f"[CHART] Size: {file_info.get('file_size', 0):,} bytes",
-                 font=('TkDefaultFont', 8)).pack(anchor='w')
+                 font=theme.font(8)).pack(anchor='w')
 
         ttk.Label(info_frame, text=f"[FOLDER] Table: {file_info['table_name']}",
-                 font=('TkDefaultFont', 8)).pack(anchor='w')
+                 font=theme.font(8)).pack(anchor='w')
 
         # Show e621_post_id if in e621_post_id mode
         if self.hash_column == 'e621_post_id':
             post_id = file_info.get('e621_post_id', 'None')
             post_id_label = ttk.Label(info_frame, text=f"[NUMBER] Post ID: {post_id}",
-                     font=('TkDefaultFont', 8))
+                     font=theme.font(8))
             post_id_label.pack(anchor='w')
 
             # Add edit buttons
@@ -2814,7 +2815,7 @@ class DuplicateManagerGUI:
         if len(full_path) > 50:
             full_path = "..." + full_path[-47:]
         ttk.Label(info_frame, text=f"[LOCATION] {full_path}",
-                 font=('TkDefaultFont', 7), foreground='#666').pack(anchor='w')
+                 font=theme.font(7), foreground=theme.PALETTE['muted']).pack(anchor='w')
 
     def _truncate_text(self, text: str, max_length: int, from_start: bool = True) -> str:
         """Truncate text with ellipsis."""
@@ -2923,16 +2924,16 @@ class DuplicateManagerGUI:
         if is_video:
             audio_flag = video_has_audio(file_path)
             badge_text = "Audio: Unknown"
-            badge_color = '#666'
+            badge_color = theme.PALETTE['muted']
             if audio_flag is True:
                 badge_text = "Audio: Yes"
-                badge_color = '#007700'
+                badge_color = theme.PALETTE['ok']
             elif audio_flag is False:
                 badge_text = "Audio: None"
-                badge_color = '#aa0000'
+                badge_color = theme.PALETTE['error']
 
             badge = ttk.Label(parent, text=badge_text, foreground=badge_color,
-                              font=('TkDefaultFont', 8, 'bold'))
+                              font=theme.font(8, 'bold'))
             badge.pack(anchor='w', padx=2, pady=(0, 2))
 
         preview_container = tk.Frame(parent, width=max_size[0], height=max_size[1])
@@ -2960,8 +2961,8 @@ class DuplicateManagerGUI:
                 img_label.pack(expand=True)
                 img_label.bind('<Button-1>', lambda e: self._open_file_in_viewer(file_path))
             else:
-                ttk.Label(preview_container, text="[No Preview]", font=('TkDefaultFont', 10),
-                         foreground='#999').pack(expand=True)
+                ttk.Label(preview_container, text="[No Preview]", font=theme.font(10),
+                         foreground=theme.PALETTE['faint']).pack(expand=True)
 
     def _open_file_in_viewer(self, file_path: str):
         """Open file in the default system viewer."""
@@ -3529,8 +3530,8 @@ class DuplicateManagerGUI:
         ttk.Label(
             self.scrollable_frame,
             text="Auto-handle in progress... Media previews are hidden for faster processing.",
-            font=('TkDefaultFont', 10),
-            foreground='#555'
+            font=theme.font(10),
+            foreground=theme.PALETTE['muted']
         ).pack(pady=40)
         self.root.update_idletasks()
 
@@ -3581,8 +3582,8 @@ class DuplicateManagerGUI:
             ttk.Label(
                 self.scrollable_frame,
                 text="Auto-handle complete. Scan again or load a saved session to continue.",
-                font=('TkDefaultFont', 10),
-                foreground='#555'
+                font=theme.font(10),
+                foreground=theme.PALETTE['muted']
             ).pack(pady=40)
 
         except Exception as e:
@@ -4839,9 +4840,15 @@ class DuplicateManagerGUI:
             self.log_text.delete(1.0, f"{lines - 800}.0")
 
 
+def build(host) -> DuplicateManagerGUI:
+    """Build the duplicate manager into ``host`` (a manager ToolHost or a themed Tk root)."""
+    return DuplicateManagerGUI(host)
+
+
 def main(argv=None):  # fff: argv is ignored (no options); lets the CLI call it uniformly
     """Main entry point."""
     root = tk.Tk()
+    theme.apply(root)
 
     try:
         app = DuplicateManagerGUI(root)

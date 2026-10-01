@@ -2688,12 +2688,9 @@ class DuplicateManagerCommand(BaseCommand):
     def _launch_gui(cls, config):
         """Launch the duplicate manager GUI."""
         try:
-            import tkinter as tk
-            from fff.gui.duplicate_manager_ui import DuplicateManagerGUI
+            from fff.gui import duplicate_manager_ui
 
-            root = tk.Tk()
-            app = DuplicateManagerGUI(root)
-            root.mainloop()
+            duplicate_manager_ui.main()
 
             print("[OK] Duplicate Manager closed")
             return 0

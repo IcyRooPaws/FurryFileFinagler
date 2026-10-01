@@ -102,51 +102,23 @@ def save_documents(config_path: Path, secrets_path: Path, config: dict, secrets:
     secrets_path.write_text(yaml.safe_dump(secrets, sort_keys=False, allow_unicode=True), encoding="utf-8")
 
 
-def main(config_path: str | Path | None = None) -> int:
+def build(parent, config_path: str | Path | None = None) -> None:
+    """Build the settings editor into ``parent`` (a manager ToolHost or a themed Tk root)."""
     import tkinter as tk
     from tkinter import filedialog, messagebox, ttk
 
-    try:
-        config_path, secrets_path, config, secrets = load_documents(config_path)
-    except (OSError, ValueError, yaml.YAMLError) as exc:
-        print(f"Could not load setup configuration: {exc}")
-        return 2
+    from fff.gui import host as tool_host
+    from fff.gui.theme import PALETTE as palette
 
-    root = tk.Tk()
-    root.title("FurryFileFinagler Setup")
-    root.geometry("1100x780")
-    root.minsize(820, 600)
-    palette = {"page": "#F1F6F6", "surface": "#FFFFFF", "ink": "#18333A",
-               "muted": "#61777C", "accent": "#087F8C", "accent_hover": "#066A75",
-               "line": "#D6E2E3", "ok": "#18794E", "warning": "#A45B08", "error": "#B42318"}
-    style = ttk.Style(root)
-    try:
-        style.theme_use("clam")
-    except tk.TclError:
-        pass
-    root.configure(background=palette["page"])
-    style.configure("TFrame", background=palette["page"])
-    style.configure("TLabel", background=palette["page"], foreground=palette["ink"],
-                    font=("Segoe UI", 10))
-    style.configure("Muted.TLabel", foreground=palette["muted"], font=("Segoe UI", 9))
-    style.configure("PageTitle.TLabel", font=("Segoe UI Semibold", 21), foreground=palette["ink"])
-    style.configure("TNotebook", background=palette["page"], borderwidth=0)
-    style.configure("TNotebook.Tab", padding=(16, 9), font=("Segoe UI Semibold", 10))
-    style.map("TNotebook.Tab", foreground=[("selected", palette["accent"])])
-    style.configure("Primary.TButton", background=palette["accent"], foreground="#FFFFFF",
-                    padding=(14, 9), font=("Segoe UI Semibold", 10), borderwidth=0)
-    style.map("Primary.TButton", background=[("active", palette["accent_hover"])])
-    style.configure("Secondary.TButton", padding=(12, 8), font=("Segoe UI", 10))
-    style.configure("TLabelframe", background=palette["surface"], bordercolor=palette["line"],
-                    relief="solid", borderwidth=1)
-    style.configure("TLabelframe.Label", background=palette["surface"], foreground=palette["ink"],
-                    font=("Segoe UI Semibold", 10))
+    config_path, secrets_path, config, secrets = load_documents(config_path)
+    root = parent
 
-    ttk.Label(root, text="FurryFileFinagler Setup", style="PageTitle.TLabel").pack(
-        anchor="w", padx=18, pady=(16, 2))
-    ttk.Label(root, text="Configure connections, folders, and credentials, then run first-time checks.",
-              style="Muted.TLabel").pack(
-        anchor="w", padx=18, pady=(0, 12))
+    if not isinstance(root, tool_host.ToolHost):  # the manager shows its own heading
+        ttk.Label(root, text="FurryFileFinagler Setup", style="Title.TLabel").pack(
+            anchor="w", padx=18, pady=(16, 2))
+        ttk.Label(root, text="Configure connections, folders, and credentials, then run first-time checks.",
+                  style="Muted.TLabel").pack(
+            anchor="w", padx=18, pady=(0, 12))
 
     notebook = ttk.Notebook(root)
     notebook.pack(fill="both", expand=True, padx=18)
@@ -185,7 +157,7 @@ def main(config_path: str | Path | None = None) -> int:
                 continue
             section = document[section_name]
             ttk.Label(content, text=section_name.replace("_", " ").title(),
-                      font=("Segoe UI Semibold", 11), foreground=palette["accent"]).grid(
+                      style="Section.TLabel").grid(
                 row=row, column=0, columnspan=2, sticky="w", pady=(12, 4))
             row += 1
             for path, value in _flatten({section_name: section}):
@@ -202,9 +174,7 @@ def main(config_path: str | Path | None = None) -> int:
                     editors[path] = ("bool", variable, value)
                 elif isinstance(value, (list, dict)):
                     widget = tk.Text(content, height=min(max(len(_display_value(value).splitlines()), 2), 7),
-                                     wrap="word", relief="solid", borderwidth=1, padx=8, pady=6,
-                                     background=palette["surface"], foreground=palette["ink"],
-                                     font=("Cascadia Mono", 9))
+                                     wrap="word", padx=8, pady=6, font="TkFixedFont")
                     widget.insert("1.0", _display_value(value))
                     widget.grid(row=row, column=1, rowspan=2, sticky="ew", pady=5)
                     editors[path] = ("text", widget, value)
@@ -238,7 +208,7 @@ def main(config_path: str | Path | None = None) -> int:
     if extra_sections:
         add_document("More Settings", config, extra_sections, config_editors)
 
-    results = tk.Text(root, height=9, state="disabled", wrap="word")
+    results = tk.Text(root, height=9, state="disabled", wrap="word", font="TkFixedFont", padx=8, pady=6)
     results.pack(fill="x", padx=18, pady=(10, 4))
     include_db = tk.BooleanVar(value=False)
     ttk.Checkbutton(root, text="Include read-only database connectivity checks", variable=include_db).pack(
@@ -302,8 +272,29 @@ def main(config_path: str | Path | None = None) -> int:
 
     buttons = ttk.Frame(root, padding=(18, 6, 18, 16))
     buttons.pack(fill="x")
-    ttk.Button(buttons, text="Save settings", command=save).pack(side="left")
-    ttk.Button(buttons, text="Save and run checks", command=run_checks).pack(side="left", padx=8)
-    ttk.Button(buttons, text="Close", command=root.destroy).pack(side="right")
+    ttk.Button(buttons, text="Save settings", style="Primary.TButton", command=save).pack(side="left")
+    ttk.Button(buttons, text="Save and run checks", style="Secondary.TButton", command=run_checks).pack(
+        side="left", padx=8)
+    ttk.Button(buttons, text="Close", style="Secondary.TButton",
+               command=lambda: tool_host.close(root)).pack(side="right")
+
+
+def main(config_path: str | Path | None = None) -> int:
+    import tkinter as tk
+
+    from fff.gui import theme
+
+    try:
+        load_documents(config_path)
+    except (OSError, ValueError, yaml.YAMLError) as exc:
+        print(f"Could not load setup configuration: {exc}")
+        return 2
+
+    root = tk.Tk()
+    root.title("FurryFileFinagler Setup")
+    root.geometry("1100x780")
+    root.minsize(820, 600)
+    theme.apply(root)
+    build(root, config_path)
     root.mainloop()
     return 0
