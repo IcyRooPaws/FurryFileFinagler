@@ -104,7 +104,7 @@ def save_documents(config_path: Path, secrets_path: Path, config: dict, secrets:
 
 def main(config_path: str | Path | None = None) -> int:
     import tkinter as tk
-    from tkinter import messagebox, ttk
+    from tkinter import filedialog, messagebox, ttk
 
     try:
         config_path, secrets_path, config, secrets = load_documents(config_path)
@@ -114,55 +114,129 @@ def main(config_path: str | Path | None = None) -> int:
 
     root = tk.Tk()
     root.title("FurryFileFinagler Setup")
-    root.geometry("960x720")
-    root.minsize(700, 500)
+    root.geometry("1100x780")
+    root.minsize(820, 600)
+    palette = {"page": "#F1F6F6", "surface": "#FFFFFF", "ink": "#18333A",
+               "muted": "#61777C", "accent": "#087F8C", "accent_hover": "#066A75",
+               "line": "#D6E2E3", "ok": "#18794E", "warning": "#A45B08", "error": "#B42318"}
+    style = ttk.Style(root)
+    try:
+        style.theme_use("clam")
+    except tk.TclError:
+        pass
+    root.configure(background=palette["page"])
+    style.configure("TFrame", background=palette["page"])
+    style.configure("TLabel", background=palette["page"], foreground=palette["ink"],
+                    font=("Segoe UI", 10))
+    style.configure("Muted.TLabel", foreground=palette["muted"], font=("Segoe UI", 9))
+    style.configure("PageTitle.TLabel", font=("Segoe UI Semibold", 21), foreground=palette["ink"])
+    style.configure("TNotebook", background=palette["page"], borderwidth=0)
+    style.configure("TNotebook.Tab", padding=(16, 9), font=("Segoe UI Semibold", 10))
+    style.map("TNotebook.Tab", foreground=[("selected", palette["accent"])])
+    style.configure("Primary.TButton", background=palette["accent"], foreground="#FFFFFF",
+                    padding=(14, 9), font=("Segoe UI Semibold", 10), borderwidth=0)
+    style.map("Primary.TButton", background=[("active", palette["accent_hover"])])
+    style.configure("Secondary.TButton", padding=(12, 8), font=("Segoe UI", 10))
+    style.configure("TLabelframe", background=palette["surface"], bordercolor=palette["line"],
+                    relief="solid", borderwidth=1)
+    style.configure("TLabelframe.Label", background=palette["surface"], foreground=palette["ink"],
+                    font=("Segoe UI Semibold", 10))
 
-    ttk.Label(root, text="FurryFileFinagler Setup", font=("Segoe UI", 18, "bold")).pack(
+    ttk.Label(root, text="FurryFileFinagler Setup", style="PageTitle.TLabel").pack(
         anchor="w", padx=18, pady=(16, 2))
-    ttk.Label(root, text="Review the example values, enter your settings, then save and run checks.").pack(
+    ttk.Label(root, text="Configure connections, folders, and credentials, then run first-time checks.",
+              style="Muted.TLabel").pack(
         anchor="w", padx=18, pady=(0, 12))
 
     notebook = ttk.Notebook(root)
     notebook.pack(fill="both", expand=True, padx=18)
     config_editors: dict[tuple[str, ...], tuple[str, Any, Any]] = {}
     secrets_editors: dict[tuple[str, ...], tuple[str, Any, Any]] = {}
+    secret_entries = []
+    show_secrets = tk.BooleanVar(value=False)
 
-    def add_document(title: str, document: dict, editors: dict, secret: bool = False) -> None:
-        for section_name, section in document.items():
-            tab = ttk.Frame(notebook)
-            notebook.add(tab, text=f"{title}: {section_name}")
-            canvas = tk.Canvas(tab, highlightthickness=0)
-            scrollbar = ttk.Scrollbar(tab, orient="vertical", command=canvas.yview)
-            content = ttk.Frame(canvas, padding=12)
-            content.bind("<Configure>", lambda event, c=canvas: c.configure(scrollregion=c.bbox("all")))
-            canvas.create_window((0, 0), window=content, anchor="nw")
-            canvas.configure(yscrollcommand=scrollbar.set)
-            canvas.pack(side="left", fill="both", expand=True)
-            scrollbar.pack(side="right", fill="y")
-            content.columnconfigure(1, weight=1)
+    def update_secret_visibility() -> None:
+        mask = "" if show_secrets.get() else "*"
+        for entry in secret_entries:
+            entry.configure(show=mask)
 
-            for row, (path, value) in enumerate(_flatten({section_name: section})):
+    def add_document(title: str, document: dict, section_names: list[str], editors: dict,
+                     secret: bool = False) -> None:
+        tab = ttk.Frame(notebook)
+        notebook.add(tab, text=title)
+        canvas = tk.Canvas(tab, highlightthickness=0, background=palette["page"])
+        scrollbar = ttk.Scrollbar(tab, orient="vertical", command=canvas.yview)
+        content = ttk.Frame(canvas, padding=18)
+        content.bind("<Configure>", lambda event, c=canvas: c.configure(scrollregion=c.bbox("all")))
+        canvas.create_window((0, 0), window=content, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+        content.columnconfigure(1, weight=1)
+
+        row = 0
+        if secret:
+            ttk.Checkbutton(content, text="Show credential values", variable=show_secrets,
+                            command=update_secret_visibility).grid(
+                row=row, column=0, columnspan=2, sticky="w", pady=(0, 10))
+            row += 1
+        for section_name in section_names:
+            if section_name not in document:
+                continue
+            section = document[section_name]
+            ttk.Label(content, text=section_name.replace("_", " ").title(),
+                      font=("Segoe UI Semibold", 11), foreground=palette["accent"]).grid(
+                row=row, column=0, columnspan=2, sticky="w", pady=(12, 4))
+            row += 1
+            for path, value in _flatten({section_name: section}):
                 key = path[-1].lower()
-                label = ".".join(path)
-                ttk.Label(content, text=label).grid(row=row, column=0, sticky="nw", padx=(0, 14), pady=5)
+                field_label = path[-1].replace("_", " ").capitalize()
+                ttk.Label(content, text=field_label).grid(
+                    row=row, column=0, sticky="nw", padx=(0, 14), pady=6)
+                ttk.Label(content, text=".".join(path), style="Muted.TLabel").grid(
+                    row=row + 1, column=0, sticky="nw", padx=(0, 14), pady=(0, 6))
                 if isinstance(value, bool):
                     variable = tk.BooleanVar(value=value)
-                    ttk.Checkbutton(content, variable=variable).grid(row=row, column=1, sticky="w", pady=5)
+                    ttk.Checkbutton(content, text="Enabled", variable=variable).grid(
+                        row=row, column=1, sticky="w", pady=5)
                     editors[path] = ("bool", variable, value)
                 elif isinstance(value, (list, dict)):
                     widget = tk.Text(content, height=min(max(len(_display_value(value).splitlines()), 2), 7),
-                                     wrap="none")
+                                     wrap="word", relief="solid", borderwidth=1, padx=8, pady=6,
+                                     background=palette["surface"], foreground=palette["ink"],
+                                     font=("Cascadia Mono", 9))
                     widget.insert("1.0", _display_value(value))
-                    widget.grid(row=row, column=1, sticky="ew", pady=5)
+                    widget.grid(row=row, column=1, rowspan=2, sticky="ew", pady=5)
                     editors[path] = ("text", widget, value)
                 else:
-                    widget = ttk.Entry(content, show="*" if secret and key in {"password", "api_key", "login"} else "")
+                    sensitive = secret and key in {"password", "api_key", "login"}
+                    widget = ttk.Entry(content, show="*" if sensitive and not show_secrets.get() else "")
                     widget.insert(0, _display_value(value))
-                    widget.grid(row=row, column=1, sticky="ew", pady=5)
+                    widget.grid(row=row, column=1, rowspan=2, sticky="ew", pady=5)
                     editors[path] = ("entry", widget, value)
+                    if sensitive:
+                        secret_entries.append(widget)
+                    if key.endswith(("directory", "folder")) or key == "directory":
+                        def browse_folder(target=widget):
+                            selected = filedialog.askdirectory(parent=root)
+                            if selected:
+                                target.delete(0, "end")
+                                target.insert(0, selected)
+                        ttk.Button(content, text="Browse…", style="Secondary.TButton",
+                                   command=browse_folder).grid(row=row, column=2, rowspan=2,
+                                                              padx=(8, 0), pady=5)
+                row += 2
 
-    add_document("Settings", config, config_editors)
-    add_document("Secrets", secrets, secrets_editors, secret=True)
+    add_document("Connections", config, ["environment", "test_paths_root", "database", "databases", "e621"],
+                 config_editors)
+    add_document("Source Search", config, ["fluffle"], config_editors)
+    add_document("Archive", config, ["archive"], config_editors)
+    add_document("Library Sorting", config, ["sorter"], config_editors)
+    add_document("Credentials", secrets, list(secrets), secrets_editors, secret=True)
+    extra_sections = [key for key in config if key not in {
+        "environment", "test_paths_root", "database", "databases", "e621", "fluffle", "archive", "sorter"}]
+    if extra_sections:
+        add_document("More Settings", config, extra_sections, config_editors)
 
     results = tk.Text(root, height=9, state="disabled", wrap="word")
     results.pack(fill="x", padx=18, pady=(10, 4))
