@@ -32,8 +32,6 @@ Global options: `fff [--config PATH] [--env prod|test] <command>`.
 | `fff e621 report deletion-timestamps` | Report how accurate deleted_at timestamps are |
 | `fff e621 report takedowns` | Interactive takedown viewer |
 | `fff e621 ai cleanup-deleted` | Posts e621 deleted as AI: snapshot, unfavorite, optionally trash files, delete from DB (dry run by default) |
-| `fff legacy add-deletion-reason-column` | One-off migration: add posts.deletion_reason |
-| `fff legacy migrate-ai-archive-text` | One-off: import data/ai_generated_posts_archive.txt into the DB |
 | `fff legacy migrate-ai-artists` | One-off: import data/ai_artist.md into ai_flagged_artists |
 | `fff e621 verify file-paths` | Verify posts.file_path and repair broken paths |
 | `fff e621 verify file-names` | Make posts.file_name agree with the files on disk |
@@ -65,10 +63,6 @@ Global options: `fff [--config PATH] [--env prod|test] <command>`.
 | `fff db report archive-tables` | List the archive_* tables |
 | `fff db diagnose all-files-view` | Diagnose the all_files view (artist-scan filters) |
 | `fff db diagnose op-logging` | Exercise file_operations logging (writes and deletes test rows) |
-| `fff legacy migrate-artist-columns` | One-off: add last_artist_check / artist_matched to every table |
-| `fff legacy migrate-paths-forward-slashes` | One-off: rewrite stored file_path values with forward slashes |
-| `fff legacy fix-file-hash-column` | One-off: widen file_operations.file_hash (obsolete) |
-| `fff legacy remove-file-hash-column` | One-off: drop file_operations.file_hash |
 | `fff hash` | Hash files / show info / find duplicates (v1 media_hasher CLI) |
 | `fff gui manager` | Unified manager for workflows, settings, and desktop tools |
 | `fff gui duplicates` | Duplicate manager GUI |
