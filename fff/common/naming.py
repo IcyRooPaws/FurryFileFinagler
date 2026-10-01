@@ -256,3 +256,29 @@ def generate_fa_filename(post_data: Dict[str, Any]) -> str:
     safe_artist = safe_artist.strip()
 
     return f"{safe_artist}-{rating}-FA-{post_id}{ext}"
+
+
+# --- fff additions -----------------------------------------------------------
+
+_WINDOWS_INVALID_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
+_WINDOWS_RESERVED_NAMES = {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)),
+                           *(f"LPT{i}" for i in range(1, 10))}
+
+
+def windows_safe_filename(name):
+    r"""Replace every character Windows doesn't allow in a file name with '_'.
+
+    That is < > : " / \ | ? * and control characters. Trailing dots/spaces (which Windows
+    silently drops) become '_' too, and a reserved device name (CON, NUL, COM1, ...) gets
+    a leading '_'. Names that are already valid come back unchanged.
+    e.g. 42^02'40.2"n-...-6129891.png -> 42^02'40.2_n-...-6129891.png
+    """
+    if not name:
+        return name
+    safe = _WINDOWS_INVALID_CHARS.sub("_", name)
+    stripped = safe.rstrip(" .")
+    if stripped != safe:
+        safe = stripped + "_" * (len(safe) - len(stripped))
+    if safe.split(".", 1)[0].upper() in _WINDOWS_RESERVED_NAMES:
+        safe = "_" + safe
+    return safe

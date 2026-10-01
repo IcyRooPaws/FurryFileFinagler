@@ -1,5 +1,6 @@
 # fff: implemented in e621 archive/modules/download.py.
 # fff: MediaHasher is the archive hash profile (fff.hashing.archive_hasher).
+# fff: characters Windows doesn't allow in file names are replaced with _ (windows_safe_filename).
 import os
 import re
 import time
@@ -10,6 +11,7 @@ from urllib3.exceptions import ProtocolError
 
 from fff.archive.db import strip_flag_tokens
 from fff.archive.config import normalize_file_path
+from fff.common.naming import windows_safe_filename
 
 # Optional import for media hashing
 try:
@@ -187,7 +189,7 @@ def download_missing_files(conn, download_config, e621_config, mysql_config=None
                     continue
 
                 # Normalize filename to remove any flag tokens before using it on disk
-                clean_file_name = strip_flag_tokens(file_name)
+                clean_file_name = windows_safe_filename(strip_flag_tokens(file_name))  # fff: invalid chars -> _
                 if clean_file_name != file_name:
                     logging.info(
                         "Normalizing filename for post %s: %s -> %s",

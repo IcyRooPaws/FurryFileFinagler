@@ -1,5 +1,6 @@
 # fff: implemented in e621 archive/modules/db.py.
 # fff: kept as one module (the planned split is deferred; see project notes).
+# fff: post file names are made Windows-safe (invalid characters -> _) wherever they are built.
 import logging
 import os
 import time
@@ -9,6 +10,7 @@ from datetime import datetime
 
 # Import path normalization utility
 from fff.archive.config import normalize_file_path
+from fff.common.naming import windows_safe_filename
 
 
 def _sorter_db_name():
@@ -1032,6 +1034,7 @@ def check_and_update_file_artist_names(conn, batch_limit=None, dry_run=False):
             expected_file_name = f"{artist_part}-{rating_full}-{post_id}"
             if extension:
                 expected_file_name = f"{expected_file_name}.{extension}"
+            expected_file_name = windows_safe_filename(expected_file_name)  # fff: invalid chars -> _
 
             # Check if file name needs updating
             if current_base_name == expected_file_name:
@@ -1436,6 +1439,7 @@ def insert_or_update_post(conn, post, commit: bool = True):
     file_name = f"{artist_part}-{rating_full}-{post_id}"
     if extension:
         file_name = f"{file_name}.{extension}"
+    file_name = windows_safe_filename(file_name)  # fff: invalid chars -> _
 
     cursor = conn.cursor()
     query = """
@@ -1616,6 +1620,7 @@ def insert_or_update_posts_bulk(conn, posts, commit: bool = True):
         file_name = f"{artist_part}-{rating_full}-{post_id}"
         if extension:
             file_name = f"{file_name}.{extension}"
+        file_name = windows_safe_filename(file_name)  # fff: invalid chars -> _
 
         media_hash = post.get("media_hash")
         post_values.append((post_id, file_url, md5_hash, media_hash, rating_full, ingested_at, local_file_path,
@@ -3709,7 +3714,7 @@ def backfill_missing_file_names(conn):
         if extension:
             file_name = f"{file_name}.{extension}"
         # Ensure no flag tokens remain in the final filename
-        file_name = strip_flag_tokens(file_name)
+        file_name = windows_safe_filename(strip_flag_tokens(file_name))  # fff: invalid chars -> _
         try:
             cursor_update = conn.cursor()
             cursor_update.execute("UPDATE posts SET file_name=%s WHERE id=%s", (file_name, post_id))
@@ -3871,7 +3876,7 @@ def backfill_conditional_dnp(conn, e621_config, batch_limit: int | None = None):
             new_file_name = f"{artist_part}-{rating_full}-{pid}"
             if extension:
                 new_file_name = f"{new_file_name}.{extension}"
-            new_file_name = strip_flag_tokens(new_file_name)
+            new_file_name = windows_safe_filename(strip_flag_tokens(new_file_name))  # fff: invalid chars -> _
             if new_file_name != current_name:
                 cursor_upd = conn.cursor()
                 cursor_upd.execute("UPDATE posts SET file_name=%s WHERE id=%s", (new_file_name, pid))
