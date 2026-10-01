@@ -53,10 +53,11 @@ def _sample_posts(limit=5):
 def child(name, shot_dir):
     import tkinter as tk
 
-    sys.path.insert(0, str(FFF / "tools" / "parity"))
-    import stub_http  # noqa: E402
+    if name != "manager":
+        sys.path.insert(0, str(FFF / "tools" / "parity"))
+        import stub_http  # noqa: E402
 
-    stub_http.install(Path(tempfile.gettempdir()) / f"fff_gui_smoke_{name}_http.json")
+        stub_http.install(Path(tempfile.gettempdir()) / f"fff_gui_smoke_{name}_http.json")
     errors = []
     tk.Tk.report_callback_exception = lambda self, exc, val, tb: errors.append(
         "".join(traceback.format_exception(exc, val, tb)))
@@ -97,7 +98,21 @@ def child(name, shot_dir):
 
     root = tk.Tk()
     watched = {}
-    if name == "tag-sort-config":
+    if name == "manager":
+        from fff.gui import manager_ui
+
+        manager_ui.main(root=root, run_mainloop=False)
+        stop_button = next((widget for widget in _walk(root)
+                            if widget.winfo_class() == "TButton"
+                            and widget.cget("text") == "Stop Web UI"), None)
+        if stop_button is None:
+            errors.append("Stop Web UI button is missing")
+        elif str(stop_button.cget("state")) != "disabled":
+            errors.append("Stop Web UI button should start disabled")
+        else:
+            result["stop_web_ui_button"] = "disabled until gallery starts"
+        app = None
+    elif name == "tag-sort-config":
         from fff.gui.tag_sort_config_ui_v2 import TagSortConfigApp
         from fff.sorter import paths as sorter_paths
 

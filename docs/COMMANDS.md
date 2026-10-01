@@ -70,6 +70,7 @@ Global options: `fff [--config PATH] [--env prod|test] <command>`.
 | `fff legacy fix-file-hash-column` | One-off: widen file_operations.file_hash (obsolete) |
 | `fff legacy remove-file-hash-column` | One-off: drop file_operations.file_hash |
 | `fff hash` | Hash files / show info / find duplicates (v1 media_hasher CLI) |
+| `fff gui manager` | Unified manager for workflows, settings, and desktop tools |
 | `fff gui duplicates` | Duplicate manager GUI |
 | `fff gui tag-sort-config` | Tag sorting rule editor GUI |
 | `fff gui artist-config` | Artist config editor GUI (sort_artists.yaml) |

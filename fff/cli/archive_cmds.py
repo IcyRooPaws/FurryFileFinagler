@@ -140,6 +140,8 @@ COMMANDS = [
     Command(("legacy", "remove-file-hash-column"), "fff.legacy.sorter.remove_file_hash_column",
             "One-off: drop file_operations.file_hash", options=[]),
     Command(("hash",), "fff.sorter.hash_cli", "Hash files / show info / find duplicates (v1 media_hasher CLI)"),
+    Command(("gui", "manager"), "fff.gui.manager_ui",
+            "Unified manager for workflows, settings, and desktop tools", options=[]),
     Command(("gui", "duplicates"), "fff.gui.duplicate_manager_ui", "Duplicate manager GUI", options=[]),
     Command(("gui", "tag-sort-config"), "fff.gui.tag_sort_config_ui_v2", "Tag sorting rule editor GUI"),
     Command(("gui", "artist-config"), "fff.gui.artist_config_ui", "Artist config editor GUI (sort_artists.yaml)"),

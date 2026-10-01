@@ -32,6 +32,7 @@
 
 ### Desktop tools and gallery
 
+- Open the unified control center with `fff gui manager` (or run `manager.bat` on Windows) to browse workflows, launch commands, and open the focused tools below.
 - Configure tag-sorting and favorite-artist rules with desktop editors.
 - Review blacklisted posts, artist-related posts, and duplicate files in desktop interfaces.
 - Browse the archive through a local Flask web gallery.
@@ -84,5 +85,5 @@ The setup UI starts from the committed examples. It stores credentials separatel
 ```powershell
 .venv\Scripts\python -m pytest                     # unit and CLI tests
 $env:FFF_INTEGRATION=1; .venv\Scripts\python -m pytest -m integration   # test databases only
-python tools/gui_smoke.py                          # every GUI opens and loads data
+python tools/gui_smoke.py manager                   # smoke-test the unified manager window
 ```
