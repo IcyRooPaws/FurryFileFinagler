@@ -41,9 +41,9 @@ with `fff config make-example --force` (it replaces paths and personal values wi
 | `fff db copy-schema [--db ...] [--dry-run]` | Create/refresh empty `test_*` copies of the databases (structure only; re-running empties them) |
 | `fff doctor [--skip-db] [--skip-deps]` | Packages, configured folders, DB connectivity, `all_files` view |
 
-### Ported commands (e621 archive and reverse-image search)
+### Ported commands (e621 archive, reverse-image search, media sorter)
 
-The command map is in project notes §7. Scripts that had their own options take them unchanged (`fff e621 backfill pools --help`).
+The command map is in project notes §7. Scripts that had their own options take them unchanged (`fff e621 backfill pools --help`, `fff sort sort --help`, `fff sort workflow --help`).
 
 | Command | What it does |
 |---|---|
@@ -85,6 +85,21 @@ The command map is in project notes §7. Scripts that had their own options take
 | `fff fluffle verify-db` | Print recent rows and counts from image_search |
 | `fff fa rename-authors` | Rename *-FA-* files from author name to author id (mappings from the reverse search DB; interactive) |
 | `fff fa rename-authors-manual` | Same, with mappings from config/fa_author_mappings.yaml (interactive) |
+| `fff sort` | media sorter: sort, archive, tag/pool/artist sort, maintenance, duplicates, workflow (was main.py/run.py) |
+| `fff e621 fix-no-source-names` | Rename files whose path name differs from posts.file_name (excludes Fav/Artists, Tag Sorted, ...) |
+| `fff dupes advanced` | Multi-stage duplicate finder (KNOWN BROKEN, project notes section 13) |
+| `fff db report space` | Sum file_size per image_sorting_hashes table |
+| `fff db report archive-tables` | List the archive_* tables |
+| `fff db diagnose all-files-view` | Diagnose the all_files view (artist-scan filters) |
+| `fff db diagnose op-logging` | Exercise file_operations logging (writes and deletes test rows) |
+| `fff legacy migrate-artist-columns` | One-off: add last_artist_check / artist_matched to every table |
+| `fff legacy migrate-paths-forward-slashes` | One-off: rewrite stored file_path values with forward slashes |
+| `fff legacy fix-file-hash-column` | One-off: widen file_operations.file_hash (obsolete) |
+| `fff legacy remove-file-hash-column` | One-off: drop file_operations.file_hash |
+| `fff hash` | Hash files / show info / find duplicates (v1 media_hasher CLI) |
+| `fff gui duplicates` | Duplicate manager GUI |
+| `fff gui tag-sort-config` | Tag sorting rule editor GUI |
+| `fff gui artist-config` | Artist config editor GUI (sort_artists.yaml) |
 | `fff fa sync-external` | Track FA source links from e621 posts and favorite them on FA |
 | `fff gui blacklist-review` | Review blacklisted posts (auto-deletes critical/AI-tagged posts first) |
 | `fff gui artist-review` | Review posts by artists from review_artists.yaml |

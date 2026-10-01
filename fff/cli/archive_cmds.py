@@ -25,12 +25,14 @@ class Command:
     options: list | None = FORWARD   # [(flags, kwargs), ...] for scripts without argparse
     original: str = ""               # original script, shown in --help
     call: str = "argv"               # "argv": func(argv) | "none": func()
+    aliases: tuple = ()              # other command implementations this command replaces
     extra: dict = field(default_factory=dict)
 
 
 S = "fff.archive.scripts"
 A = "e621 archive/"
 FL = "reverse-image search/"
+IS = "media sorter/"
 
 COMMANDS = [
     # --- sync ------------------------------------------------------------------
@@ -142,6 +144,41 @@ COMMANDS = [
     Command(("fa", "rename-authors-manual"), "fff.fluffle.rename_fa_authors_manual",
             "Same, with mappings from config/fa_author_mappings.yaml (interactive)", options=[],
             original=FL + "scripts/rename_fa_author_manual.py"),
+    # --- media sorter -----------------------------------------------------------------------
+    Command(("sort",), "fff.sorter.entry",
+            "media sorter: sort, archive, tag/pool/artist sort, maintenance, duplicates, workflow (was main.py/run.py)",
+            original=IS + "main.py", aliases=(IS + "run.py", IS + "fa_backlog_sort.py", IS + "fff.sorter/__main__.py")),
+    Command(("e621", "fix-no-source-names"), "fff.sorter.scripts.fix_no_source_filenames",
+            "Rename files whose path name differs from posts.file_name (excludes Fav/Artists, Tag Sorted, ...)",
+            options=[(("--dry-run",), {"action": "store_true"})], original=IS + "fix_no_source_filenames.py"),
+    Command(("dupes", "advanced"), "fff.sorter.scripts.find_duplicates_advanced",
+            "Multi-stage duplicate finder (KNOWN BROKEN, project notes section 13)", original=IS + "scripts/find_duplicates_advanced.py"),
+    Command(("db", "report", "space"), "fff.sorter.scripts.table_space_report",
+            "Sum file_size per image_sorting_hashes table", options=[], original=IS + "table_space_report.py"),
+    Command(("db", "report", "archive-tables"), "fff.sorter.scripts.check_archive_tables",
+            "List the archive_* tables", options=[], original=IS + "check_archive_tables.py"),
+    Command(("db", "diagnose", "all-files-view"), "fff.sorter.scripts.diagnose_all_files_view",
+            "Diagnose the all_files view (artist-scan filters)", options=[], original=IS + "test_all_files_view.py"),
+    Command(("db", "diagnose", "op-logging"), "fff.sorter.scripts.diagnose_file_operations_logging",
+            "Exercise file_operations logging (writes and deletes test rows)", options=[],
+            original=IS + "test_file_operations_logging.py"),
+    Command(("legacy", "migrate-artist-columns"), "fff.legacy.sorter.migrate_artist_columns",
+            "One-off: add last_artist_check / artist_matched to every table", options=[],
+            original=IS + "migrate_artist_columns.py"),
+    Command(("legacy", "migrate-paths-forward-slashes"), "fff.legacy.sorter.migrate_paths_to_forward_slashes",
+            "One-off: rewrite stored file_path values with forward slashes", original=IS + "migrate_paths_to_forward_slashes.py"),
+    Command(("legacy", "fix-file-hash-column"), "fff.legacy.sorter.fix_file_hash_column",
+            "One-off: widen file_operations.file_hash (obsolete)", options=[], original=IS + "fix_file_hash_column.py"),
+    Command(("legacy", "remove-file-hash-column"), "fff.legacy.sorter.remove_file_hash_column",
+            "One-off: drop file_operations.file_hash", options=[], original=IS + "remove_file_hash_column.py"),
+    Command(("hash",), "fff.sorter.hash_cli", "Hash files / show info / find duplicates (v1 media_hasher CLI)",
+            original=IS + "_handlers/media_hasher/cli.py"),
+    Command(("gui", "duplicates"), "fff.gui.duplicate_manager_ui", "Duplicate manager GUI", options=[],
+            original=IS + "scripts/duplicate_manager_ui.py"),
+    Command(("gui", "tag-sort-config"), "fff.gui.tag_sort_config_ui_v2", "Tag sorting rule editor GUI",
+            original=IS + "scripts/tag_sort_config_ui_v2.py", aliases=(IS + "scripts/tag_sort_config_ui.py",)),
+    Command(("gui", "artist-config"), "fff.gui.artist_config_ui", "Artist config editor GUI (sort_artists.yaml)",
+            original=IS + "scripts/artist_config_ui.py"),
     # --- FA --------------------------------------------------------------------------
     Command(("fa", "sync-external"), "fff.fluffle.sync_external_fa_sources",
             "Track FA source links from e621 posts and favorite them on FA", options=[], call="none",
@@ -169,6 +206,9 @@ GROUP_HELP = {
     ("fluffle",): "reverse search reverse image search and match processing (was reverse-image search)",
     ("gui",): "Desktop GUIs",
     ("legacy",): "One-off migrations kept from the current features",
+    ("dupes",): "Duplicate finders",
+    ("db", "report"): "Read-only database reports",
+    ("db", "diagnose"): "Database diagnostics",
 }
 
 
