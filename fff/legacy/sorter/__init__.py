@@ -1,1 +1,1 @@
-"""media sorter's one-off schema migrations, kept for reference."""
+"""FFF's one-off schema migrations, kept for reference."""

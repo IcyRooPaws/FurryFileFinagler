@@ -1,4 +1,3 @@
-# fff: implemented in media sorter/tests/test_tag_sort_optimization.py.
 # fff: integration test (reads test_e621_posts_db).
 """
 Test tag sorting optimizations.

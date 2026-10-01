@@ -1,4 +1,3 @@
-# fff: implemented in media sorter/_handlers/media_hasher/__init__.py.
 # fff: old v1 hasher package, kept verbatim: DatabaseManager._get_hash_metadata uses its type
 # fff: mapping for the hash_method/hash_type columns, and 'fff hash' wraps its CLI.
 """

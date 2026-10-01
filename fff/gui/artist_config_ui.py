@@ -1,4 +1,3 @@
-# fff: implemented in media sorter/scripts/artist_config_ui.py.
 # fff: edits config/sort_artists.yaml (raw read, it is saved back); __main__ became parse_args + main.
 """
 Artist Configuration UI
@@ -27,7 +26,7 @@ from fff.sorter import paths as sorter_paths
 
 logger = logging.getLogger(__name__)
 
-# fff: config/sort_artists.yaml (was configs/artists.yaml, decision 3). This editor writes the
+# This editor writes config/sort_artists.yaml directly, so it reads the raw YAML rather than
 # file back, so it is read RAW (_load_yaml), never through sorter_paths.load_yaml_for_env.
 DEFAULT_CONFIG_PATH = sorter_paths.SORT_ARTISTS
 

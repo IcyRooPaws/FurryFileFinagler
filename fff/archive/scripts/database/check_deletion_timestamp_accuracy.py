@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# fff: implemented in e621 archive/scripts/database/check_deletion_timestamp_accuracy.py.
 # fff: main(argv) parses an option-less argparse parser so --help works; the original took no arguments.
 """
 Diagnostic script to check how many deleted posts have potentially inaccurate

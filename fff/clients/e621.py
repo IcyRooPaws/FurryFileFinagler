@@ -1,12 +1,11 @@
 """e621 API access.
 
 Two request styles are kept exactly as they were, because callers depend on their
-error behaviour (design note section5):
-  * ``api_get`` (from e621 archive): global 1 s spacing, 60 s pause every 5000
-    calls, retries forever on timeout. Used by the archive.
-  * reverse search's helpers (``get_post_data``, ``add_to_favorites`` ...): plain requests
+error behavior:
+    * ``api_get``: global 1 s spacing, 60 s pause every 5000 calls, retries forever on timeout.
+    * Search helpers (``get_post_data``, ``add_to_favorites`` ...): plain requests
     calls that print and return None/False on failure.
-v1/v2 response helpers come from e621 archive/modules/db.py.
+v1/v2 response helpers normalize the supported API response shapes.
 """
 import json
 import logging
@@ -104,7 +103,7 @@ def api_get(url, params=None, headers=None, auth=None, stream=False):
             time.sleep(60)
 
 
-# --- reverse-image search/scripts/process_e621_matches.py ------------------
+# --- reverse-image source search/scripts/process_e621_matches.py ------------------
 
 def get_all_favorites(login: str, api_key: str, user_agent: str) -> set:
     """

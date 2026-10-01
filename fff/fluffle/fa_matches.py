@@ -1,7 +1,5 @@
-# fff: implemented in reverse-image search/scripts/process_furaffinity_matches.py.
-# fff: the FA client (cookies, retrying GET, scraping, favoriting, download) is imimplemented in
-# fff: fff.clients.furaffinity (Phase 1, identical code).
-# fff: moves/copies/renames/deletes are logged to file_operations via fff.fluffle.ops (decision 5).
+# The FurAffinity client is shared with other entry points.
+# File operations are logged to file_operations via fff.fluffle.ops.
 """
 FurAffinity Post Processor
 Processes images that have FurAffinity matches, adds to favorites, downloads with proper naming,

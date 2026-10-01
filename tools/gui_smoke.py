@@ -1,4 +1,4 @@
-"""Smoke-test every ported GUI in the test environment (project notes phase 5).
+"""Smoke-test every GUI in the test environment.
 
     python tools/gui_smoke.py [--shots DIR] [name ...]
 

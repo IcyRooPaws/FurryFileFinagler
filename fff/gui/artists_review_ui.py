@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# fff: implemented in e621 archive/scripts/ui/artists_review_ui.py.
 # fff: run as 'fff gui artist-review'; main(argv=None) ignores argv (the original had no options).
 # fff: reads config/review_artists.yaml (was config/artists.yaml); logs go to data/logs/archive (was ./logs).
 """
@@ -179,7 +178,7 @@ def main(argv=None):  # fff: argv is ignored (no options); lets the CLI call it 
         messagebox.showerror("Error", "Failed to connect to database")
         sys.exit(1)
 
-    artists_yaml_path = archive_paths.REVIEW_ARTISTS  # fff: artists.yaml renamed (decision 3)
+    artists_yaml_path = archive_paths.REVIEW_ARTISTS
     artists_map = load_artists_yaml(str(artists_yaml_path))
     if artists_map is None:
         messagebox.showerror("Error", f"Failed to load {artists_yaml_path}")

@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# fff: implemented in e621 archive/scripts/database/create_download_tables_and_match_files.py.
 # fff: no argparse (as in the original): main(argv) scans argv for --dry-run / --skip-to-id-matching,
 # fff: defaulting to sys.argv[1:]; unknown flags (including --help) are ignored and the script runs.
 """

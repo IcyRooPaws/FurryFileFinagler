@@ -1,6 +1,5 @@
-# fff: implemented in media sorter/fff.sorter/cli/__init__.py.
 """
-CLI module for media sorter.
+CLI module for FFF.
 
 Provides command-line interface functionality.
 """

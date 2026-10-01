@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# fff: implemented in e621 archive/scripts/favorites/remove_ai_artist_posts.py.
 """
 Remove Posts by AI Artists
 

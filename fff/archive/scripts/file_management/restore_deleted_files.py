@@ -1,4 +1,3 @@
-# fff: implemented in e621 archive/scripts/file_management/restore_deleted_files.py.
 # fff: the hard-coded CSV/search/duplicates/not-found paths are argparse options defaulting
 # fff: to the original values; argparse replaces the sys.argv flag check.
 import argparse

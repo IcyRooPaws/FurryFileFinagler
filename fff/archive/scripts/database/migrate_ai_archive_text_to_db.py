@@ -1,4 +1,3 @@
-# fff: implemented in e621 archive/scripts/database/migrate_ai_archive_text_to_db.py.
 # fff: the __main__ block moved into main(argv); the archive argument defaults to data/ai_generated_posts_archive.txt in fff.
 """Migrate the legacy AI-generated post text archive into MySQL."""
 

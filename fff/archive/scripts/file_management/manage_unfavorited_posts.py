@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# fff: implemented in e621 archive/scripts/file_management/manage_unfavorited_posts.py.
 """
 Script to manage posts that are in the database but not in current favorites.
 Provides options to clean up, archive, or investigate these posts.

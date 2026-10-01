@@ -1,4 +1,3 @@
-# fff: implemented in media sorter/media_hasher.py (the superset of the three hasher copies).
 # Changes are marked "fff:": profile-based config lookup, `settings` and `normalize_images`.
 """
 MediaHash Library - Multi-format file hashing with type-specific algorithms
@@ -65,7 +64,7 @@ class MediaHasher:
             return {}
 
         if config_path is None:
-            # fff: the original searched upward from the CWD and, when run from media sorter,
+            # fff: the original searched upward from the CWD and, when run from FFF,
             # found configs/config.yaml. That media_hasher section is now the sorter's.
             try:
                 from fff.common import config as fff_config
@@ -117,7 +116,7 @@ class MediaHasher:
             config_path: Path to config.yaml file (default: auto-detect)
             use_config: Whether to load settings from config.yaml (default: True)
             normalize_images: fff addition. Pre-normalize images/frames (RGB + ~512px) before
-                perceptual hashing (default: from config or True, media sorter's behaviour).
+                perceptual hashing (default: from config or True, FFF's behaviour).
                 e621 archive's hasher never did this; see fff.hashing.archive_hasher.
             settings: fff addition. Use this dict instead of reading any config file.
         """

@@ -1,4 +1,4 @@
-"""reverse search's file operations, logged to the log file and ``file_operations`` (project notes §11 decision 5).
+"""reverse search's file operations, logged to the log file and ``file_operations``.
 
 Every move, copy, rename and delete reverse search does on a media file goes through here, recorded
 in the sorter database's file_operations table with reason ``fluffle:<step>``. Each helper

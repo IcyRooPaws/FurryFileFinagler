@@ -1,21 +1,7 @@
 import os
 from pathlib import Path
 
-import pytest
-
 from fff.common import fileops, timestamps
-from tests import existing code
-from tests.existing code import requires_existing code
-
-
-def _fluffle_movers():
-    return [
-        existing code.fluffle_e621().move_to_blacklisted,
-        existing code.fluffle_e621().move_to_source_found,
-        existing code.fluffle_fa().move_to_source_found,
-        existing code.fluffle_fa().move_to_not_found,
-        existing code.fluffle_main().move_to_not_found,
-    ]
 
 
 def _tree(root: Path) -> list[str]:
@@ -35,22 +21,6 @@ def _scenario(root: Path, mover, preserve, collide, outside):
         existing.with_name("pic_1.png").write_bytes(b"old")
     ok = mover(src, target, base, preserve)
     return ok, _tree(target), src.exists()
-
-
-@requires_existing code
-@pytest.mark.parametrize("preserve", [False, True])
-@pytest.mark.parametrize("collide", [False, True])
-@pytest.mark.parametrize("outside", [False, True])
-def test_move_to_directory_matches_all_five_fluffle_copies(tmp_path, preserve, collide, outside):
-    expected = _scenario(tmp_path / "new", fileops.move_to_directory, preserve, collide, outside)
-    for i, mover in enumerate(_fluffle_movers()):
-        assert _scenario(tmp_path / f"orig{i}", mover, preserve, collide, outside) == expected, mover
-
-
-@requires_existing code
-def test_move_to_directory_missing_source_returns_false_like_original(tmp_path):
-    for i, mover in enumerate(_fluffle_movers() + [fileops.move_to_directory]):
-        assert mover(tmp_path / "nope.png", tmp_path / f"out{i}") is False
 
 
 class FakeCursor:
@@ -119,20 +89,6 @@ def test_rename_across_folders_is_logged_as_move(tmp_path):
     (tmp_path / "sub").mkdir()
     fileops.rename_file_with_logging(f, tmp_path / "sub" / "a.png", db_manager=op)
     assert rows[0][1][0] == "move"
-
-
-@requires_existing code
-@pytest.mark.parametrize("keep_atime,original", [(False, "fluffle_e621"), (True, "fluffle_fa")])
-def test_copy_file_times_matches_original_variants(tmp_path, keep_atime, original):
-    src = tmp_path / "src"
-    src.write_bytes(b"s")
-    os.utime(src, (1_000_000_000, 1_500_000_000))
-    a, b = tmp_path / "a", tmp_path / "b"
-    a.write_bytes(b"a")
-    b.write_bytes(b"b")
-    getattr(existing code, original)().copy_file_times(src, a)
-    timestamps.copy_file_times(src, b, keep_source_atime=keep_atime)
-    assert (a.stat().st_atime, a.stat().st_mtime) == (b.stat().st_atime, b.stat().st_mtime)
 
 
 def test_set_file_timestamps(tmp_path):

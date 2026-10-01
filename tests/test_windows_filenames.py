@@ -5,9 +5,10 @@ import pytest
 
 from fff.common import paths
 from fff.common.naming import windows_safe_filename
-from tests.test_windows_filenames import NAMES
 
 INVALID = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
+VALID_NAMES = ["artist-explicit-12345.jpg", "artist-name-safe-67890.png", "image with spaces.webp",
+               "artist-explicit-12345-1.jpg", "clip.webm", "notes.txt", ".hidden-file"]
 
 
 @pytest.mark.parametrize("name,expected", [
@@ -28,7 +29,7 @@ def test_examples(name, expected):
 
 
 def test_valid_names_are_unchanged_and_result_is_always_valid():
-    for name in NAMES:
+    for name in VALID_NAMES:
         out = windows_safe_filename(name)
         assert not INVALID.search(out or "")
         if not INVALID.search(name) and not name.endswith((" ", ".")):

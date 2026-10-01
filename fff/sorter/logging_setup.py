@@ -1,7 +1,6 @@
-# fff: implemented in media sorter/fff.sorter/config/logging.py.
 # fff: default log folder is logs/sorter (was ./Logs).
 """
-Logging configuration for media sorter.
+Logging configuration for FFF.
 
 Provides centralized logging setup with consistent formatting and file management.
 """

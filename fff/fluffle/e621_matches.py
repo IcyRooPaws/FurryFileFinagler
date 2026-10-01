@@ -1,8 +1,6 @@
-# fff: implemented in reverse-image search/scripts/process_e621_matches.py.
-# fff: the e621 API helpers are imimplemented in fff.clients.e621 (Phase 1, identical code).
-# fff: moves/copies/deletes are logged to file_operations via fff.fluffle.ops (decision 5).
-# fff: standalone main() now applies the tag blacklist and honours auto_favorite, like
-# fff: process_single_image does (decision 6).
+# The e621 API helpers are imimplemented in the shared client.
+# File operations are logged to file_operations; blacklist and auto_favorite settings
+# apply consistently to both command entry points.
 """
 E621 Post Processor
 Processes images that have e621 matches, checks favorites, downloads with proper naming,
@@ -345,7 +343,7 @@ def main(argv=None):  # fff: argv accepted for the CLI; no options
     preserve_structure = search_config.get('preserve_directory_structure', False)
     request_delay = 1.0  # Delay between API requests (e621 rate limit)
 
-    # fff: decision 6 - the same blacklist / auto_favorite settings process_single_image uses
+    # Apply the shared blacklist and auto_favorite settings.
     blacklisted_dir = Path(e621_config.get('blacklisted_directory', './blacklisted'))
     blacklist = e621_config.get('blacklist', [])
     auto_favorite = e621_config.get('auto_favorite', True)
@@ -453,7 +451,7 @@ def main(argv=None):  # fff: argv accepted for the CLI; no options
             print("[OK] Already favorited")
         else:
             print("[ERROR] Not favorited")
-            if auto_favorite:  # fff: decision 6 (the original always favorited here)
+            if auto_favorite:
                 print(f"  Adding to favorites...", end=" ", flush=True)
                 if add_to_favorites(numeric_id, login, api_key, user_agent, favorites_cache):
                     print("[OK] Successfully added to favorites")
@@ -478,7 +476,7 @@ def main(argv=None):  # fff: argv accepted for the CLI; no options
 
         print("[OK]")
 
-        # fff: decision 6 - check blacklisted tags exactly like process_single_image
+        # Check blacklisted tags before processing the post.
         if blacklist:
             blacklisted_tags = check_blacklisted_tags(post_data, blacklist)
             if blacklisted_tags:

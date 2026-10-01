@@ -32,8 +32,8 @@ def log_dir(tmp_path, monkeypatch):
     return tmp_path / "logs" / "daily"
 
 
-def test_runs_the_same_order_as_the_daily_powershell_script():
-    """fff_daily.ps1: fluffle.py, run.py, e621_main.py, run.py, sync_external_fa_sources.py"""
+def test_runs_standard_stage_order():
+    """Search, sorting, archive sync, sorting, then external source sync."""
     run = FakeRunner()
     assert daily.run(parse("daily"), runner=run) == 0
     assert run.stages() == [["fluffle", "search"], ["sort", "workflow"], ["e621", "sync"],
@@ -57,11 +57,11 @@ def test_env_and_config_pass_through():
 
 
 def test_failure_keeps_going_by_default_but_exits_nonzero(log_dir):
-    run = FakeRunner(codes=[0, 0, 1, 0, 0])  # like the .ps1: a failed stage doesn't stop the run
+    run = FakeRunner(codes=[0, 0, 1, 0, 0])  # A failed stage does not stop later stages by default.
     assert daily.run(parse("daily"), runner=run) == 1
     assert len(run.calls) == 5
     summary = next(log_dir.glob("*.log")).read_text(encoding="utf-8")
-    assert "FAIL e621 favorites sync" in summary and "OK   media sorter workflow (2nd)" in summary
+    assert "FAIL e621 favorites sync" in summary and "OK   Library workflow (2nd)" in summary
 
 
 def test_stop_on_error():
@@ -75,7 +75,7 @@ def test_dry_run_runs_nothing(capsys):
     assert daily.run(parse("--env", "test", "daily", "--dry-run"), runner=run) == 0
     assert run.calls == []
     out = capsys.readouterr().out
-    assert "1. reverse search reverse image search: fff --env test fluffle search" in out
+    assert "1. Reverse-image source search: fff --env test fluffle search" in out
     assert "5. External FA sources sync: fff --env test fa sync-external" in out
 
 

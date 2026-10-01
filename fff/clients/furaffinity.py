@@ -1,9 +1,4 @@
-"""FurAffinity access: Firefox cookie loading, retrying GETs, page scraping, favoriting, downloads.
-
-Copied from reverse-image search/scripts/process_furaffinity_matches.py (the newer copy,
-with retry/backoff; design note section5). Only change: the "no download link" debug HTML goes to
-data/cache/fa_debug/ instead of the current working directory.
-"""
+"""FurAffinity access: Firefox cookies, retrying GETs, page scraping, favorites, and downloads."""
 import http.cookiejar
 import os
 import re

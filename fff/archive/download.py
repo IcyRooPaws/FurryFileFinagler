@@ -1,4 +1,3 @@
-# fff: implemented in e621 archive/modules/download.py.
 # fff: MediaHasher is the archive hash profile (fff.hashing.archive_hasher).
 # fff: characters Windows doesn't allow in file names are replaced with _ (windows_safe_filename).
 import os

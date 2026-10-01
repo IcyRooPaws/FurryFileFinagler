@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# fff: implemented in media sorter/migrate_artist_columns.py.
 # fff: one-off migration kept for reference; main(argv=None) (no options).
 """
 Migration script to add artist check columns to all tables.

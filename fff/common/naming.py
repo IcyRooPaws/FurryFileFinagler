@@ -1,13 +1,9 @@
-"""Filename conventions shared by all modules.
-
-Every function here is copied verbatim from its previous component; the source is
-noted above each group. tests/test_windows_filenames.py checks them against the existing code.
-"""
+"""Filename and tag conventions shared by all modules."""
 import os
 import re
 from typing import Any, Dict
 
-# --- media sorter/_handlers/utils.py: file type and rating detection ---------
+# --- file type and rating detection ---------------------------------------------------
 
 def is_configured_file(file):
     """Return True if the file extension is allowed."""
@@ -193,7 +189,7 @@ FLAG_TOKENS = [
 def strip_flag_tokens(name: str) -> str:
     """Remove known flag tokens (e.g. 'conditional_dnp', 'sound_warning') from a name.
 
-    Mirrors the cleanup logic in media sorter so filenames stay consistent.
+    Mirrors the cleanup logic in FFF so filenames stay consistent.
     """
     if not name:
         return name
@@ -234,7 +230,7 @@ def _filename_has_exact_post_id(fname, post_id):
     return match.group(1) == str(post_id)
 
 
-# --- reverse-image search ---------------------------------------------------
+# --- reverse-image source search ---------------------------------------------------
 
 def sanitize_filename_component(value: str) -> str:
     """Sanitize a string for safe filename usage."""

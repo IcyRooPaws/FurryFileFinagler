@@ -7,7 +7,7 @@ import argparse
 from fff.cli import archive_cmds
 from fff.cli.app import build_parser
 
-CORE = ("config", "db", "doctor")
+CORE = ("config", "db", "doctor", "setup")
 
 
 def _subparsers(parser):
@@ -38,23 +38,21 @@ def render() -> str:
     lines = ["# fff command reference", "",
              "Generated from the parsers by `python tools/gen_commands_doc.py`; do not edit by hand.",
              "Global options: `fff [--config PATH] [--env prod|test] <command>`.", "",
-             "## Project commands", "", "| Command | What it does |", "|---|---|"]
+             "## General commands", "", "| Command | What it does |", "|---|---|"]
     for path, text in _walk(parser, ()):
         if path[0] in CORE and path not in ported:
             lines.append(f"| `fff {' '.join(path)}` | {_md(text)} |")
 
-    lines += ["", "## Ported commands", "",
-              "Each runs the command implementation listed; options are the existing code's unless noted.", "",
-              "| Command | What it does | Original |", "|---|---|---|"]
+    lines += ["", "## Archive and Media Commands", "",
+              "| Command | What it does |", "|---|---|"]
     for c in archive_cmds.COMMANDS:
-        existing code = ", ".join(f"`{o}`" for o in (c.original, *c.aliases) if o)
-        lines.append(f"| `fff {' '.join(c.path)}` | {_md(c.help)} | {existing code} |")
+        lines.append(f"| `fff {' '.join(c.path)}` | {_md(c.help)} |")
 
     from fff.sorter.main import build_parser as sorter_parser
     from fff.sorter.entry import EXTRA
 
-    lines += ["", "## `fff sort` sub-commands", "",
-              "`fff sort <command>` is `python main.py <command>` from media sorter (same flags).", "",
+    lines += ["", "## `fff sort` Sub-commands", "",
+              "Sorting, archiving, indexing, and library maintenance commands.", "",
               "| Command | What it does |", "|---|---|"]
     for name, _sub, text in sorted(_subparsers(sorter_parser()), key=lambda t: t[0]):
         lines.append(f"| `fff sort {name}` | {_md(text)} |")

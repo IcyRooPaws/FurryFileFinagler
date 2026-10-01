@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# fff: implemented in media sorter/migrate_paths_to_forward_slashes.py.
 # fff: one-off migration kept for reference; main(argv=None).
 r"""
 Migrate Database Paths to Forward Slashes

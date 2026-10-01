@@ -1,15 +1,15 @@
-"""One media hasher, two profiles (design note section5).
+"""One media hasher, two profiles.
 
 The sorter and the archive both write perceptual hashes into existing DB columns, and
-their existing code produced different values for the same file:
+the profiles produce different values for the same file:
 
-* ``sorter_hasher()``: media sorter's behaviour. Settings come from the sorter config's
+* ``sorter_hasher()``: FFF's behaviour. Settings come from the sorter config's
   ``media_hasher`` section, compute_all_hashes defaults on (``avg|dhash|phash|whash``),
   and images are normalized before hashing.
 * ``archive_hasher()``: e621 archive's behaviour. Built-in defaults only (its config
   block was never read), mode-based output (``dhash|phash`` for hybrid), no normalization.
 
-tests/test_hashing.py checks both against the original modules.
+Unit tests cover both profiles.
 """
 from fff.hashing.media_hasher import (  # noqa: F401  (re-exported)
     ContentHasher,

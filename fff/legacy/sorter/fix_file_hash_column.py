@@ -1,4 +1,3 @@
-# fff: implemented in media sorter/fix_file_hash_column.py.
 # fff: one-off migration kept for reference; main(argv=None) (no options).
 """
 Quick migration script to fix file_hash column size in file_operations table.

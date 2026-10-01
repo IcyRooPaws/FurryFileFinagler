@@ -1,1 +1,1 @@
-"""media sorter, ported (project notes phase 4)."""
+"""Media sorting, archiving, and library maintenance."""

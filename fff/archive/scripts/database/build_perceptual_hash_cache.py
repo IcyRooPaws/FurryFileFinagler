@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# fff: implemented in e621 archive/scripts/database/build_perceptual_hash_cache.py.
 # fff: MediaHasher is the archive hash profile (fff.hashing.archive_hasher).
 """
 Proactively build perceptual hash cache for all posts that have local files.

@@ -1,4 +1,3 @@
-# fff: implemented in media sorter/tests/test_tag_sorted_cleanup.py.
 from types import SimpleNamespace
 
 from fff.sorter.features.tag_sorted_cleanup import cleanup_tag_sorted_directories

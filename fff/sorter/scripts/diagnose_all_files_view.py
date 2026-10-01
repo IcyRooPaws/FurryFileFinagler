@@ -1,4 +1,3 @@
-# fff: implemented in media sorter/test_all_files_view.py.
 # fff: renamed from test_all_files_view.py (a diagnostic, not a pytest test).
 # fff: the hard-coded MySQL host/user/password are removed: connection settings and schema come
 # fff: from Config() (sorter view, prod or test_); the artist/fav folder filters use the

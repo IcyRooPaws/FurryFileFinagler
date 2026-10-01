@@ -1,4 +1,3 @@
-# fff: implemented in e621 archive/scripts/database/verify_and_fix_file_names.py.
 # fff: logs go to data/logs/archive instead of ./logs in the CWD.
 """
 Verify and Fix file_name / on-disk filename Consistency

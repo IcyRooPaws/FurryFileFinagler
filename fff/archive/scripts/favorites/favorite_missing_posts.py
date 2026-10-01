@@ -1,4 +1,3 @@
-# fff: implemented in e621 archive/scripts/favorites/favorite_missing_posts.py.
 # fff: the cross-database query uses the active environment's schema names;
 # fff: the e621_main.py sync runs in-process (fff.archive.sync.main) instead of a subprocess.
 """

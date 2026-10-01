@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# fff: implemented in e621 archive/scripts/database/add_deletion_reason_column.py.
 # fff: the __main__ block (confirmation prompt + migration) moved into main(argv).
 # fff: main(argv) parses an option-less argparse parser so --help works; the original took no arguments.
 """

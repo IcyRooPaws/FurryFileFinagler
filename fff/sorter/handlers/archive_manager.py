@@ -1,6 +1,5 @@
-# fff: implemented in media sorter/_handlers/archive_manager.py.
 """
-Archive management for old files in the media sorter system.
+Archive management for old files in the FFF system.
 
 This module provides functionality to archive old files based on age criteria,
 integrated with the main database and configuration system.

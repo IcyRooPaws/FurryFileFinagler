@@ -1,5 +1,4 @@
-# fff: implemented in e621 archive/modules/file_verification.py.
-# fff: process_orphan_file still imports a download_file that never existed (design note section8 item 7);
+# fff: process_orphan_file has a conditional download_file import;
 # fff: it only runs when e621.verify_sources is true.
 import os
 import logging

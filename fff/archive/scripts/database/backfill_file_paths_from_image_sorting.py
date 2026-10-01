@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# fff: implemented in e621 archive/scripts/database/backfill_file_paths_from_image_sorting.py.
 """
 Standalone script to backfill missing file_path values from image_sorting_hashes database.
 

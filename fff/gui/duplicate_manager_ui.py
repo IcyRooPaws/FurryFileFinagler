@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# fff: implemented in media sorter/scripts/duplicate_manager_ui.py.
 # fff: imports come from fff.sorter.handlers / fff.sorter.config; hashing from fff.hashing.
 # fff: SQL schema qualifiers use the active environment's sorter schema (_sorter_db()); the
 # fff: unqualified all_files view is left alone (the connection already targets that schema).
@@ -30,8 +29,7 @@ from PIL import Image, ImageTk, ImageSequence
 import tempfile
 import hashlib
 
-# fff: the sys.path hack is gone; the _handlers imports come from fff.sorter.handlers. The
-# ImportError fallback to fff.sorter.core.database was dropped (that module was dropped, decision 4).
+# Import project-owned sorter handlers directly.
 from fff.sorter.handlers import DatabaseManager
 from fff.sorter.handlers.utils import Config
 from fff.sorter import paths as sorter_paths
@@ -879,7 +877,7 @@ class DuplicateManagerGUI:
 
     def __init__(self, root, hash_column='perceptual_hash_phash'):
         self.root = root
-        self.root.title(f"media sorter - Duplicate Manager ({hash_column})")
+        self.root.title(f"FFF - Duplicate Manager ({hash_column})")
         self.root.geometry("1400x900")
         self.root.minsize(1200, 700)
 
@@ -931,7 +929,7 @@ class DuplicateManagerGUI:
             self.auto_handle_all_button.pack(fill='x', pady=(2, 2))
 
     def load_config(self):
-        """Load media sorter configuration."""
+        """Load FFF configuration."""
         try:
             self.config = Config()
             self.db_manager = DatabaseManager(self.config)
@@ -1668,7 +1666,7 @@ class DuplicateManagerGUI:
         self.hash_column_display = self.hash_type_mapping[new_hash_column]
 
         # Update window title
-        self.root.title(f"media sorter - Duplicate Manager ({self.hash_column_display})")
+        self.root.title(f"FFF - Duplicate Manager ({self.hash_column_display})")
 
         # Clear existing results
         self.duplicate_groups = []

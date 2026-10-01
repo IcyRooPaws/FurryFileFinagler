@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# fff: implemented in e621 archive/scripts/file_management/check_deleted_posts_files_enhanced.py.
 # fff: report goes to data/archive/reports/, log to logs/archive/.
 # fff: max_posts = 10 is still hard-coded in main() as in the original (only 10 posts are checked).
 """

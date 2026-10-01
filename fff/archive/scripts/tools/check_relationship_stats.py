@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# fff: implemented in e621 archive/scripts/tools/check_relationship_stats.py.
 # fff: main(argv=None) accepts the CLI argv but takes no options.
 """
 Quick script to check relationship statistics in the database.

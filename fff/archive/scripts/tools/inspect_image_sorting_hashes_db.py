@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# fff: implemented in e621 archive/scripts/tools/inspect_image_sorting_hashes_db.py.
 # fff: connects to the active environment's sorter schema; main() takes no options (argv is ignored).
 # fff: logging.basicConfig still runs at import time, as in the original.
 """

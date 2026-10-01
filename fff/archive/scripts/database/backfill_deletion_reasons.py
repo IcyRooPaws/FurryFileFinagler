@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# fff: implemented in e621 archive/scripts/database/backfill_deletion_reasons.py.
 """
 Script to backfill deletion reasons and takedown details for deleted posts.
 This script fetches deletion information from e621 web pages and updates the database

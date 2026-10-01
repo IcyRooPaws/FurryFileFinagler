@@ -1,10 +1,6 @@
-# fff: implemented in reverse-image search/fluffle.py.
-# fff: the reverse search/FuzzySearch clients come from fff.clients (Phase 1, identical code).
-# fff: moves/copies are logged to file_operations via fff.fluffle.ops (decision 5).
-# fff: fixed: step 4 overwrote responses_dir with e621.responses_directory, so reverse search's JSON
-# fff: went to the e621 folder (design note section6). It now goes to search.responses_directory.
+# Reverse-search clients are shared from fff.clients; file operations are logged centrally.
 """
-reverse-image search Tool
+reverse-image source search Tool
 Searches for posts matching local image files using reverse search reverse image search API.
 Stores results in MySQL database. Run as 'fff fluffle search'.
 """
@@ -852,7 +848,7 @@ def cleanup_old_responses(responses_dir: str, max_age_days: int = 5) -> None:
 
 def main(argv=None):  # fff: argv accepted for the CLI; no options
     """Main function to run the image search."""
-    print("reverse-image search Tool")
+    print("reverse-image source search Tool")
     print("=" * 80)
 
     # Load configuration
@@ -987,7 +983,7 @@ def main(argv=None):  # fff: argv accepted for the CLI; no options
         user_agent = e621_config.get('user_agent', 'E621PostProcessor/1.0')
         login = e621_config.get('login')
         api_key = e621_config.get('api_key')
-        e621_responses_dir = e621_config.get('responses_directory')  # fff: was responses_dir (design note section6 bug)
+        e621_responses_dir = e621_config.get('responses_directory')
 
         if login and api_key:
             # Decide whether to fetch all favorites or check individually

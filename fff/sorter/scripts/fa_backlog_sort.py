@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# fff: implemented in media sorter/fa_backlog_sort.py.
 # fff: imports from fff.sorter.handlers; main(argv=None). --config's default still means the
 # fff: sorter view of the unified config.
 """

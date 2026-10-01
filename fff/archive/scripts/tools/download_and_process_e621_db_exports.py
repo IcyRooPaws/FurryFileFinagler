@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# fff: implemented in e621 archive/scripts/tools/download_and_process_e621_db_exports.py.
 # fff: logs go to logs/archive/; exports go to db_export.directory (data/db_exports) instead of ./db_exports.
 # fff: fixed: download_file passed timeout= to api_get, which doesn't accept it, so every download failed.
 """

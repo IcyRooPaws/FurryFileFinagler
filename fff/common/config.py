@@ -3,9 +3,7 @@
 ``config/config.yaml`` holds all settings with no secrets; ``config/secrets.yaml``
 (gitignored) holds the DB password and API keys. Both are deep-merged at load.
 
-Ported modules don't read the unified layout directly. They call
-``legacy_view(<module>)``, which rebuilds the exact dict shape their original
-project's config.yaml had, so their key lookups work unchanged (design note section4).
+Modules use ``legacy_view(<module>)`` to access their module-specific config shape.
 """
 from __future__ import annotations
 
@@ -60,8 +58,7 @@ def load(config_path: str | Path | None = None, secrets_path: str | Path | None 
     secrets_path = Path(secrets_path) if secrets_path else config_path.with_name("secrets.yaml")
     if not config_path.exists():
         raise ConfigError(
-            f"{config_path} not found. Run 'fff setup' to build it from the original "
-            f"projects, or copy config/config.example.yaml."
+            f"{config_path} not found. Run 'fff setup' or copy config/config.example.yaml."
         )
     cfg = _read_yaml(config_path)
     if secrets_path.exists():
@@ -208,7 +205,7 @@ def redirect_database(cfg: dict, name: str) -> str:
 
 
 def e621_credentials(cfg: dict) -> dict:
-    """The single shared e621 account (design note section11, decision 7)."""
+    """Return the shared e621 account credentials."""
     e = cfg.get("e621", {})
     return {"login": e.get("login"), "api_key": e.get("api_key"), "user_agent": e.get("user_agent")}
 
@@ -224,7 +221,7 @@ def _resolve_keys(section: dict, keys: list[str]) -> None:
 # ---------------------------------------------------------------------------
 
 def legacy_view(module: str, cfg: dict | None = None) -> dict:
-    """Rebuild the previous component's config dict for ``module``."""
+    """Build the module-specific config dict expected by its implementation."""
     cfg = cfg if cfg is not None else load()
     builders = {"fluffle": _fluffle_view, "archive": _archive_view, "sorter": _sorter_view}
     if module not in builders:
@@ -249,8 +246,7 @@ def _fluffle_view(cfg: dict) -> dict:
     if fz_key is not None:
         view["fuzzysearch"]["api_key"] = fz_key
 
-    # Response caches live under data/cache now (design note section6). The e621 post cache is
-    # shared with the archive; reverse search's own JSON goes to its own folder.
+    # Keep e621 responses separate from reverse-search responses.
     view["search"].setdefault("responses_directory", str(paths.FLUFFLE_RESPONSES))
     view["e621"].setdefault("responses_directory", str(paths.E621_POST_CACHE))
     _resolve_keys(view["search"], ["responses_directory"])
@@ -288,7 +284,7 @@ def _archive_view(cfg: dict) -> dict:
     return normalize_config_paths(view)
 
 
-# Copied from e621 archive/modules/config.py; its load_config applied this to every config.
+# Apply this normalizer consistently to all module configuration paths.
 def normalize_config_paths(config):
     """
     Recursively normalize all file paths in configuration dictionary.

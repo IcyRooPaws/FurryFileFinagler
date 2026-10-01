@@ -1,4 +1,4 @@
-# Union of reverse-image search, e621 archive and media sorter requirements.
+# Runtime dependencies for FurryFileFinagler.
 # py621 dropped: nothing imported it.
 PyYAML>=6.0
 requests>=2.31

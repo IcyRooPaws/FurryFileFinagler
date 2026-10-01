@@ -1,4 +1,3 @@
-# fff: implemented in media sorter/remove_file_hash_column.py.
 # fff: one-off migration kept for reference; main(argv=None) (no options).
 """
 Migration script to remove file_hash column from file_operations table.

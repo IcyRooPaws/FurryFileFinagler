@@ -1,4 +1,4 @@
-# FurryFileFinagler daily run: replaces fff_daily.ps1.
+# FurryFileFinagler daily run: replaces media library manager_E621Manager_reverse search.ps1.
 #
 # Same order as the old script (see 'fff daily --help'):
 #   fluffle search -> sort workflow -> e621 sync -> sort workflow -> fa sync-external

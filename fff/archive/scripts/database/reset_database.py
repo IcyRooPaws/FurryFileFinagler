@@ -1,4 +1,3 @@
-# fff: implemented in e621 archive/scripts/database/reset_database.py.
 # fff: the target database is config mysql.database from the archive view, i.e. the active
 # fff: environment's archive schema (prod or test_); prompts and --force/--dry-run unchanged.
 """

@@ -1,4 +1,3 @@
-# fff: implemented in e621 archive/e621_main.py.
 # fff: run as 'fff e621 sync'. The FA sync runs in-process instead of as a subprocess.
 import sys
 import os

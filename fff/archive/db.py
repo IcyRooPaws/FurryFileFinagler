@@ -1,5 +1,4 @@
-# fff: implemented in e621 archive/modules/db.py.
-# fff: kept as one module (the planned split is deferred; see project notes).
+# fff: kept as one module to preserve the existing archive database interface.
 # fff: post file names are made Windows-safe (invalid characters -> _) wherever they are built.
 import logging
 import os
@@ -82,7 +81,7 @@ def _get_file_ext(post):
 def strip_flag_tokens(name: str) -> str:
     """Remove known flag tokens (e.g. 'conditional_dnp', 'sound_warning') from a name.
 
-    Mirrors the cleanup logic in media sorter so filenames stay consistent.
+    Mirrors the cleanup logic in FFF so filenames stay consistent.
     """
     if not name:
         return name

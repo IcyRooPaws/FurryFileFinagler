@@ -1,4 +1,3 @@
-# fff: implemented in media sorter/scripts/tag_sort_config_ui.py.
 # fff: forwards to fff.gui.tag_sort_config_ui_v2; the __main__ block became parse_args + main.
 # -*- coding: utf-8 -*-
 """Tag Sort Configuration UI -- shim (Phase 6)

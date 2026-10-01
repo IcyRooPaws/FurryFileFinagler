@@ -1,5 +1,5 @@
 # FurryFileFinagler example configuration. Copy to config.yaml and edit,
-# or run 'fff setup' to build config.yaml from the current features.
+# or run 'fff setup' for guided configuration.
 # Regenerate this file from your config with 'fff config make-example --force'.
 # Secrets go in secrets.yaml (see secrets.example.yaml). Relative paths are
 # relative to the project root.

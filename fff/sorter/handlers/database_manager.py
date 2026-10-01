@@ -1,5 +1,4 @@
-# fff: implemented in media sorter/_handlers/database_manager.py.
-# fff: fixed: delete/rename logging no longer passes file_hash= to log_file_operation (design note section8 item 12).
+# Delete and rename logging use the supported log_file_operation arguments.
 """
 Database operations for file hash caching using MySQL.
 """
@@ -48,7 +47,7 @@ class DatabaseManager:
         """Initialize the connection pool for better thread management."""
         try:
             pool_config = {
-                'pool_name': 'fff.sorter_pool',
+                'pool_name': 'fff_sorter_pool',
                 'pool_size': 25,  # Increased pool size for multiple threads
                 'pool_reset_session': True,
                 'host': self.host,
@@ -1762,7 +1761,7 @@ class DatabaseManager:
             file_name=file_name,
             source_path=source_path,
             source_directory=source_directory,
-            # fff: file_hash dropped here (column removed; log_file_operation rejected it, design note section8 item 12)
+            # file_hash is not part of the file_operations schema.
             file_size=file_size,
             reason=reason
         )
@@ -1778,7 +1777,7 @@ class DatabaseManager:
             destination_path=os.path.join(directory_path, new_name),
             source_directory=directory_path,
             destination_directory=directory_path,
-            # fff: file_hash dropped here (column removed; log_file_operation rejected it, design note section8 item 12)
+            # file_hash is not part of the file_operations schema.
             file_size=file_size,
             reason=reason
         )

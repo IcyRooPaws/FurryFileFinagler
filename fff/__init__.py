@@ -1,3 +1,3 @@
-"""FurryFileFinagler: reverse-image search + e621 archive + media sorter in one package."""
+"""FurryFileFinagler media archiving, source search, and library management toolkit."""
 
 __version__ = "0.1.0"

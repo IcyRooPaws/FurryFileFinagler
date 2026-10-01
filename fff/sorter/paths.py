@@ -1,4 +1,4 @@
-"""Where media sorter's files live in fff, and test-environment aware loading of its YAML files.
+"""Where FFF's files live in fff, and test-environment aware loading of its YAML files.
 
 The original read configs/config.yaml, configs/tag_sorting.yaml and configs/artists.yaml
 relative to the current working directory, and wrote Logs/, post_id_list.txt and
@@ -11,7 +11,7 @@ import yaml
 from fff.common import config as fff_config
 from fff.common import paths
 
-# config/ (artists.yaml was renamed sort_artists.yaml, decision 3)
+# Artist sorting settings are stored in config/sort_artists.yaml.
 TAG_SORTING = paths.CONFIG_DIR / "tag_sorting.yaml"
 SORT_ARTISTS = paths.CONFIG_DIR / "sort_artists.yaml"
 

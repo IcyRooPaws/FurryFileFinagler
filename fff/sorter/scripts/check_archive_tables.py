@@ -1,4 +1,3 @@
-# fff: implemented in media sorter/check_archive_tables.py.
 # fff: module-level code moved into main(argv=None) so importing it does nothing.
 """Check archive tables in database."""
 from fff.sorter.handlers.database_manager import DatabaseManager

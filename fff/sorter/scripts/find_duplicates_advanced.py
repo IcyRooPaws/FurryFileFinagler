@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
-# fff: implemented in media sorter/scripts/find_duplicates_advanced.py.
-# fff: ported AS IS, still broken (project notes §13): DatabaseManager is a stub that raises a
+# fff: still incompatible with the active database schema: DatabaseManager is a stub that raises a
 # fff: 'known broken' RuntimeError when the finder starts; main(argv=None).
 """
 Advanced Duplicate Finder - Uses multi-stage deduplication pipeline
 
 This script integrates the deduplicator's efficient multi-stage pipeline
-with media sorter's database and file handling infrastructure.
+with FFF's database and file handling infrastructure.
 
 Usage:
     python find_duplicates_advanced.py --mode normal --tables all
@@ -27,28 +26,23 @@ from fff.sorter.core.advanced_deduplicator import (
 from fff.sorter.config import Config
 
 
-# fff: fff.sorter/core/database.py (the unified-schema DatabaseManager) was dropped (project notes §11
-# decision 4). This stub keeps the module importable and --help working. The finder is known
-# broken and ported as is: it calls DatabaseManager.get_all_tables() and reads stale
-# file_hashes_* tables / file_hash columns (project notes §13). The live fff.sorter.handlers
-# DatabaseManager is not substituted: it takes a Config, not this dict, and would connect and
-# run its schema checks against the live database before failing.
+# Keep this module importable and --help usable, but prevent execution because its database
+# adapter and file_hashes_* tables are not supported by the current schema.
 class DatabaseManager:
     def __init__(self, *args, **kwargs):
         raise RuntimeError(
-            "find_duplicates_advanced is known broken: it needs the dropped unified-schema "
-            "DatabaseManager (fff.sorter/core/database.py) and file_hashes_* tables. "
-            "See project notes §13."
+            "find_duplicates_advanced requires an unsupported database adapter and file_hashes_* tables. "
+            "This command requires an obsolete database schema."
         )
 
 logger = logging.getLogger(__name__)
 
 
 class AdvancedDuplicateFinder:
-    """Integrates advanced deduplicator with media sorter database"""
+    """Integrates advanced deduplicator with FFF database"""
 
     def __init__(self, config_path: str = 'configs/config.yaml'):
-        """Initialize with media sorter configuration"""
+        """Initialize with FFF configuration"""
         self.config = Config(config_path)
         self.db = DatabaseManager(self.config.get_mysql_config())
         self.deduplicator = AdvancedDeduplicator()
@@ -69,7 +63,7 @@ class AdvancedDuplicateFinder:
                                  max_size: Optional[int] = None,
                                  extensions: Optional[Set[str]] = None) -> List[DuplicateFile]:
         """
-        Load files from media sorter database tables.
+        Load files from FFF database tables.
 
         Args:
             tables: List of table names to query (None = all tables)

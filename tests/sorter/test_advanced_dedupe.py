@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# fff: implemented in media sorter/tests/test_advanced_dedupe.py.
 """
 Quick test of advanced deduplication integration
 
@@ -253,7 +252,7 @@ def main():
         print("✅ ALL TESTS PASSED!")
         print("="*70)
         print("\nThe advanced deduplicator is working correctly.")
-        print("You can now use it with your media sorter database:\n")
+        print("You can now use it with your media library manager database:\n")
         print("  python find_duplicates_advanced.py --mode normal")
         print("  python find_duplicates_advanced.py --mode fast --tables Furry_Explicit")
         print("\nSee ADVANCED_DEDUPLICATION.md for full documentation.")

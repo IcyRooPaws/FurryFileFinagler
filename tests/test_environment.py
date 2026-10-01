@@ -114,8 +114,7 @@ ALLOWED = {"common/config.py", "common/config_examples.py"}
 
 
 def test_no_hard_coded_database_names_in_package():
-    """Ported code must take schema names from fff.common.config.database_names(), or the
-    test toggle would silently miss it (the existing code hard-code them ~200 times)."""
+    """Modules must use configured schema names so the test toggle applies consistently."""
     offenders = []
     root = paths.ROOT / "fff"
     for path in root.rglob("*.py"):
@@ -133,7 +132,7 @@ def test_no_hard_coded_database_names_in_package():
 @pytest.mark.parametrize("prod,test", [
     ("P:/IPL/Pictures/- SFW Pics", "E:/Testing/P/IPL/Pictures/- SFW Pics"),
     ("P:\IPL\- Need to be Sorted", "E:\Testing\P\IPL\- Need to be Sorted"),
-    ("E:/Image Sorter Working Folder/AI", "E:/Testing/E/Image Sorter Working Folder/AI"),
+    ("E:/Work/AI", "E:/Testing/E/Work/AI"),
     ("c:/Users/IPL/Downloads", "E:/Testing/C/Users/IPL/Downloads"),
     ("P:/", "E:/Testing/P"),
     ("E:/Testing/P/IPL/already", "E:/Testing/P/IPL/already"),      # already under the test root

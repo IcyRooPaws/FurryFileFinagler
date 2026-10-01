@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
-# fff: implemented in media sorter/run.py.
 # fff: 'fff sort workflow': main(argv=None) -> int with the same flags and steps.
-# fff: fixed: setup_logging gets console=True instead of the config object (design note section8 item 4).
+# Configure console logging explicitly.
 # fff: the SIGINT/SIGTERM handlers and stdout reconfigure run in main(), not at import.
 """
-media sorter - Unified-CLI Orchestrator
+FFF - Unified-CLI Orchestrator
 
 Runs the full workflow in the same order as the legacy run.py but delegates
-each step to the command classes defined in fff.sorter/cli/commands.py so
+    each step to the command classes defined in fff.sorter.cli.commands so
 that every step uses exactly the same logic as `python main.py <command>`.
 
 Execution order:
@@ -69,7 +68,7 @@ def _install_signal_handlers():
 # ---------------------------------------------------------------------------
 
 def _header():
-    print("[TARGET] media sorter v2.0 — Full Workflow (run.py)")
+    print("[TARGET] FFF v2.0 — Full Workflow (run.py)")
     print("=" * 60)
     print(f"Started: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print("=" * 60)
@@ -360,9 +359,9 @@ def step_tag_sorted_cleanup(config, logger, dry_run: bool) -> int:
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog='fff sort workflow',  # fff: was run.py
-        description='media sorter full workflow orchestrator (uses unified CLI commands)')
+        description='FFF full workflow orchestrator (uses unified CLI commands)')
     p.add_argument('--config', default=DEFAULT_CONFIG_FILE,  # fff: default = unified config's sorter view
-                   help='Path to an media sorter-format config.yaml (default: the sorter view of config/config.yaml)')
+                   help='Path to an FFF-format config.yaml (default: the sorter view of config/config.yaml)')
     p.add_argument('--dry-run', action='store_true',
                    help='Pass --dry-run to every step (no files are moved)')
     p.add_argument('--skip-hash', action='store_true',
@@ -404,7 +403,7 @@ def main(argv=None) -> int:
 
     logger, log_filename = setup_logging(
         config.log_directory,
-        console=True,  # fff: was the config object passed as `console` (design note section8 item 4)
+        console=True,
         level=getattr(logging, args.log_level),
     )
     logger.info("run2.py started")

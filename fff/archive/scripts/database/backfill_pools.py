@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# fff: implemented in e621 archive/scripts/database/backfill_pools.py.
 # fff: cached API pages are read from data/cache/e621_pages (was ./temp_responses).
 """
 Script to backfill pool relationships for posts from cached API responses.

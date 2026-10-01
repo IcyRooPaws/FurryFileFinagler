@@ -1,4 +1,3 @@
-# fff: implemented in media sorter/test_file_operations_logging.py.
 # fff: renamed from test_file_operations_logging.py (a diagnostic, not a pytest test).
 # fff: still writes test rows to file_operations and deletes them afterwards, in the active
 # fff: environment's sorter schema (Config() is the environment-aware sorter view); logs go to logs/sorter.
@@ -66,7 +65,7 @@ def test_file_operations_logging():
     print("Creating test files...")
     print("-" * 70)
     
-    temp_dir = tempfile.mkdtemp(prefix="fff.sorter_test_")
+    temp_dir = tempfile.mkdtemp(prefix="fff_sorter_test_")
     test_file1 = os.path.join(temp_dir, "test_file_1.txt")
     test_file2 = os.path.join(temp_dir, "test_file_2.txt")
     test_file_moved = os.path.join(temp_dir, "test_file_moved.txt")

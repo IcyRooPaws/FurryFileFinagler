@@ -1,4 +1,4 @@
-"""``fff hash ...``: the v1 media_hasher CLI (media sorter/_handlers/media_hasher/cli.py).
+"""``fff hash ...``: the v1 media_hasher CLI (FFF/_handlers/media_hasher/cli.py).
 
 Its main() parses sys.argv itself, so argv is passed through sys.argv here; the CLI
 argparse (``fff hash --help``) is unchanged.

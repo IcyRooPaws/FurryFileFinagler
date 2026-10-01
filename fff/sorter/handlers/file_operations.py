@@ -1,4 +1,3 @@
-# fff: implemented in media sorter/_handlers/file_operations.py.
 """
 File operations module for moving, hashing, and validating files.
 """

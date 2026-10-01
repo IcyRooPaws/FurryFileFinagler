@@ -1,4 +1,3 @@
-# fff: implemented in media sorter/fff.sorter/features/tag_sorted_cleanup.py.
 """Remove empty folders from configured tag-sorted directory trees."""
 
 import logging

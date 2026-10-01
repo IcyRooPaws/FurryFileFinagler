@@ -1,8 +1,7 @@
-# fff: implemented in media sorter/fff.sorter/core/advanced_deduplicator.py.
 """
-Advanced Deduplicator - Multi-stage duplicate detection for media sorter
+Advanced Deduplicator - Multi-stage duplicate detection for FFF
 
-Integrates the deduplicator's efficient multi-stage pipeline with media sorter's
+Integrates the deduplicator's efficient multi-stage pipeline with FFF's
 database management and media-specific hashing capabilities.
 
 Features:
@@ -56,7 +55,7 @@ class DuplicateFile:
     """File representation for duplicate detection"""
     path: str
     size: int
-    table_name: Optional[str] = None  # media sorter database table
+    table_name: Optional[str] = None  # FFF database table
     existing_hash: Optional[str] = None  # From database
     mtime: Optional[int] = None
     is_favorite: bool = False  # From favorite directory
@@ -142,7 +141,7 @@ class AdvancedDeduplicator:
 
         Args:
             chunk_size: Size of chunks for partial hashing
-            use_database: Whether to integrate with media sorter database
+            use_database: Whether to integrate with FFF database
         """
         self.chunk_size = chunk_size
         self.use_database = use_database

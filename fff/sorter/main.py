@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
-# fff: implemented in media sorter/main.py.
 # fff: 'fff sort' entry point: build_parser() (was create_parser) and main(argv=None) -> int.
-# fff: --config still names an media sorter-format file; its default means the unified config's sorter view.
-# fff: advanced-duplicates prints a known-broken warning (decision 2).
+# fff: --config still names an FFF-format file; its default means the unified config's sorter view.
+# advanced-duplicates reports its unsupported database schema when invoked.
 """
-media sorter - Unified CLI Entry Point
+FFF - Unified CLI Entry Point
 
-Main command-line interface for the media sorter file organization system.
+Main command-line interface for the FFF file organization system.
 Provides access to all core functionality through subcommands.
 
 Usage:
@@ -83,8 +82,8 @@ logger = logging.getLogger('fff.sorter.main')
 def build_parser():  # fff: was create_parser
     """Create and configure the argument parser."""
     parser = argparse.ArgumentParser(
-        prog='fff sort',  # fff: was fff.sorter
-        description='media sorter - Intelligent media file organization system',
+        prog='fff sort',
+        description='Intelligent media file organization system',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -101,7 +100,7 @@ For more information, see the documentation in the docs/ directory.
     parser.add_argument(
         '--config',
         default=DEFAULT_CONFIG_FILE,  # fff: left at default, Config() uses the unified config's sorter view
-        help='Path to an media sorter-format configuration file (default: the sorter view of config/config.yaml)'
+        help='Path to an FFF-format configuration file (default: the sorter view of config/config.yaml)'
     )
 
     parser.add_argument(
@@ -267,7 +266,7 @@ def main(argv=None) -> int:
             level=getattr(logging, args.log_level)
         )
 
-        logger.info(f"Starting media sorter - Command: {args.command}")
+        logger.info(f"Starting FFF - Command: {args.command}")
         logger.debug(f"Configuration loaded from: {args.config}")
 
         # Map commands to their handler classes
@@ -294,7 +293,7 @@ def main(argv=None) -> int:
                 print("Error: Advanced duplicates feature requires additional dependencies.")
                 print("Install with: pip install xxhash")
                 return 1
-            print("WARNING: advanced-duplicates is known to be broken (project notes §13)")  # fff: decision 2
+            print("WARNING: advanced-duplicates requires an obsolete database schema")
             from fff.sorter.cli.advanced_duplicates import run_advanced_duplicates
             return run_advanced_duplicates(args, config)
 

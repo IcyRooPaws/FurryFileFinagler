@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-# fff: implemented in reverse-image search/scripts/rename_fa_author_files.py.
-# fff: run as 'fff fa rename-authors'; renames are logged to file_operations (decision 5).
+# Renames are logged to file_operations.
 """
 FurAffinity Author Name to ID Renamer
 This script queries the database for FurAffinity author mappings and renames files
@@ -110,7 +109,7 @@ def rename_file_preserve_mtime(old_path: Path, new_path: Path) -> bool:
         atime = stat_info.st_atime
 
         # Rename the file
-        ops.rename(old_path, new_path, "fa_author_rename")  # fff: logged (decision 5)
+        ops.rename(old_path, new_path, "fa_author_rename")
 
         # Restore the modification time
         os.utime(new_path, (atime, mtime))

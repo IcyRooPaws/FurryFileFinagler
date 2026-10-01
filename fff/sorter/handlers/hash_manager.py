@@ -1,4 +1,3 @@
-# fff: implemented in media sorter/_handlers/hash_manager.py.
 """
 Hash management for destination directories using multi-threaded operations.
 

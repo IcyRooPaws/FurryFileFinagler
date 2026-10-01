@@ -1,4 +1,3 @@
-# fff: implemented in media sorter/fix_no_source_filenames.py.
 # fff: connects to the active environment's archive schema (db_names()['archive']) with the
 # fff: sorter config's server settings; logs go to logs/sorter, configured when main() runs.
 # fff: main(argv=None) reads the same --dry-run / -n flags from argv (default sys.argv[1:]).

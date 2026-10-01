@@ -1,4 +1,3 @@
-# fff: implemented in media sorter/_handlers/file_sorter.py.
 """
 Main file sorting logic that orchestrates the file processing workflow.
 """

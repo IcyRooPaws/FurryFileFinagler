@@ -1,10 +1,7 @@
 # FurryFileFinagler (`fff`)
 
-One toolkit combining **e621 archive** (e621 favorites archive), **reverse-image search**
-(reverse image search and source downloads) and **media sorter** (library sorting, hashing,
-archiving, duplicates). Every command implementation has an `fff` command. Each port has been
-checked against its original on identical input: database contents, files and HTTP calls
-all match.
+`fff` is a toolkit for e621 favorites archiving, reverse-image source search,
+and media-library sorting, hashing, archiving, and duplicate detection.
 
 ## Quick start
 
@@ -12,8 +9,8 @@ all match.
 python -m venv .venv
 .venv\Scripts\python -m pip install -r requirements.txt
 .venv\Scripts\python -m pip install -e . --no-deps
-fff setup      # builds config/config.yaml + secrets.yaml from the three current features
-fff doctor              # checks packages, folders and all three databases
+fff setup               # guided configuration and first-run checks
+fff doctor              # check packages, folders and all three databases
 
 fff daily               # the daily run: fluffle search, sort, e621 sync, sort, FA sync
 fff daily --dry-run     # what it would run
@@ -27,10 +24,7 @@ against the `test_*` databases and the `E:\Testing` copy of the library.
 | Doc | Contents |
 |---|---|
 | [docs/USAGE.md](docs/USAGE.md) | Setup, where things live, daily order, what each command touches, the test environment, checks |
-| [docs/COMMANDS.md](docs/COMMANDS.md) | Every command, with the original script it replaces (generated) |
-| [project notes](project notes) | The merge plan, decisions, known issues and progress |
-| []() | How the current implementation was ported (for changing a ported module) |
-| [](README.md) | The three current features' own docs |
+| [docs/COMMANDS.md](docs/COMMANDS.md) | Complete command reference (generated) |
 
 ## Config files
 
@@ -46,7 +40,7 @@ The real files are gitignored; only the examples are committed.
 ## Tests
 
 ```powershell
-.venv\Scripts\python -m pytest                     # unit, pinning and CLI tests
+.venv\Scripts\python -m pytest                     # unit and CLI tests
 $env:FFF_INTEGRATION=1; .venv\Scripts\python -m pytest -m integration   # test databases only
 python tools/gui_smoke.py                          # every GUI opens and loads data
 ```

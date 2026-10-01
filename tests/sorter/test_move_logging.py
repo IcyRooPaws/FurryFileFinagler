@@ -1,4 +1,3 @@
-# fff: implemented in media sorter/tests/test_move_logging.py.
 # fff: the test was stale against the current implementation (its dummy lacked the logging methods and it
 # fff: expected an old log format); both fixed, see the comments. It now passes on the current implementation too.
 import logging

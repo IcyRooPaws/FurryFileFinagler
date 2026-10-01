@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-# fff: implemented in reverse-image search/scripts/sync_fa_favorites.py.
-# fff: run as 'fff fluffle sync-fa-favorites'; now runnable (design note section8 item 2).
+# Run with ``fff fluffle sync-fa-favorites``.
 """
 Sync FurAffinity Favorites
 Finds images that have both e621 and FA matches, and ensures the FA posts are favorited.
@@ -16,7 +15,7 @@ import mysql.connector
 from mysql.connector import Error
 import http.cookiejar
 
-# fff: the existing code's relative import + ../config.yaml meant it couldn't run either way (design note section8)
+# Use the shared FurAffinity client and unified project configuration.
 from fff.clients.furaffinity import (
     get_firefox_cookies,
     check_if_fa_favorited,

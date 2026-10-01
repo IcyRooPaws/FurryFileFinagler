@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# fff: implemented in e621 archive/scripts/database/verify_and_repair_file_paths.py.
 """
 Standalone script to verify and repair broken file paths using image_sorting_hashes database.
 

@@ -1,9 +1,9 @@
 """File moves, copies, deletes and renames, logged to the log file and ``file_operations``.
 
-The ``*_with_logging`` helpers are copied verbatim from media sorter/_handlers/utils.py.
+The ``*_with_logging`` helpers are copied verbatim from FFF/_handlers/utils.py.
 ``db_manager`` may be the sorter's DatabaseManager or an ``OperationLogger`` (below),
-which writes ``file_operations`` rows without the rest of the sorter's DB layer. reverse search
-uses the latter (design note section11, decision 5).
+which writes ``file_operations`` rows without the rest of the sorter's DB layer. Search
+workflows use the latter.
 """
 import logging
 import os
@@ -34,7 +34,7 @@ def normalize_file_path(file_path):
     return file_path
 
 
-# --- media sorter/_handlers/utils.py: forward-slash paths for image_sorting_hashes, logged file ops ---
+# --- FFF/_handlers/utils.py: forward-slash paths for image_sorting_hashes, logged file ops ---
 
 def ensure_directory_exists(directory):
     """Create directory if it doesn't exist."""
@@ -395,7 +395,7 @@ def delete_file_with_logging(file_path, db_manager=None, logger_obj=None,
 class OperationLogger:
     """Writes ``file_operations`` rows in the sorter DB, matching DatabaseManager.log_*.
 
-    Same SQL, retry and "never raise" behaviour as media sorter's
+    Same SQL, retry and "never raise" behaviour as FFF's
     DatabaseManager.log_file_operation. The original log_delete_operation and
     log_rename_operation passed ``file_hash=`` to a method that no longer accepted it
     (a TypeError); here ``file_hash`` is accepted and ignored, since the column was dropped.

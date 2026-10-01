@@ -1,4 +1,3 @@
-# fff: implemented in media sorter/_handlers/artist_manager.py.
 # fff: artists come from config/sort_artists.yaml (was configs/artists.yaml).
 """
 Artist management for favorite file detection and processing.

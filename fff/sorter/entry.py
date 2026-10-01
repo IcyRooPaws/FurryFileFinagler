@@ -1,4 +1,4 @@
-"""``fff sort ...``: media sorter's main.py sub-commands, plus run.py and fa_backlog_sort.
+"""``fff sort ...``: FFF's main.py sub-commands, plus run.py and fa_backlog_sort.
 
 ``fff sort <command>`` runs exactly what ``python main.py <command>`` ran (same 14
 sub-commands, flags and defaults); ``fff sort workflow`` is run.py and ``fff sort

@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
-# fff: implemented in e621 archive/scripts/ui/blacklist_review_ui.py.
 # fff: run as 'fff gui blacklist-review'; main(argv=None) ignores argv (the original had no options).
 # fff: file deletes go to the recycle bin (send2trash) instead of os.remove: both the critical
-# fff: auto-delete and the manual Delete button (project notes §11 decision 6).
+# fff: auto-delete and the manual Delete button use the recycle bin.
 # fff: the AI folder comes from config archive.ai_cleanup (default E:\Image Sorter Working Folder\AI).
 """
 Blacklist Review UI
@@ -824,7 +823,7 @@ class BlacklistReviewUI:
             file_path = post.get('file_path')
             if file_path and os.path.exists(file_path):
                 try:
-                    send2trash(file_path)  # fff: recycle bin instead of os.remove (decision 6)
+                    send2trash(file_path)
                     logging.info(f"Deleted file (sent to recycle bin): {file_path}")
                 except Exception as e:
                     logging.error(f"Failed to delete file {file_path}: {e}")
@@ -1294,7 +1293,7 @@ def auto_delete_critical_posts(conn, e621_config, critical_tags):
             file_path = post.get('file_path')
             if file_path and os.path.exists(file_path):
                 try:
-                    send2trash(file_path)  # fff: recycle bin instead of os.remove (decision 6)
+                    send2trash(file_path)
                     logging.info(f"Deleted file (sent to recycle bin): {file_path}")
                 except Exception as e:
                     logging.error(f"Failed to delete file {file_path}: {e}")

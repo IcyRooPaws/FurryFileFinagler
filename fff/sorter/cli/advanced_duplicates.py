@@ -1,5 +1,4 @@
-# fff: implemented in media sorter/fff.sorter/cli/advanced_duplicates.py.
-# fff: ported as is and still broken (decision 2, design note section13); only the imports moved and a warning
+# This command remains unavailable because it requires a database schema the application does not provide.
 # fff: is printed when it runs.
 """
 CLI command for advanced duplicate detection
@@ -69,7 +68,7 @@ def add_advanced_duplicates_command(subparsers):
 
 def run_advanced_duplicates(args):
     """Execute advanced duplicate detection"""
-    print("WARNING: advanced-duplicates is known to be broken (project notes §13)")  # fff: decision 2
+    print("WARNING: advanced-duplicates requires an obsolete database schema")
     from fff.sorter.scripts.find_duplicates_advanced import AdvancedDuplicateFinder, parse_size
     
     # Parse arguments

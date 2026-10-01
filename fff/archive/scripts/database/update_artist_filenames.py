@@ -1,4 +1,3 @@
-# fff: implemented in e621 archive/scripts/database/update_artist_filenames.py.
 # fff: logs go to logs/archive (was ./logs relative to the CWD).
 """
 Update file names to match current artist names in the database.

@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# fff: implemented in e621 archive/FA Fav Sync/sync_external_fa_sources.py (same as reverse-image search/scripts/).
 # fff: run as 'fff fa sync-external'; config and the e621_posts_db name come from fff config.
 """
 External FurAffinity Source Links Monitor
@@ -19,7 +18,7 @@ import yaml
 import mysql.connector
 from mysql.connector import Error
 
-# fff: the FA functions come from the newer reverse search copy (retry/backoff), design note section5
+# FurAffinity functions use the shared client with retry/backoff.
 from fff.clients.furaffinity import (
     get_firefox_cookies,
     check_if_fa_favorited,

@@ -1,13 +1,13 @@
-"""``fff daily``: the daily run, in the same order as fff_daily.ps1.
+"""``fff daily``: run the standard archive, search, and library-maintenance sequence.
 
-1. ``fff fluffle search``     (fluffle.py)            sources for inbox images, downloads existing code
-2. ``fff sort workflow``      (media sorter run.py)    sort what reverse search and earlier runs left
-3. ``fff e621 sync``          (e621_main.py)          favorites -> e621_posts_db, downloads, AI cleanup
-4. ``fff sort workflow``      (media sorter run.py)    sort the files the e621 sync downloaded
-5. ``fff fa sync-external``   (sync_external_fa_sources.py)  final FA favorites pass
+1. ``fff fluffle search``     find image sources and process matches
+2. ``fff sort workflow``      sort and organize downloaded files
+3. ``fff e621 sync``          sync favorites, downloads, and AI cleanup
+4. ``fff sort workflow``      organize files downloaded by the e621 sync
+5. ``fff fa sync-external``   sync external FurAffinity sources
 
-As in the script, a failed stage doesn't stop the run (unless --stop-on-error). Each stage
-runs as its own ``fff`` process (so their logging setup, signal handlers and sys.exit calls
+By default, a failed stage doesn't stop the run (unless --stop-on-error). Each stage
+runs as its own ``fff`` process (so logging setup, signal handlers and exit calls
 can't interfere with each other), with the same --env / --config. It adds no logic of its
 own: running the five commands by hand does exactly the same.
 """
@@ -20,12 +20,12 @@ from datetime import datetime
 
 from fff.common import paths
 
-# (skip key, fff command, label). Same order as fff_daily.ps1.
+# (skip key, fff command, label).
 STAGES = [
-    ("fluffle", ["fluffle", "search"], "reverse search reverse image search"),
-    ("sort", ["sort", "workflow"], "media sorter workflow (1st)"),
+    ("fluffle", ["fluffle", "search"], "Reverse-image source search"),
+    ("sort", ["sort", "workflow"], "Library workflow (1st)"),
     ("e621", ["e621", "sync"], "e621 favorites sync"),
-    ("sort", ["sort", "workflow"], "media sorter workflow (2nd)"),
+    ("sort", ["sort", "workflow"], "Library workflow (2nd)"),
     ("fa_sync", ["fa", "sync-external"], "External FA sources sync"),
 ]
 

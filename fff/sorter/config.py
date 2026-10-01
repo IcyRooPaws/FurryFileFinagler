@@ -1,9 +1,8 @@
-# fff: implemented in media sorter/fff.sorter/config/settings.py.
-# fff: this is the single sorter Config; _handlers/utils.py's near-copy is an alias of it (design note section4).
+# The sorter exposes one shared Config implementation.
 # fff: settings come from the unified config's sorter view; tag_sorting.yaml / sort_artists.yaml
 # fff: live in config/; the e621 database name comes from the environment.
 """
-Configuration module for media sorter.
+Configuration module for FFF.
 
 Provides unified configuration management with validation and easy access to settings.
 """
@@ -19,7 +18,7 @@ DEFAULT_CONFIG_FILE = "configs/config.yaml"  # the existing code's CWD-relative 
 
 
 class Config:
-    """Centralized configuration manager for media sorter."""
+    """Centralized configuration manager for FFF."""
 
     def __init__(self, config_file: str = "configs/config.yaml"):
         """Initialize configuration from YAML file."""
@@ -31,7 +30,7 @@ class Config:
     def _load_config(self) -> Dict:
         """Load configuration from YAML file."""
         # fff: the default path (or none) means the sorter view of config/config.yaml; an
-        # explicit path still loads an media sorter-format file, as the original did.
+        # explicit path still loads an FFF-format file, as the original did.
         if self.config_file in (None, DEFAULT_CONFIG_FILE):
             return fff_config.legacy_view("sorter")
         if not os.path.exists(self.config_file):
@@ -124,7 +123,7 @@ class Config:
 
             self.log_directory = other_config["log_directory"]
 
-            # fff: from _handlers/utils.py's Config (the two classes are merged, design note section4)
+            # Reuse the shared sorter Config implementation.
             log_level_str = other_config.get("log_level", "WARNING")
             self.log_level = getattr(logging, log_level_str.upper(), logging.WARNING)
 

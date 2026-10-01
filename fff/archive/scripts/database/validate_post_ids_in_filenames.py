@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# fff: implemented in e621 archive/scripts/database/validate_post_ids_in_filenames.py.
 # fff: the tkinter review UI (--review) is kept as-is.
 """
 Validate and fix post ID mismatches in filenames.

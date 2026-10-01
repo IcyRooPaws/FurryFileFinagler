@@ -1,4 +1,3 @@
-# fff: implemented in media sorter/tests/test_archive_tables.py.
 # fff: integration test (test databases only).
 """
 Quick test to verify archive tables are created correctly.

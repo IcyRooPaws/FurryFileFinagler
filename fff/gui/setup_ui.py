@@ -1,0 +1,235 @@
+"""Guided first-run configuration and environment checks."""
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any
+
+import yaml
+
+from fff.common import paths
+
+
+def _read_yaml(path: Path) -> dict:
+    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    if not isinstance(data, dict):
+        raise ValueError(f"Expected a YAML mapping in {path}")
+    return data
+
+
+def _merge_defaults(defaults: dict, current: dict) -> dict:
+    merged = dict(defaults)
+    for key, value in current.items():
+        if isinstance(value, dict) and isinstance(merged.get(key), dict):
+            merged[key] = _merge_defaults(merged[key], value)
+        else:
+            merged[key] = value
+    return merged
+
+
+def load_documents(config_path: str | Path | None = None) -> tuple[Path, Path, dict, dict]:
+    """Load existing files, falling back to the committed examples on first run."""
+    config_path = Path(config_path) if config_path else paths.CONFIG_DIR / "config.yaml"
+    secrets_path = config_path.with_name("secrets.yaml")
+    config_example = paths.CONFIG_DIR / "config.example.yaml"
+    secrets_example = paths.CONFIG_DIR / "secrets.example.yaml"
+    config = _merge_defaults(_read_yaml(config_example), _read_yaml(config_path)) if config_path.exists() \
+        else _read_yaml(config_example)
+    secrets = _merge_defaults(_read_yaml(secrets_example), _read_yaml(secrets_path)) if secrets_path.exists() \
+        else _read_yaml(secrets_example)
+    return config_path, secrets_path, config, secrets
+
+
+def _flatten(data: dict, prefix: tuple[str, ...] = ()) -> list[tuple[tuple[str, ...], Any]]:
+    fields = []
+    for key, value in data.items():
+        path = prefix + (str(key),)
+        if isinstance(value, dict) and value:
+            fields.extend(_flatten(value, path))
+        else:
+            fields.append((path, value))
+    return fields
+
+
+def _set_path(data: dict, path: tuple[str, ...], value: Any) -> None:
+    section = data
+    for key in path[:-1]:
+        section = section.setdefault(key, {})
+    section[path[-1]] = value
+
+
+def _display_value(value: Any) -> str:
+    if isinstance(value, (list, dict)):
+        return yaml.safe_dump(value, sort_keys=False, allow_unicode=True).rstrip()
+    return "" if value is None else str(value)
+
+
+def _parse_value(raw: str, original: Any) -> Any:
+    if original is None:
+        return raw if raw else None
+    if isinstance(original, bool):
+        value = raw if isinstance(raw, bool) else yaml.safe_load(raw)
+        if not isinstance(value, bool):
+            raise ValueError("Enter true or false")
+        return value
+    if isinstance(original, int) and not isinstance(original, bool):
+        return int(raw)
+    if isinstance(original, float):
+        return float(raw)
+    if isinstance(original, (list, dict)):
+        value = yaml.safe_load(raw)
+        if not isinstance(value, type(original)):
+            raise ValueError(f"Expected a YAML {type(original).__name__}")
+        return value
+    return raw
+
+
+def _collect_documents(documents: dict, editors: dict) -> dict:
+    result = yaml.safe_load(yaml.safe_dump(documents, sort_keys=False)) or {}
+    for path, editor in editors.items():
+        if editor[0] == "text":
+            raw = editor[1].get("1.0", "end-1c")
+        elif editor[0] == "bool":
+            raw = editor[1].get()
+        else:
+            raw = editor[1].get()
+        _set_path(result, path, _parse_value(raw, editor[2]))
+    return result
+
+
+def save_documents(config_path: Path, secrets_path: Path, config: dict, secrets: dict) -> None:
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text(yaml.safe_dump(config, sort_keys=False, allow_unicode=True), encoding="utf-8")
+    secrets_path.write_text(yaml.safe_dump(secrets, sort_keys=False, allow_unicode=True), encoding="utf-8")
+
+
+def main(config_path: str | Path | None = None) -> int:
+    import tkinter as tk
+    from tkinter import messagebox, ttk
+
+    try:
+        config_path, secrets_path, config, secrets = load_documents(config_path)
+    except (OSError, ValueError, yaml.YAMLError) as exc:
+        print(f"Could not load setup configuration: {exc}")
+        return 2
+
+    root = tk.Tk()
+    root.title("FurryFileFinagler Setup")
+    root.geometry("960x720")
+    root.minsize(700, 500)
+
+    ttk.Label(root, text="FurryFileFinagler Setup", font=("Segoe UI", 18, "bold")).pack(
+        anchor="w", padx=18, pady=(16, 2))
+    ttk.Label(root, text="Review the example values, enter your settings, then save and run checks.").pack(
+        anchor="w", padx=18, pady=(0, 12))
+
+    notebook = ttk.Notebook(root)
+    notebook.pack(fill="both", expand=True, padx=18)
+    config_editors: dict[tuple[str, ...], tuple[str, Any, Any]] = {}
+    secrets_editors: dict[tuple[str, ...], tuple[str, Any, Any]] = {}
+
+    def add_document(title: str, document: dict, editors: dict, secret: bool = False) -> None:
+        for section_name, section in document.items():
+            tab = ttk.Frame(notebook)
+            notebook.add(tab, text=f"{title}: {section_name}")
+            canvas = tk.Canvas(tab, highlightthickness=0)
+            scrollbar = ttk.Scrollbar(tab, orient="vertical", command=canvas.yview)
+            content = ttk.Frame(canvas, padding=12)
+            content.bind("<Configure>", lambda event, c=canvas: c.configure(scrollregion=c.bbox("all")))
+            canvas.create_window((0, 0), window=content, anchor="nw")
+            canvas.configure(yscrollcommand=scrollbar.set)
+            canvas.pack(side="left", fill="both", expand=True)
+            scrollbar.pack(side="right", fill="y")
+            content.columnconfigure(1, weight=1)
+
+            for row, (path, value) in enumerate(_flatten({section_name: section})):
+                key = path[-1].lower()
+                label = ".".join(path)
+                ttk.Label(content, text=label).grid(row=row, column=0, sticky="nw", padx=(0, 14), pady=5)
+                if isinstance(value, bool):
+                    variable = tk.BooleanVar(value=value)
+                    ttk.Checkbutton(content, variable=variable).grid(row=row, column=1, sticky="w", pady=5)
+                    editors[path] = ("bool", variable, value)
+                elif isinstance(value, (list, dict)):
+                    widget = tk.Text(content, height=min(max(len(_display_value(value).splitlines()), 2), 7),
+                                     wrap="none")
+                    widget.insert("1.0", _display_value(value))
+                    widget.grid(row=row, column=1, sticky="ew", pady=5)
+                    editors[path] = ("text", widget, value)
+                else:
+                    widget = ttk.Entry(content, show="*" if secret and key in {"password", "api_key", "login"} else "")
+                    widget.insert(0, _display_value(value))
+                    widget.grid(row=row, column=1, sticky="ew", pady=5)
+                    editors[path] = ("entry", widget, value)
+
+    add_document("Settings", config, config_editors)
+    add_document("Secrets", secrets, secrets_editors, secret=True)
+
+    results = tk.Text(root, height=9, state="disabled", wrap="word")
+    results.pack(fill="x", padx=18, pady=(10, 4))
+    include_db = tk.BooleanVar(value=False)
+    ttk.Checkbutton(root, text="Include read-only database connectivity checks", variable=include_db).pack(
+        anchor="w", padx=18)
+
+    def report(lines: list[str]) -> None:
+        results.configure(state="normal")
+        results.delete("1.0", "end")
+        results.insert("end", "\n".join(lines))
+        results.configure(state="disabled")
+
+    def collect_and_save() -> tuple[dict, dict] | None:
+        try:
+            saved_config = _collect_documents(config, config_editors)
+            saved_secrets = _collect_documents(secrets, secrets_editors)
+            save_documents(config_path, secrets_path, saved_config, saved_secrets)
+            from fff.common import config as fff_config
+            fff_config.load(config_path, secrets_path, reload=True)
+            return saved_config, saved_secrets
+        except (OSError, ValueError, yaml.YAMLError) as exc:
+            messagebox.showerror("Setup", str(exc), parent=root)
+            return None
+
+    def save() -> None:
+        if collect_and_save() is not None:
+            report([f"Saved {config_path}", f"Saved {secrets_path}"])
+
+    def run_checks() -> None:
+        loaded = collect_and_save()
+        if loaded is None:
+            return
+        from fff.cli import doctor
+        from fff.common import config as fff_config
+
+        cfg, secret_values = loaded
+        cfg = fff_config.deep_merge(cfg, secret_values)
+        problems = 0
+        lines = ["Python packages"]
+        for name, status in doctor.check_modules():
+            lines.append(f"  {status}: {name}")
+            problems += status.startswith(doctor.MISSING)
+        lines.append("\nConfigured folders")
+        seen = set()
+        for label, folder in doctor.configured_directories(cfg):
+            if (label, folder) in seen:
+                continue
+            seen.add((label, folder))
+            exists = Path(folder).exists()
+            lines.append(f"  {'OK' if exists else 'MISSING'}: {folder} [{label}]")
+            problems += not exists
+        if include_db.get():
+            lines.append("\nDatabases")
+            for module, name, status in doctor.check_databases(cfg):
+                lines.append(f"  {module}: {name}: {status}")
+                problems += not status.startswith(doctor.OK)
+            view = doctor.check_all_files_view(cfg)
+            lines.append(f"  all_files view: {view}")
+            problems += view != doctor.OK
+        lines.append(f"\n{problems} problem(s) found." if problems else "\nAll checks passed.")
+        report(lines)
+
+    buttons = ttk.Frame(root, padding=(18, 6, 18, 16))
+    buttons.pack(fill="x")
+    ttk.Button(buttons, text="Save settings", command=save).pack(side="left")
+    ttk.Button(buttons, text="Save and run checks", command=run_checks).pack(side="left", padx=8)
+    ttk.Button(buttons, text="Close", command=root.destroy).pack(side="right")
+    root.mainloop()
+    return 0

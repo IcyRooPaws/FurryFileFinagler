@@ -1,11 +1,9 @@
-# fff: implemented in media sorter/fff.sorter/cli/commands.py.
 # fff: imports point at fff.sorter.*; the sys.path hack is gone; GUIs are imported lazily from fff.gui.
 # fff: CWD-relative files (post_id_list.txt, move_log.log, configs/*.yaml, configs/examples/*) use
 # fff: fff.sorter.paths / fff.common.paths; schema names come from the environment.
-# fff: setup --test-db and maintenance verify no longer use the dropped fff.sorter.core.database (decision 4).
-# fff: fixed: duplicates GUI import (design note section8 item 1); _verify_database returns 0 when clean (item 5).
+# Test database and maintenance operations use the unified configuration.
 """
-CLI commands module for media sorter.
+CLI commands module for FFF.
 
 Contains command implementations for the unified CLI interface.
 """
@@ -762,7 +760,7 @@ class MaintenanceCommand(BaseCommand):
                 tasks_run += cls._cleanup_logs(config, args.log_age_days)
 
             if args.verify_database or args.all:
-                cls._verify_database(config)  # fff: now returns an issue status, not a task count (design note section8 item 5)
+                cls._verify_database(config)  # Returns issue status; task counting is handled by the caller.
                 tasks_run += 1
 
             if args.fix_database or args.all:
@@ -770,7 +768,7 @@ class MaintenanceCommand(BaseCommand):
 
             if args.verify_and_fix:
                 print("[Clipboard] Running combined verify and fix operation...")
-                cls._verify_database(config)  # fff: now returns an issue status, not a task count (design note section8 item 5)
+                cls._verify_database(config)  # Returns issue status; task counting is handled by the caller.
                 tasks_run += 1
                 tasks_run += cls._fix_database_issues(config)
 
@@ -887,7 +885,7 @@ class MaintenanceCommand(BaseCommand):
         try:
             # Import database manager
             from fff.sorter.handlers.database_manager import DatabaseManager
-            # fff: unused import of the dropped fff.sorter.core.database DatabaseManager removed (decision 4)
+            # The unused secondary database adapter is not part of this application.
 
             # Initialize database connection
             db_manager = DatabaseManager(config)
@@ -927,7 +925,7 @@ class MaintenanceCommand(BaseCommand):
                 print(f"  [WARNING]  Database verification completed with {issues_found} issue(s) found")
                 print("     Check the details above for specific problems that need attention")
 
-            return 0 if issues_found == 0 else 1  # fff: 0 when no issues (was always 1, design note section8 item 5)
+            return 0 if issues_found == 0 else 1
 
         except Exception as e:
             logger.error(f"Database verification failed: {e}")
@@ -2410,7 +2408,7 @@ class SetupCommand(BaseCommand):
     @classmethod
     def execute(cls, args, config):
         """Execute setup tasks."""
-        print("[CONFIG] media sorter Setup")
+        print("[CONFIG] FFF Setup")
         print("=" * 50)
 
         if args.init:
@@ -2496,7 +2494,7 @@ class SetupCommand(BaseCommand):
         print("[SEARCH] Testing database connection...")
 
         try:
-            # fff: the unified-schema DatabaseManager was dropped (decision 4); use the live one
+            # Use the active database manager for schema checks.
             from fff.sorter.handlers import DatabaseManager
             db_manager = DatabaseManager(config)
             print("  [OK] Database connection successful")
@@ -2691,7 +2689,7 @@ class DuplicateManagerCommand(BaseCommand):
         """Launch the duplicate manager GUI."""
         try:
             import tkinter as tk
-            from fff.gui.duplicate_manager_ui import DuplicateManagerGUI  # fff: was a broken bare import (design note section8 item 1)
+            from fff.gui.duplicate_manager_ui import DuplicateManagerGUI
 
             root = tk.Tk()
             app = DuplicateManagerGUI(root)

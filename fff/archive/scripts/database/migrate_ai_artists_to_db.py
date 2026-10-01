@@ -1,4 +1,3 @@
-# fff: implemented in e621 archive/scripts/database/migrate_ai_artists_to_db.py.
 # fff: the __main__ block moved into main(argv); reads data/ai_artist.md in fff.
 # fff: main(argv) parses an option-less argparse parser so --help works; the original took no arguments.
 """Import the existing AI artist list into the database ledger."""

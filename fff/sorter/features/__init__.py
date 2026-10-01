@@ -1,6 +1,5 @@
-# fff: implemented in media sorter/fff.sorter/features/__init__.py.
 """
-Features module for media sorter.
+Features module for FFF.
 
 Provides specialized functionality like archiving, artist management, tag sorting, and maintenance.
 """

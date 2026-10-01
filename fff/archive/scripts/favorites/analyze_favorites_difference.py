@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# fff: implemented in e621 archive/scripts/favorites/analyze_favorites_difference.py.
 # fff: added main(argv=None) wrapping analyze_differences() for the fff CLI.
 """
 Script to find posts that are in the database but not in current favorites.

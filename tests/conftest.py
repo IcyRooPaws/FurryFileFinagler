@@ -3,9 +3,6 @@ import sys
 
 import pytest
 
-# Pinning tests import the current features' modules; never write __pycache__ into them.
-sys.dont_write_bytecode = True
-
 INTEGRATION = os.environ.get("FFF_INTEGRATION") == "1"
 
 

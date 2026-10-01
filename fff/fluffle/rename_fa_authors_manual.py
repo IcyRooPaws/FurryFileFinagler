@@ -1,7 +1,5 @@
-# fff: implemented in reverse-image search/scripts/rename_fa_author_manual.py.
 # fff: the mappings come from config/fa_author_mappings.yaml instead of being hard-coded.
-# fff: find_fa_files / rename_file_preserve_mtime / process_files were identical to
-# fff: rename_fa_author_files.py's and are imimplemented in fff.fluffle.rename_fa_authors.
+# File discovery and rename helpers are imimplemented in fff.fluffle.rename_fa_authors.
 """
 FurAffinity Author Manual Renamer: like 'fff fa rename-authors' but with hand-written
 author mappings (config/fa_author_mappings.yaml) instead of the database's.

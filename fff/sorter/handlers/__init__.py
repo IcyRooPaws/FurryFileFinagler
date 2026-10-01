@@ -1,8 +1,7 @@
-# fff: implemented in media sorter/_handlers/__init__.py.
 """
-media sorter Handlers Package
+FFF Handlers Package
 
-This package contains all the core handler modules for the media sorter project.
+This package contains all the core handler modules for the FFF project.
 """
 
 # Import all handler classes for easy access

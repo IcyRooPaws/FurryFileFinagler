@@ -1,4 +1,3 @@
-# fff: implemented in e621 archive/scripts/database/fast_backfill_file_paths.py.
 # fff: the unused ./logs fallback log directory is data/logs/archive.
 """
 Fast File Path Backfill Script

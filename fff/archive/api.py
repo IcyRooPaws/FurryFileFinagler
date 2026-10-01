@@ -1,4 +1,3 @@
-# fff: implemented in e621 archive/modules/api.py.
 # fff: the page cache folder comes from config (data/cache/e621_pages).
 import time
 import logging

@@ -1,4 +1,3 @@
-# fff: implemented in e621 archive/scripts/favorites/swap_duplicate_favorites.py.
 """
 Swap favorites from deleted duplicate posts to their superior versions.
 

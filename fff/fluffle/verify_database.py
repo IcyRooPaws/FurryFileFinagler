@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# fff: implemented in reverse-image search/scripts/verify_database.py.
 # fff: run as 'fff fluffle verify-db'.
 """
 Quick script to verify data in the new platform-specific tables.

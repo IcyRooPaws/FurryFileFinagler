@@ -21,7 +21,7 @@ SQL_DIR = ROOT / "sql"
 # In the test environment everything under data/ goes here instead (fff.common.config.test_path).
 TEST_DATA_DIR = DATA_DIR / "test"
 
-# Caches that used to live inside each previous component (design note section6).
+# Runtime caches are kept under the project-owned data/cache directory.
 E621_PAGE_CACHE = CACHE_DIR / "e621_pages"      # was e621 archive/temp_responses
 E621_POST_CACHE = CACHE_DIR / "e621_posts"      # was reverse search responses/e621_*.json
 FLUFFLE_RESPONSES = CACHE_DIR / "fluffle"       # was reverse search responses/*.json
@@ -32,7 +32,7 @@ def for_env(path: str | os.PathLike) -> Path:
     try:
         from fff.common import config as fff_config
         return Path(fff_config.test_path(str(path), fff_config.load()))
-    except Exception:  # no config yet (e.g. before 'fff setup'): prod layout
+    except Exception:  # no config yet: prod layout
         return Path(path)
 
 

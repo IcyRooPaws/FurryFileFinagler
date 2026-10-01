@@ -1,4 +1,3 @@
-# fff: implemented in media sorter/fff.sorter/features/tag_sorter.py.
 # fff: artists come from config/sort_artists.yaml; the e621 schema name from the environment.
 """
 Tag-based file sorter using e621_posts_db database.
@@ -40,7 +39,7 @@ class TagSorter:
         Initialize TagSorter.
 
         Args:
-            config: media sorter configuration object
+            config: FFF configuration object
             e621_db_config: Optional e621 database config override
                 {
                     'host': 'localhost',

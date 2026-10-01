@@ -1,4 +1,3 @@
-# fff: implemented in media sorter/table_space_report.py.
 # fff: imports from fff.sorter; main(argv=None) (no options).
 """Report total file_size (bytes) tracked per table, across every table that has a file_size column."""
 from fff.sorter.handlers.database_manager import DatabaseManager

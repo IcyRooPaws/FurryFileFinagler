@@ -1,35 +1,12 @@
-"""``fff`` command-line entry point.
-
-Command groups are registered here as each phase of project notes lands.
-"""
+"""``fff`` command-line entry point."""
 from __future__ import annotations
 
 import argparse
 import sys
-from pathlib import Path
 
 from fff import __version__
 from fff.common import config as fff_config
 from fff.common import paths
-
-
-def _cmd_config_examples(args) -> int:
-    from fff.common import config_examples
-
-    workspace = Path(args.from_workspace) if args.from_workspace else paths.ROOT.parent
-    sources = config_examples.Sources(workspace)
-    missing = [p for p in (sources.fluffle, sources.archive, sources.sorter) if not p.is_dir()]
-    if missing:
-        print("Original project folder(s) not found: " + ", ".join(map(str, missing)), file=sys.stderr)
-        return 2
-    result = config_examples.build(sources)
-    for warning in result.warnings:
-        print(f"NOTE  {warning}")
-    for action in config_examples.write(result, force=args.force, dry_run=args.dry_run):
-        print(action)
-    if args.dry_run:
-        print("(dry run: nothing written)")
-    return 0
 
 
 def _cmd_config_make_example(args) -> int:
@@ -156,6 +133,12 @@ def _cmd_doctor(args) -> int:
     return doctor.run(args)
 
 
+def _cmd_setup(args) -> int:
+    from fff.gui import setup_ui
+
+    return setup_ui.main(args.config)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="fff", description="FurryFileFinagler")
     parser.add_argument("--version", action="version", version=f"fff {__version__}")
@@ -167,11 +150,6 @@ def build_parser() -> argparse.ArgumentParser:
     # config
     p_config = sub.add_parser("config", help="Build or inspect the unified configuration")
     config_sub = p_config.add_subparsers(dest="config_command", metavar="<action>", required=True)
-    p = config_sub.add_parser("migrate", help="Build config.yaml/secrets.yaml from the original three projects")
-    p.add_argument("--from-workspace", help="Folder containing the current features (default: parent of this project)")
-    p.add_argument("--force", action="store_true", help="Overwrite existing files")
-    p.add_argument("--dry-run", action="store_true", help="Show what would be written")
-    p.set_defaults(func=_cmd_config_examples, needs_config=False)
     p = config_sub.add_parser("make-example", help="Write config/config.example.yaml from config.yaml, sanitized")
     p.add_argument("--force", action="store_true", help="Overwrite an existing example")
     p.set_defaults(func=_cmd_config_make_example)
@@ -180,7 +158,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(func=_cmd_config_test_dirs)
     p = config_sub.add_parser("show", help="Print the config (secrets redacted)")
     p.add_argument("--module", choices=fff_config.MODULES,
-                   help="Show the legacy view one module's ported code sees")
+                   help="Show the module-specific configuration view")
     p.set_defaults(func=_cmd_config_show)
 
     # db
@@ -217,7 +195,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--dry-run", action="store_true", help="Count without changing anything")
     p.set_defaults(func=_cmd_db_rewrite_test_paths)
 
-    # e621 / fa / gui / web / legacy (ported e621 archive entry points)
+    # e621 / fa / gui / web / legacy commands
     from fff.cli import archive_cmds
     archive_cmds.register(sub)
 
@@ -227,6 +205,10 @@ def build_parser() -> argparse.ArgumentParser:
                        description=daily.__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     daily.add_arguments(p)
     p.set_defaults(func=lambda args: daily.run(args))
+
+    # first-run setup
+    p = sub.add_parser("setup", help="Open the guided configuration and first-run checks")
+    p.set_defaults(func=_cmd_setup, needs_config=False)
 
     # doctor
     p = sub.add_parser("doctor", help="Check databases, folders and dependencies")
@@ -238,7 +220,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def _utf8_console() -> None:
-    """The existing code print and log characters like the check mark; a cp1252 Windows console
+    """Some commands print and log non-ASCII characters; a cp1252 Windows console
     can't encode them, so use UTF-8 (replacing anything still unencodable) instead."""
     for stream in (sys.stdout, sys.stderr):
         try:

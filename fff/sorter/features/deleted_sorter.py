@@ -1,4 +1,3 @@
-# fff: implemented in media sorter/fff.sorter/features/deleted_sorter.py.
 # fff: schema names in the cross-database query come from the environment.
 """
 Move files whose e621 post is marked deleted into a dedicated directory.

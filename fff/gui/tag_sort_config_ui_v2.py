@@ -1,4 +1,3 @@
-# fff: implemented in media sorter/scripts/tag_sort_config_ui_v2.py.
 # fff: edits config/tag_sorting.yaml (was configs/), read raw because it is saved back; config.yaml
 # fff: is the unified config's sorter view; the e621 schema comes from the environment.
 # fff: 'Apply Post Dates Now' reroutes the rule's folders in the test environment (_rule_for_env).
@@ -181,7 +180,7 @@ def get_global_base_dirs(tag_sorting_data: dict, main_config: Optional[dict] = N
     """Compute the pictures/videos/gifs base directories used for folder_name
     (split-mode) rules that have no hard-set ``target_directory``.
 
-    Mirrors ``fff.sorter.config.settings.Config.get_tag_sorting_base_dirs()``:
+    Computes base directories using the sorter configuration:
     1. An explicit ``base_directories`` block in tag_sorting.yaml, if set.
     2. Otherwise derived from config.yaml's ``destination_directories`` +
        tag_sorting.yaml's ``tag_sort_subdirectory``.
@@ -211,8 +210,7 @@ def get_global_base_dirs(tag_sorting_data: dict, main_config: Optional[dict] = N
 
 
 def resolve_e621_db_config(tag_sorting_data: dict, main_config: Optional[dict] = None) -> dict:
-    """Resolve e621 database connection settings, mirroring
-    ``fff.sorter.config.settings.Config.get_e621_database_config()``:
+    """Resolve e621 database connection settings:
     tag_sorting.yaml's ``e621_database`` block overrides config.yaml's ``mysql``
     block, field-by-field, with ``e621_posts_db`` as the default database name.
     """
@@ -3089,7 +3087,7 @@ class TagSortConfigApp:
         # data; reroute it so a test-environment run cannot move files into real folders.
         rule = _rule_for_env(rule)
         try:
-            from fff.sorter.config import Config as media sorterConfig
+            from fff.sorter.config import Config as FFFConfig
             from fff.sorter.features.tag_sorter import TagSorter
             from fff.sorter.handlers.database_manager import DatabaseManager
         except Exception as e:
@@ -3099,7 +3097,7 @@ class TagSortConfigApp:
         def worker():
             result, error = None, None
             try:
-                main_cfg = media sorterConfig(str(DEFAULT_MAIN_CONFIG_PATH))
+                main_cfg = FFFConfig(str(DEFAULT_MAIN_CONFIG_PATH))
                 db_config = main_cfg.get_e621_database_config()
                 db_manager = DatabaseManager(main_cfg)
                 tag_sorter = TagSorter(main_cfg, db_config, db_manager=db_manager)

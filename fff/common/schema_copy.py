@@ -1,7 +1,7 @@
 """Copy database schemas (no data) to their test_ twins: ``fff db copy-schema``.
 
 Merges e621 archive/scripts/database/copy_schema_to_test_databases.py and
-media sorter/scripts/copy_schema_to_test_database.py; their schema functions were identical
+FFF/scripts/copy_schema_to_test_database.py; their schema functions were identical
 and are copied verbatim below. fff changes:
 
 * References to *all three* production databases are rewritten to their test names, not
@@ -281,7 +281,7 @@ def apply_schema_to_database(conn, test_db_name, schema, original_db_name, dry_r
         cursor.close()
 
 
-# --- fff: orchestration (replaces the prior code's copy_database_schema/main) ---
+# --- schema copy orchestration ---------------------------------------------------------
 
 def test_database_pairs(cfg, modules=None):
     """(module, production schema, test schema) for the requested modules."""

@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "furryfilefinagler"
 version = "0.1.0"
-description = "Combined reverse-image search, e621 archive and media sorter toolkit"
+description = "Toolkit for e621 archiving, reverse-image source search, and media library management"
 requires-python = ">=3.10"
 dependencies = [
     "PyYAML>=6.0",

@@ -10,4 +10,4 @@ Personal data and caches. Everything here except this file is gitignored.
 | `md5_search/` | md5 lists for `fff e621 favorites from-md5` |
 | `cache/` | e621 page and post caches, reverse search responses, FA debug pages |
 
-`fff setup` copies these from e621 archive.
+These files are created and maintained by FurryFileFinagler.

@@ -1,4 +1,3 @@
-# fff: implemented in e621 archive/scripts/ui/archive_browser.py.
 # fff: run as 'fff web'; the __main__ block became parse_args(argv) + main(argv).
 """Local web browser for searching and previewing archived e621 posts."""
 

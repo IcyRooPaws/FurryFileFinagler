@@ -1,4 +1,4 @@
-"""FuzzySearch reverse image search (implemented in reverse-image search/fluffle.py)."""
+"""Client for FuzzySearch reverse-image search."""
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 

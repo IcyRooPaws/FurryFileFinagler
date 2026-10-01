@@ -1,4 +1,3 @@
-# fff: implemented in e621 archive/search_for_posts/md5_favorite_checker.py.
 # fff: moved from search_for_posts/; the default md5 file is data/md5_search/md5.txt.
 """
 Search md5 hashes on e621, verify favorite status, and favorite missing posts.

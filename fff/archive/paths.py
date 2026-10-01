@@ -9,7 +9,7 @@ from pathlib import Path
 from fff.common import paths
 from fff.common import config as fff_config
 
-# config/ -> config/lists/ (design note section3); artists.yaml was renamed review_artists.yaml (decision 3)
+# Shared list files are stored under config/lists/.
 AI_TAGS = paths.LISTS_DIR / "ai_tags.txt"
 BLACKLIST = paths.LISTS_DIR / "blacklist.txt"
 CRITICAL_BLACKLIST = paths.LISTS_DIR / "critical_blacklist.txt"
@@ -40,7 +40,7 @@ def __getattr__(name):
 # was ./data/logs for per-script logs
 LOG_DIR = paths.LOG_DIR / "archive"
 
-# Folders the original hard-coded (design note section3); config: archive.ai_cleanup.*
+# Default folders can be overridden with archive.ai_cleanup.* settings.
 DEFAULT_AI_TAG_DIRECTORY = r"E:\Image Sorter Working Folder\AI"
 DEFAULT_AI_ARTIST_DIRECTORY = r"E:\Image Sorter Working Folder\AI\AI_Artist_Trash"
 

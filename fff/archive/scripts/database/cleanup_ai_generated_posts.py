@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# fff: implemented in e621 archive/scripts/database/cleanup_ai_generated_posts.py.
 """
 Script to clean up posts that were deleted from e621 for AI-generated content.
 

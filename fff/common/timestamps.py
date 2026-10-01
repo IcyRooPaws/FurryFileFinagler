@@ -1,7 +1,7 @@
 """File timestamp helpers.
 
-``set_file_timestamps`` is media sorter's (with Windows creation time). ``copy_file_times``
-merges reverse search's two variants, which differed only in the access time they set.
+``set_file_timestamps`` also handles Windows creation time. ``copy_file_times``
+supports the access-time behavior required by e621 and FurAffinity downloads.
 """
 import logging
 import os
@@ -11,8 +11,8 @@ from pathlib import Path
 def copy_file_times(source: Path, destination: Path, *, keep_source_atime: bool = False) -> None:
     """Copy the modified time from ``source`` to ``destination``.
 
-    keep_source_atime=False: atime is set to the source mtime (reverse search's e621 processor).
-    keep_source_atime=True:  atime is implemented in the source (reverse search's FA processor).
+    keep_source_atime=False: atime is set to the source mtime.
+    keep_source_atime=True:  atime is implemented in the source.
     """
     try:
         stat_info = Path(source).stat()

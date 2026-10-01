@@ -1,12 +1,12 @@
 # Using FurryFileFinagler
 
-`fff` combines three earlier projects into one command:
+`fff` provides one command-line interface for managing your archive and media library:
 
-- **e621 archive**: mirrors your e621 favorites into `e621_posts_db` and keeps your local files matched to them.
-- **reverse-image search**: finds the source of images in your inbox folders and downloads the existing code.
-- **media sorter**: sorts, hashes, archives and de-duplicates the library in `image_sorting_hashes`.
+- **e621 archive**: mirrors favorites into `e621_posts_db` and matches posts to local files.
+- **Source search**: finds image sources and processes matching downloads.
+- **Library management**: sorts, hashes, archives and de-duplicates files in `image_sorting_hashes`.
 
-The full command list is in [COMMANDS.md](COMMANDS.md). [project notes](../project notes) records every decision and every change made during the merge.
+The full command list is in [COMMANDS.md](COMMANDS.md).
 
 ## Setup
 
@@ -14,11 +14,14 @@ The full command list is in [COMMANDS.md](COMMANDS.md). [project notes](../proje
 python -m venv .venv
 .venv\Scripts\python -m pip install -r requirements.txt
 .venv\Scripts\python -m pip install -e . --no-deps
-fff setup      # build config/config.yaml + secrets.yaml from the current features
+fff setup               # guided configuration and first-run checks
 fff doctor              # packages, configured folders, all three databases
 ```
 
-### Without the current features
+The setup window starts from the committed examples unless real config files already exist. It keeps
+credentials in `config/secrets.yaml`; database connectivity checks are opt-in and read-only.
+
+### Manual setup
 
 Copy each `config/*.example.yaml` and `config/lists/*.example.txt` to the same name without `.example`, then fill them in.
 
@@ -28,38 +31,36 @@ Only the examples are committed. If you change the layout of `config.yaml`, run 
 
 | Path | Contents |
 |---|---|
-| `config/config.yaml` | All settings, with no secrets. It has sections `fluffle:`, `archive:` and `sorter:` (each in its previous component's layout), plus the shared `database:` and `e621:` |
+| `config/config.yaml` | All settings, with no secrets. It has `fluffle:`, `archive:` and `sorter:` sections, plus shared `database:` and `e621:` settings |
 | `config/secrets.yaml` | DB password, the e621 login and API key (one account, shared by every module), and the FuzzySearch key |
-| `config/tag_sorting.yaml`, `sort_artists.yaml`, `review_artists.yaml`, `fa_author_mappings.yaml`, `lists/*.txt` | The current features' rule and list files |
-| `data/` | AI-artist list, kept-post lists, md5 lists, caches (e621 pages and posts, reverse search responses) |
+| `config/*.yaml`, `config/lists/*.txt` | Sorting, review, and filtering rules |
+| `data/` | AI-artist list, kept-post lists, md5 lists, and runtime caches |
 | `logs/<archive\|sorter\|db>/` | One log file per run |
 
 ## A typical day
 
-The three pipelines feed each other:
+The search, archive, and sorting workflows feed into each other:
 
 ```powershell
-fff fluffle search      # find sources for inbox images; download e621/FA existing code
+fff fluffle search      # find sources for inbox images and process matches
 fff sort workflow       # tag sort, sort + hash, artist sort, archive, maintenance
 fff e621 sync           # favorites -> e621_posts_db, download missing files, AI cleanup, FA sync
 fff sort workflow       # sort what the e621 sync downloaded
 fff fa sync-external    # final FA favorites pass
 ```
 
-Or run the whole daily sequence with one command. It is the same order as the old
-`fff_daily.ps1`:
+Or run the full sequence with one command:
 
 ```powershell
-fff daily                  # fluffle search -> sort workflow -> e621 sync -> sort workflow -> fa sync-external
-fff daily --dry-run        # show what would run
+fff daily
+fff daily --dry-run
 fff daily --skip-fluffle --skip-favorites --stop-on-error
-fff --env test daily       # the same against the test databases and E:\Testing
-.ff_daily.ps1 -scheduled # what Task Scheduler runs (exit code = failed stages)
+fff --env test daily
 ```
 
-`fff daily` runs each stage as its own `fff` process, passing through `--env` and `--config`. Like the old script, it keeps going after a failed stage. Unlike the old script, it exits non-zero if any stage failed. It writes a one-line-per-stage summary to `logs/daily/`. It adds no logic of its own.
+`fff daily` runs each stage as its own `fff` process, passing through `--env` and `--config`. It continues after a failed stage unless `--stop-on-error` is set, exits non-zero if any stage failed, and writes a stage summary to `logs/daily/`.
 
-Each command accepts its original flags. For example:
+Use each command's `--help` to see its options. For example:
 
 - `fff e621 sync --skip-favorites`
 - `fff sort workflow --dry-run --skip-archive`
@@ -85,7 +86,7 @@ In test mode:
 - the project's `data\` becomes `data\test\`;
 - commands print a `[fff] TEST environment` banner.
 
-e621, FurAffinity, reverse search and FuzzySearch are real services with no test version, so in test mode they are still called for real.
+e621, FurAffinity, and FuzzySearch are real services with no test version, so in test mode they are still called for real.
 
 ### Setting up (or resetting) the test copy
 
@@ -102,15 +103,6 @@ fff config test-dirs                     # where each configured folder goes
 
 | What | How |
 |---|---|
-| Unit and pinning tests | `.venv\Scripts\python -m pytest` |
+| Unit and CLI tests | `.venv\Scripts\python -m pytest` |
 | Integration tests (test databases only) | `$env:FFF_INTEGRATION=1; .venv\Scripts\python -m pytest -m integration` |
 | GUIs open and load data | `python tools/gui_smoke.py` |
-| Same results as the existing code | `archive_sync_parity.py`, `fluffle_search_parity.py`, `sorter_workflow_parity.py`. Each runs an original and its port on identical input and compares databases, files and HTTP calls. |
-
-## How the code was ported
-
-Each current file was copied verbatim by a script in ``, which then applies exact, count-checked edits marked `# fff:`. Never edit a ported file by hand. Change its port script and re-run it.
-
-- `python audit.py` shows how much each ported file differs from its original.
-- [PORTING.md](PORTING.md) has the conventions.
-- [existing code/](existing code/README.md) has the three projects' own docs.

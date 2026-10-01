@@ -1,11 +1,10 @@
-# fff: implemented in media sorter/_handlers/utils.py.
 # fff: Config is fff.sorter.config.Config (the two near-identical classes are merged).
 # fff: the file-type/rating helpers, path normalization, timestamps and the *_with_logging
 # fff: file operations were copied verbatim to fff.common in Phase 1 and are imimplemented in there.
-# fff: hash_file uses fff.hashing (media sorter's media_hasher.py, sorter profile) instead of
+# fff: hash_file uses fff.hashing (FFF's media_hasher.py, sorter profile) instead of
 # fff: loading media_hasher.py by file path.
 """
-Utility functions and configuration management for media sorter.
+Utility functions and configuration management for FFF.
 
 This module provides core utilities including configuration management,
 logging setup, file type detection, and hashing functions.

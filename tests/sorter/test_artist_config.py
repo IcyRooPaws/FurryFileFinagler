@@ -1,4 +1,3 @@
-# fff: implemented in media sorter/tests/test_artist_config.py.
 # fff: integration test (reads the real config).
 """
 Test that artist processing config is loaded correctly.

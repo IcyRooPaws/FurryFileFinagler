@@ -1,4 +1,3 @@
-# fff: implemented in e621 archive/modules/logging_setup.py.
 import os
 import logging
 from datetime import datetime

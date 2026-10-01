@@ -1,4 +1,4 @@
-"""reverse search reverse image search (implemented in reverse-image search/fluffle.py)."""
+"""Client for reverse-image source search."""
 import tempfile
 import time
 from pathlib import Path

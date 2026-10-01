@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# fff: implemented in e621 archive/scripts/database/view_takedown_details.py.
 # fff: the interactive input() menu is kept as-is.
 # fff: main(argv) parses an option-less argparse parser so --help works; the original took no arguments.
 """
