@@ -5,6 +5,9 @@ and media-library sorting, hashing, archiving, and duplicate detection.
 
 ## Quick start
 
+On Windows, run `setup.bat` to create `.venv`, install dependencies and launch guided setup.
+To do those steps manually:
+
 ```powershell
 python -m venv .venv
 .venv\Scripts\python -m pip install -r requirements.txt
