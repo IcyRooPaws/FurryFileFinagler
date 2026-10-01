@@ -44,6 +44,17 @@ fff fluffle search      # 2. find sources for inbox images; download e621/FA exi
 fff sort workflow       # 3. tag sort, sort + hash, artist sort, archive, maintenance
 ```
 
+Or run all three in that order with one command:
+
+```powershell
+fff daily                         # e621 sync -> fluffle search -> sort workflow
+fff daily --dry-run               # show what would run
+fff daily --skip-fluffle --skip-favorites --stop-on-error
+fff --env test daily              # the same against the test databases and E:\Testing
+```
+
+`fff daily` runs each stage as its own `fff` process, passing through `--env` and `--config`. By default it keeps going after a failed stage. It exits non-zero if any stage failed and writes a one-line-per-stage summary to `logs/daily/`. It adds no logic of its own.
+
 Each command accepts its original flags. For example:
 
 - `fff e621 sync --skip-favorites`

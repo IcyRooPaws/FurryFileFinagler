@@ -221,6 +221,13 @@ def build_parser() -> argparse.ArgumentParser:
     from fff.cli import archive_cmds
     archive_cmds.register(sub)
 
+    # daily
+    from fff.cli import daily
+    p = sub.add_parser("daily", help="Run e621 sync, then fluffle search, then sort workflow",
+                       description=daily.__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    daily.add_arguments(p)
+    p.set_defaults(func=lambda args: daily.run(args))
+
     # doctor
     p = sub.add_parser("doctor", help="Check databases, folders and dependencies")
     p.add_argument("--skip-db", action="store_true", help="Don't connect to MySQL")

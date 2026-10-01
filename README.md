@@ -18,6 +18,7 @@ fff doctor              # checks packages, folders and all three databases
 fff e621 sync           # favorites -> e621_posts_db
 fff fluffle search      # find sources for inbox images
 fff sort workflow       # sort, hash, archive the library
+fff daily               # or: all three, in that order
 ```
 
 Use `fff --env test <command>` (or `environment: test` in `config/config.yaml`) to run
