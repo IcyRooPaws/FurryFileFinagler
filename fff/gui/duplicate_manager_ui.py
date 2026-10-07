@@ -15,6 +15,8 @@ This provides a graphical interface for:
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 import os
+# Quiet FFmpeg console spam from damaged webms; must be set before anything imports cv2
+os.environ.setdefault('OPENCV_FFMPEG_LOGLEVEL', '-8')
 import sys
 import subprocess
 import threading
@@ -34,6 +36,8 @@ from fff.gui import theme
 from fff.sorter.handlers import DatabaseManager
 from fff.sorter.handlers.utils import Config
 from fff.sorter import paths as sorter_paths
+from fff.hashing import video_similarity
+from fff.hashing.video_similarity import DEFAULT_MAX_DISTANCE as DEFAULT_VIDEO_MAX_DISTANCE
 
 import logging
 
@@ -598,14 +602,19 @@ class ImagePreviewCache:
 
             # Create PhotoImage
             return ImageTk.PhotoImage(frame)
-        try:
-            # Use optional opencv if available (module-level cv2 set at import time)
-            if cv2 is None:
-                # OpenCV not available, use placeholder
-                return self._generate_placeholder_preview("video", preview_size)
 
-            # Try to extract first frame with opencv
+    def _generate_video_preview(self, file_path: str, preview_size: tuple = None) -> ImageTk.PhotoImage:
+        """Generate preview for video files (frame 25% in, past any intro/black frames)."""
+        if preview_size is None:
+            preview_size = self.preview_size
+
+        try:
+            import cv2
+
             cap = cv2.VideoCapture(file_path)
+            frame_count = cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0
+            if frame_count > 4:
+                cap.set(cv2.CAP_PROP_POS_FRAMES, int(frame_count * 0.25))
             ret, frame = cap.read()
             cap.release()
 
@@ -876,6 +885,29 @@ class VideoPlayerWidget(ttk.Frame):
 class DuplicateManagerGUI:
     """Main GUI application for duplicate management."""
 
+    IMAGE_MODES = [
+        ('perceptual_hash_phash', '[TARGET] Perceptual (phash)'),
+        ('perceptual_hash_dhash', '[Loop] Difference (dhash)'),
+        ('perceptual_hash_average', '[FAST] Average'),
+        ('perceptual_hash_whash', '[STREAM] Wavelet (whash)'),
+        ('perceptual_hash_similar', '[SEARCH] Similar (Multi-algo)'),
+        ('view_perceptual_hash_phash', '[TARGET] View: Perceptual (phash)'),
+        ('view_perceptual_hash_dhash', '[Loop] View: Difference (dhash)'),
+        ('view_perceptual_hash_average', '[FAST] View: Average'),
+        ('view_perceptual_hash_whash', '[STREAM] View: Wavelet (whash)'),
+        ('md5_hash', '[SECURE] Binary (Exact)'),
+        ('file_name', '[Notes] Name Match'),
+        ('e621_post_id', '[NUMBER] e621 Post ID'),
+    ]
+    VIDEO_MODES = [
+        ('video_similarity', '[VIDEO] Visual Match (HQ/LQ)'),
+        ('md5_hash', '[SECURE] Binary (Exact)'),
+        ('file_name', '[Notes] Name Match'),
+        ('e621_post_id', '[NUMBER] e621 Post ID'),
+    ]
+    VIDEO_ONLY_MODES = {'video_similarity'}
+    VIDEO_TABLES = {'manual_sort_videos', 'sfw_video', 'nsfw_video', 'archive_explicit_videos', 'archive_sfw_videos'}
+
     def __init__(self, root, hash_column='perceptual_hash_phash'):
         self.root = root
         self.root.title(f"FFF - Duplicate Manager ({hash_column})")
@@ -890,7 +922,8 @@ class DuplicateManagerGUI:
             'perceptual_hash_average': 'Average Hash',
             'perceptual_hash_whash': 'Wavelet Hash (whash)',
             'md5_hash': 'MD5 Hash',
-            'file_name': 'File Name'
+            'file_name': 'File Name',
+            'video_similarity': 'Video Visual Match',
         }.get(hash_column, hash_column)
 
         # Load configuration
@@ -914,7 +947,9 @@ class DuplicateManagerGUI:
         self.status_text = tk.StringVar(value="Ready")
         self.skip_confirmations = tk.BooleanVar(value=False)  # Skip confirmation dialogs
         self.incremental_load = tk.BooleanVar(value=False)  # Load groups incrementally vs all at once
-        self.skip_videos = tk.BooleanVar(value=True)  # Skip video files in duplicate search
+        # Images and videos are scanned separately: 'images' excludes videos, 'videos' includes only videos
+        self.media_type = tk.StringVar(value='videos' if hash_column in self.VIDEO_ONLY_MODES else 'images')
+        self.folder_filter = tk.StringVar(value='')  # Empty = whole library; otherwise only files under this folder
         self.compact_layout = tk.BooleanVar(value=True)  # Prefer compact layout for previews
         self.compact_layout.trace_add('write', lambda *_: self._on_layout_toggle())
 
@@ -1414,26 +1449,21 @@ class DuplicateManagerGUI:
         scan_frame = ttk.LabelFrame(parent, text="1 · Detection", padding=2)
         scan_frame.pack(fill='x', pady=(0, 2))
 
+        # Media selector - images and videos are detected and reviewed separately
+        media_row = ttk.Frame(scan_frame)
+        media_row.pack(fill='x', pady=(0, 2))
+        ttk.Label(media_row, text="Media:", font=theme.font(8)).pack(side='left', padx=(0, 4))
+        for value, text in (('images', '[IMAGE] Images'), ('videos', '[VIDEO] Videos')):
+            ttk.Radiobutton(media_row, text=text, value=value, variable=self.media_type,
+                            command=self.on_media_type_changed).pack(side='left', padx=(0, 4))
+
         # Detection mode selector (shortened labels)
         self.hash_type_var = tk.StringVar(value=self.hash_column)
-        hash_types = [
-            ('perceptual_hash_phash', '[TARGET] Perceptual (phash)'),
-            ('perceptual_hash_dhash', '[Loop] Difference (dhash)'),
-            ('perceptual_hash_average', '[FAST] Average'),
-            ('perceptual_hash_whash', '[STREAM] Wavelet (whash)'),
-            ('perceptual_hash_similar', '[SEARCH] Similar (Multi-algo)'),
-            ('view_perceptual_hash_phash', '[TARGET] View: Perceptual (phash)'),
-            ('view_perceptual_hash_dhash', '[Loop] View: Difference (dhash)'),
-            ('view_perceptual_hash_average', '[FAST] View: Average'),
-            ('view_perceptual_hash_whash', '[STREAM] View: Wavelet (whash)'),
-            ('md5_hash', '[SECURE] Binary (Exact)'),
-            ('file_name', '[Notes] Name Match'),
-            ('e621_post_id', '[NUMBER] e621 Post ID')
-        ]
+        hash_types = self._modes_for_media()
 
-        # Store mapping for display
-        self.hash_type_mapping = {ht[0]: ht[1] for ht in hash_types}
-        self.hash_type_reverse_mapping = {ht[1]: ht[0] for ht in hash_types}
+        # Store mapping for display (labels are shared between image and video modes)
+        self.hash_type_mapping = {ht[0]: ht[1] for ht in self.IMAGE_MODES + self.VIDEO_MODES}
+        self.hash_type_reverse_mapping = {ht[1]: ht[0] for ht in self.IMAGE_MODES + self.VIDEO_MODES}
 
         hash_combo = ttk.Combobox(
             scan_frame,
@@ -1471,13 +1501,44 @@ class DuplicateManagerGUI:
         self.similarity_label.pack(side='left')
         self.similarity_frame.pack_forget()  # Hidden by default
 
+        # Video match distance (only for video visual match mode)
+        self.video_distance_frame = ttk.Frame(scan_frame)
+        video_control = ttk.Frame(self.video_distance_frame)
+        video_control.pack(fill='x')
+        ttk.Label(video_control, text="Max dist:", font=theme.font(8)).pack(side='left', padx=(0, 1))
+        self.video_max_distance = tk.IntVar(value=DEFAULT_VIDEO_MAX_DISTANCE)
+        ttk.Scale(
+            video_control,
+            from_=4,
+            to=24,
+            orient='horizontal',
+            variable=self.video_max_distance,
+            command=lambda v: self.video_distance_label.config(text=str(int(float(v))))
+        ).pack(side='left', fill='x', expand=True, padx=(0, 1))
+        self.video_distance_label = ttk.Label(video_control, text=str(DEFAULT_VIDEO_MAX_DISTANCE),
+                                              width=3, font=theme.font(8, 'bold'))
+        self.video_distance_label.pack(side='left')
+        ttk.Label(self.video_distance_frame,
+                  text="Lower = stricter. Same video scores 2-16; unrelated 18+.",
+                  font=theme.font(7), foreground=theme.PALETTE['muted'], wraplength=220).pack(anchor='w')
+        if self.hash_column in self.VIDEO_ONLY_MODES:
+            self.video_distance_frame.pack(fill='x', pady=(2, 2))
+
+        # Optional folder scope - only files inside this folder (and subfolders) are compared
+        folder_row = ttk.Frame(scan_frame)
+        folder_row.pack(fill='x', pady=(2, 0))
+        ttk.Label(folder_row, text="Folder:", font=theme.font(8)).pack(side='left', padx=(0, 2))
+        ttk.Entry(folder_row, textvariable=self.folder_filter, state='readonly',
+                  font=theme.font(8), width=14).pack(side='left', fill='x', expand=True, padx=(0, 1))
+        ttk.Button(folder_row, text="...", width=3,
+                   command=self.choose_folder_filter).pack(side='left', padx=(0, 1))
+        ttk.Button(folder_row, text="x", width=2,
+                   command=lambda: self._set_folder_filter('')).pack(side='left')
+
         # Options - stacked vertically to save width
         ttk.Checkbutton(scan_frame, text="[FAST] Load fast",
                        variable=self.incremental_load,
                        command=self._on_incremental_toggle).pack(anchor='w', pady=(2, 0))
-
-        ttk.Checkbutton(scan_frame, text="[ACTION] Skip videos",
-                       variable=self.skip_videos).pack(anchor='w')
 
         ttk.Checkbutton(scan_frame, text="[Compact] Compact layout",
                    variable=self.compact_layout).pack(anchor='w')
@@ -1630,6 +1691,77 @@ class DuplicateManagerGUI:
         self.root.bind('<Left>', lambda e: self.previous_group())
         self.root.bind('<Right>', lambda e: self.next_group())
 
+    def _modes_for_media(self) -> List[Tuple[str, str]]:
+        """Detection modes offered for the selected media type."""
+        return self.VIDEO_MODES if self.media_type.get() == 'videos' else self.IMAGE_MODES
+
+    def _filter_rows_by_media(self, rows: List[Dict]) -> List[Dict]:
+        """Keep only videos in video mode, and only non-videos in image mode; apply the folder scope."""
+        want_videos = self.media_type.get() == 'videos'
+        before_count = len(rows)
+        rows = [r for r in rows if (get_file_type(r['file_path']) == 'video') == want_videos]
+        filtered_count = before_count - len(rows)
+        if filtered_count > 0:
+            logger.info(f"Filtered out {filtered_count} {'non-video' if want_videos else 'video'} files from results")
+        return self._filter_rows_by_folder(rows)
+
+    def choose_folder_filter(self):
+        """Pick a folder to limit the scan to."""
+        initial = self.folder_filter.get() or None
+        folder = filedialog.askdirectory(title="Only find duplicates inside this folder",
+                                         initialdir=initial, mustexist=True)
+        if folder:
+            self._set_folder_filter(folder)
+
+    def _set_folder_filter(self, folder: str):
+        if folder == self.folder_filter.get():
+            return
+        self.folder_filter.set(folder)
+        if folder:
+            name = os.path.basename(os.path.normpath(folder)) or folder
+            self.log_message(f"Scope: {folder}")
+            self.status_text.set(f"Ready - only files under {name}")
+        else:
+            self.log_message("Scope: whole library")
+            self.status_text.set("Ready - whole library")
+
+    def _filter_rows_by_folder(self, rows: List[Dict]) -> List[Dict]:
+        """Keep only rows under the selected folder (no-op when no folder is set)."""
+        folder = self.folder_filter.get()
+        if not folder:
+            return rows
+        prefix = os.path.normcase(os.path.normpath(folder)).rstrip(os.sep) + os.sep
+        kept = [r for r in rows if os.path.normcase(os.path.normpath(r['file_path'])).startswith(prefix)]
+        logger.info(f"Folder scope {folder}: kept {len(kept)} of {len(rows)} files")
+        return kept
+
+    def _tables_for_media(self, all_tables: List[Tuple[str, str]]) -> List[Tuple[str, str]]:
+        """Drop video-only tables when scanning images; mixed tables are filtered by extension later."""
+        if self.media_type.get() == 'videos':
+            return all_tables
+        return [(name, table) for name, table in all_tables if table not in self.VIDEO_TABLES]
+
+    def on_media_type_changed(self):
+        """Switch between image and video detection modes."""
+        modes = self._modes_for_media()
+        mode_columns = [m[0] for m in modes]
+        previous_media = 'images' if self.media_type.get() == 'videos' else 'videos'
+
+        if self.duplicate_groups:
+            msg = (f"Switch to {self.media_type.get()}?\n\n"
+                   "This will clear current results and require a new scan.")
+            if not messagebox.askyesno("Change Media Type", msg):
+                self.media_type.set(previous_media)
+                return
+
+        self.hash_type_combo.config(values=[m[1] for m in modes])
+        new_column = self.hash_column if self.hash_column in mode_columns else mode_columns[0]
+        self.hash_type_combo.set(self.hash_type_mapping[new_column])
+        # Force the reset even when the mode (e.g. md5) exists for both media types
+        self.hash_column = None
+        self.duplicate_groups = []
+        self.on_hash_type_changed()
+
     def on_hash_type_changed(self, event=None):
         """Handle hash type selection change."""
         # Get selected display name and convert to column name
@@ -1639,9 +1771,14 @@ class DuplicateManagerGUI:
         # Show/hide similarity controls based on mode
         # Similarity controls are for the multi-algorithm mode or for any perceptual hash
         if new_hash_column == 'perceptual_hash_similar' or new_hash_column.startswith('perceptual_hash_'):
-            self.similarity_frame.pack(fill='x', pady=(2, 2))
+            self.similarity_frame.pack(fill='x', pady=(2, 2), after=self.hash_type_combo)
         else:
             self.similarity_frame.pack_forget()
+
+        if new_hash_column in self.VIDEO_ONLY_MODES:
+            self.video_distance_frame.pack(fill='x', pady=(2, 2), after=self.hash_type_combo)
+        else:
+            self.video_distance_frame.pack_forget()
 
         # Show/hide Auto Handle All button for view modes
         if new_hash_column.startswith('view_'):
@@ -1736,6 +1873,9 @@ class DuplicateManagerGUI:
     def execute_duplicate_query(self) -> List[Dict]:
         """Execute the SQL query to find duplicates using configured hash column."""
         try:
+            if self.hash_column == 'video_similarity':
+                return self.execute_video_similarity_search()
+
             # Check if we're using view-based detection
             if self.hash_column.startswith('view_'):
                 return self.execute_view_based_query()
@@ -1750,9 +1890,6 @@ class DuplicateManagerGUI:
 
             # Build query with dynamic hash column
             hash_col = self.hash_column
-
-            # Build list of tables to include based on skip_videos setting
-            skip_videos = self.skip_videos.get()
 
             # Define all tables
             all_tables = [
@@ -1778,12 +1915,7 @@ class DuplicateManagerGUI:
             if self.ignore_archive_premium:
                 all_tables = [(name, table) for name, table in all_tables if table != 'archive_premium']
 
-            # Filter out video tables if skip_videos is enabled
-            video_tables = {'manual_sort_videos', 'sfw_video', 'nsfw_video', 'archive_explicit_videos', 'archive_sfw_videos'}
-            tables_to_query = [
-                (name, table) for name, table in all_tables
-                if not (skip_videos and table in video_tables)
-            ]
+            tables_to_query = self._tables_for_media(all_tables)
 
             # Build UNION ALL query dynamically
             # When comparing file names, strip extensions (from the last dot)
@@ -1845,16 +1977,8 @@ class DuplicateManagerGUI:
             cursor.close()
             conn.close()
 
-            # Additional filter: if skip_videos is enabled, filter out video files by extension
-            # This handles cases where video files might be in tables like 'favorites'
-            if skip_videos:
-                before_count = len(results)
-                results = [f for f in results if get_file_type(f['file_path']) != 'video']
-                filtered_count = before_count - len(results)
-                if filtered_count > 0:
-                    logger.info(f"Filtered out {filtered_count} video files from results")
-
-            return results
+            # Mixed tables like 'favorites' hold both images and videos - filter by extension
+            return self._filter_rows_by_media(results)
 
         except Exception as e:
             logger.error(f"Database query failed: {e}")
@@ -1871,7 +1995,6 @@ class DuplicateManagerGUI:
             cursor = conn.cursor(dictionary=True)
 
             hash_col = self.hash_column
-            skip_videos = self.skip_videos.get()
 
             all_tables = [
                 ('archive_premium', 'archive_premium'),
@@ -1896,11 +2019,7 @@ class DuplicateManagerGUI:
             if self.ignore_archive_premium:
                 all_tables = [(name, table) for name, table in all_tables if table != 'archive_premium']
 
-            video_tables = {'manual_sort_videos', 'sfw_video', 'nsfw_video', 'archive_explicit_videos', 'archive_sfw_videos'}
-            tables_to_query = [
-                (name, table) for name, table in all_tables
-                if not (skip_videos and table in video_tables)
-            ]
+            tables_to_query = self._tables_for_media(all_tables)
 
             union_parts = []
             for table_name, table in tables_to_query:
@@ -1928,12 +2047,7 @@ class DuplicateManagerGUI:
             if self.ignore_archive_premium:
                 all_files = [f for f in all_files if f.get('table_name') != 'archive_premium']
 
-            if skip_videos:
-                before_count = len(all_files)
-                all_files = [f for f in all_files if get_file_type(f['file_path']) != 'video']
-                filtered_count = before_count - len(all_files)
-                if filtered_count > 0:
-                    logger.info(f"Filtered out {filtered_count} video files from results")
+            all_files = self._filter_rows_by_media(all_files)
 
             total_files = len(all_files)
             if total_files == 0:
@@ -2290,6 +2404,83 @@ class DuplicateManagerGUI:
             self.root.after(0, lambda: self.status_text.set(f"Similarity search failed: {e}"))
             raise
 
+    def execute_video_similarity_search(self) -> List[Dict]:
+        """Find the same video at different quality levels using multi-frame signatures."""
+        if not video_similarity.HAS_VIDEO_SIMILARITY:
+            raise RuntimeError("Video matching needs opencv-python, imagehash and Pillow installed")
+
+        def status(text, progress=None):
+            self.root.after(0, lambda: self.status_text.set(text))
+            if progress is not None:
+                self.root.after(0, lambda: self.scan_progress.set(progress))
+
+        status("Loading videos from database...", 2)
+        conn = self.db_manager.get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute(f"""
+            SELECT table_name, file_path, file_modified_at, file_size, e621_post_id
+            FROM all_files
+            WHERE LOWER(file_path) REGEXP '\\\\.(mp4|webm|mov|avi|mkv|m4v)$'
+        """)
+        rows = cursor.fetchall()
+        cursor.close()
+        conn.close()
+
+        rows = [
+            r for r in self._filter_rows_by_folder(rows)
+            if not self._should_skip_table(r.get('table_name', '')) and os.path.exists(r['file_path'])
+        ]
+        rows_by_path: Dict[str, List[Dict]] = defaultdict(list)
+        for row in rows:
+            rows_by_path[row['file_path']].append(row)
+        paths = sorted(rows_by_path)
+        if len(paths) < 2:
+            status("[OK] Not enough videos to compare", 100)
+            return []
+
+        # Stage 1 (0-90%): signatures - cached ones load instantly, new ones are extracted
+        def on_signature_progress(done, total, cached):
+            new = done - cached
+            status(f"[VIDEO] Signatures {done:,}/{total:,} ({cached:,} cached, {new:,} new)",
+                   2 + 88 * done / max(total, 1))
+
+        cache = video_similarity.VideoSignatureCache(self.db_manager.get_db_connection, _sorter_db())
+        signatures = video_similarity.build_signatures(paths, cache=cache, progress_callback=on_signature_progress)
+
+        # Stage 2 (90-98%): compare every pair
+        sig_paths = [p for p in paths if p in signatures]
+        sig_list = [signatures[p] for p in sig_paths]
+        max_distance = int(self.video_max_distance.get())
+        status(f"Comparing {len(sig_list):,} videos...", 90)
+        pairs = video_similarity.find_similar_pairs(
+            sig_list, max_distance,
+            progress_callback=lambda i, n: status(f"Comparing videos {i:,}/{n:,}...", 90 + 8 * i / n),
+        )
+        groups = video_similarity.group_pairs(len(sig_list), pairs)
+        groups.sort(key=lambda g: g[1])  # Clearest matches first
+
+        results = []
+        for group_number, (members, worst) in enumerate(groups, start=1):
+            synthetic_hash = f"video_d{worst:02d}_g{group_number:04d}"
+            best = max(members, key=lambda k: sig_list[k].quality_key())
+            for k in members:
+                sig = sig_list[k]
+                for row in rows_by_path[sig_paths[k]]:
+                    row = dict(row)
+                    row['hash_value'] = synthetic_hash
+                    row['video_quality'] = sig.describe()
+                    row['video_quality_key'] = sig.quality_key()
+                    row['video_best_quality'] = (k == best)
+                    row['video_distance'] = worst
+                    results.append(row)
+
+        failed = sum(1 for p in paths if p not in signatures)
+        failed_note = f", {failed} unreadable" if failed else ""
+        status(f"[OK] {len(groups)} video groups at max distance {max_distance}{failed_note}", 100)
+        logger.info(f"Video similarity: {len(sig_list)} videos, {len(pairs)} matching pairs, "
+                    f"{len(groups)} groups{failed_note}")
+        return results
+
     def execute_view_based_query(self) -> List[Dict]:
         """Execute duplicate query using all_files view with CTE."""
         try:
@@ -2339,13 +2530,7 @@ class DuplicateManagerGUI:
             if self.ignore_archive_premium:
                 results = [f for f in results if f.get('table_name') != 'archive_premium']
 
-            # Filter out videos if skip_videos is enabled
-            if self.skip_videos.get():
-                before_count = len(results)
-                results = [f for f in results if get_file_type(f['file_path']) != 'video']
-                filtered_count = before_count - len(results)
-                if filtered_count > 0:
-                    logger.info(f"Filtered out {filtered_count} video files from results")
+            results = self._filter_rows_by_media(results)
 
             logger.info(f"View-based query found {len(results)} duplicate files")
             return results
@@ -2495,7 +2680,12 @@ class DuplicateManagerGUI:
             file_type_label = ""
 
         # Update hash display with file type
-        self.hash_label.config(text=group.hash_value[:16] + "..." + file_type_label)
+        video_distance = group.files[0].get('video_distance') if group.files else None
+        if video_distance is not None:
+            confidence = "clear match" if video_distance <= 10 else "check frames - may be a different edit"
+            self.hash_label.config(text=f"Frame distance {video_distance}/64 ({confidence}){file_type_label}")
+        else:
+            self.hash_label.config(text=group.hash_value[:16] + "..." + file_type_label)
 
         # Update navigation display
         self.current_group_var.set(f"Group {self.current_group_index + 1} of {len(self.duplicate_groups)}")
@@ -2573,6 +2763,12 @@ class DuplicateManagerGUI:
             if file_size > largest_size:
                 largest_size = file_size
                 largest_idx = idx
+
+        # Video matches: file size says little across codecs, so pick content by resolution/bitrate
+        is_video_match = any('video_quality_key' in f for f in files_to_display)
+        if is_video_match:
+            largest_idx = max(range(num_files),
+                              key=lambda i: tuple(files_to_display[i].get('video_quality_key', (0, 0))))
 
         best_dir_idx = 0
         best_dir_priority = group._get_directory_priority(files_to_display[0]['file_path'].lower())
@@ -2669,6 +2865,11 @@ class DuplicateManagerGUI:
 
         def _size_value(idx, file_info):
             size_mb = file_info.get('file_size', 0) / (1024 * 1024)
+            if is_video_match:
+                text = f"{file_info.get('video_quality') or '?'} · {size_mb:.1f} MB"
+                if idx == largest_idx:
+                    text += " · best quality"
+                return text
             text = f"{size_mb:.1f} MB"
             if idx == largest_idx:
                 text += " · largest"
@@ -2787,6 +2988,11 @@ class DuplicateManagerGUI:
 
         ttk.Label(info_frame, text=f"[CHART] Size: {file_info.get('file_size', 0):,} bytes",
                  font=theme.font(8)).pack(anchor='w')
+
+        if file_info.get('video_quality'):
+            best = " (best quality)" if file_info.get('video_best_quality') else ""
+            ttk.Label(info_frame, text=f"[VIDEO] {file_info['video_quality']}{best}",
+                     font=theme.font(8, 'bold' if best else 'normal')).pack(anchor='w')
 
         ttk.Label(info_frame, text=f"[FOLDER] Table: {file_info['table_name']}",
                  font=theme.font(8)).pack(anchor='w')
