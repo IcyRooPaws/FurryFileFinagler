@@ -261,6 +261,13 @@ _WINDOWS_RESERVED_NAMES = {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in rang
                            *(f"LPT{i}" for i in range(1, 10))}
 
 
+def clean_artist_names(artists):
+    """Prepare artist names for a filename: strip leading dots (e.g. '.gearsy' -> 'gearsy')
+    so files never start with '.', and drop names left empty (e.g. '...')."""
+    cleaned = [a.lstrip('.') for a in artists if a]
+    return [a for a in cleaned if a]
+
+
 def windows_safe_filename(name):
     r"""Replace every character Windows doesn't allow in a file name with '_'.
 

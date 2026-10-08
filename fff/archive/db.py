@@ -9,7 +9,7 @@ from datetime import datetime
 
 # Import path normalization utility
 from fff.archive.config import normalize_file_path
-from fff.common.naming import windows_safe_filename
+from fff.common.naming import clean_artist_names, windows_safe_filename
 
 
 def _sorter_db_name():
@@ -998,7 +998,7 @@ def check_and_update_file_artist_names(conn, batch_limit=None, dry_run=False):
 
             # Filter out avoid_posting, conditional_dnp, unknown, and sound_warning
             excluded_artists = {"avoid_posting", "conditional_dnp", "unknown", "sound_warning"}
-            current_artists = [a for a in current_artists if a not in excluded_artists]
+            current_artists = clean_artist_names(a for a in current_artists if a not in excluded_artists)
             if not current_artists:
                 current_artists = ["unknown"]
 
@@ -1429,7 +1429,7 @@ def insert_or_update_post(conn, post, commit: bool = True):
     artists = (_tags.get("artist", []) if isinstance(_tags, dict) else []) or []
     # Filter out "avoid_posting", "conditional_dnp", "unknown", and "sound_warning" from artist names
     excluded_artists = {"avoid_posting", "conditional_dnp", "unknown", "sound_warning"}
-    artists = [artist for artist in artists if artist not in excluded_artists]
+    artists = clean_artist_names(artist for artist in artists if artist not in excluded_artists)
     if artists:
         artist_part = "_".join(artists)
     else:
@@ -1614,7 +1614,7 @@ def insert_or_update_posts_bulk(conn, posts, commit: bool = True):
         artists = (_tags.get("artist", []) if isinstance(_tags, dict) else []) or []
         # Filter out "avoid_posting", "conditional_dnp", "unknown", and "sound_warning" from artist names
         excluded_artists = {"avoid_posting", "conditional_dnp", "unknown", "sound_warning"}
-        artists = [artist for artist in artists if artist not in excluded_artists]
+        artists = clean_artist_names(artist for artist in artists if artist not in excluded_artists)
         artist_part = "_".join(artists) if artists else "unknown"
         file_name = f"{artist_part}-{rating_full}-{post_id}"
         if extension:
@@ -3690,8 +3690,7 @@ def backfill_missing_file_names(conn):
         # Filter out "avoid_posting", "conditional_dnp", "unknown", and "sound_warning" and strip flag tokens from artist names
         excluded_artists = {"avoid_posting", "conditional_dnp", "unknown", "sound_warning"}
         artists = [artist for artist in artists if artist not in excluded_artists]
-        artists = [strip_flag_tokens(artist) for artist in artists]
-        artists = [a for a in artists if a]
+        artists = clean_artist_names(strip_flag_tokens(artist) for artist in artists)
         if artists:
             artist_part = "_".join(artists)
         else:
@@ -3850,8 +3849,7 @@ def backfill_conditional_dnp(conn, e621_config, batch_limit: int | None = None):
                 WHERE pa.post_id = %s
                 ORDER BY a.name
             """, (pid,))
-            artist_list = [strip_flag_tokens(r[0]) for r in cursor_art.fetchall()]
-            artist_list = [a for a in artist_list if a]
+            artist_list = clean_artist_names(strip_flag_tokens(r[0]) for r in cursor_art.fetchall())
             cursor_art.close()
             cursor_meta = conn.cursor()
             cursor_meta.execute("SELECT rating, file_url, file_path FROM posts WHERE id=%s", (pid,))
