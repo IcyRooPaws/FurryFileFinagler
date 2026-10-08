@@ -188,14 +188,11 @@ def get_global_base_dirs(tag_sorting_data: dict, main_config: Optional[dict] = N
     1. An explicit ``base_directories`` block in tag_sorting.yaml, if set.
     2. Otherwise derived from config.yaml's ``destination_directories`` +
        tag_sorting.yaml's ``tag_sort_subdirectory``.
+
+    Also returns sfw_pictures/sfw_videos/sfw_gifs, which receive files rated
+    'safe' (same priority, derived from the sfw_* destination directories).
     """
     bases = tag_sorting_data.get('base_directories', {}) or {}
-    if any(bases.get(k, '') for k in ('pictures', 'videos', 'gifs')):
-        return {
-            'pictures': bases.get('pictures', ''),
-            'videos': bases.get('videos', ''),
-            'gifs': bases.get('gifs', ''),
-        }
     if main_config is None:
         main_config = _load_main_config()
     subdir = tag_sorting_data.get('tag_sort_subdirectory', '') or ''
@@ -206,11 +203,24 @@ def get_global_base_dirs(tag_sorting_data: dict, main_config: Optional[dict] = N
             return ''
         return os.path.join(base, subdir) if subdir else base
 
-    return {
-        'pictures': _join(dest.get('nsfw_image', '')),
-        'videos': _join(dest.get('nsfw_video', '')),
-        'gifs': _join(dest.get('nsfw_gif', '')),
+    if any(bases.get(k, '') for k in ('pictures', 'videos', 'gifs')):
+        nsfw = {
+            'pictures': bases.get('pictures', ''),
+            'videos': bases.get('videos', ''),
+            'gifs': bases.get('gifs', ''),
+        }
+    else:
+        nsfw = {
+            'pictures': _join(dest.get('nsfw_image', '')),
+            'videos': _join(dest.get('nsfw_video', '')),
+            'gifs': _join(dest.get('nsfw_gif', '')),
+        }
+    sfw = {
+        'sfw_pictures': bases.get('sfw_pictures') or _join(dest.get('sfw_image', '')),
+        'sfw_videos': bases.get('sfw_videos') or _join(dest.get('sfw_video', '')),
+        'sfw_gifs': bases.get('sfw_gifs') or _join(dest.get('sfw_gif', '')),
     }
+    return {**nsfw, **sfw}
 
 
 def resolve_e621_db_config(tag_sorting_data: dict, main_config: Optional[dict] = None) -> dict:
@@ -288,7 +298,8 @@ def _split_mode_directories(rule: dict, base_dirs: dict) -> list:
         if append_label:
             from pathlib import PurePosixPath
             parts = PurePosixPath(folder_name.replace('\\', '/')).parts
-            suffix = labels.get(media_type, media_type.capitalize())
+            label_key = media_type[len('sfw_'):] if media_type.startswith('sfw_') else media_type
+            suffix = labels.get(label_key, label_key.capitalize())
             if parts:
                 effective = os.path.join(*[f'{p} - {suffix}' for p in parts])
         dirs.append(os.path.join(base, effective))

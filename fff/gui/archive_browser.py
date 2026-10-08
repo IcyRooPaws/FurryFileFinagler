@@ -50,6 +50,8 @@ PAGE = r"""
     .topline { display:flex; justify-content:space-between; gap:8px; align-items:center; font-family:"Trebuchet MS", sans-serif; }
     .id { color:var(--teal); font-weight:700; }
     .rating { padding:2px 6px; border-radius:3px; color:white; background:var(--accent); font-size:11px; text-transform:uppercase; }
+    .rating.safe { background:#2f9e44; }
+    .rating.questionable { background:#f0c419; color:#1d2321; }
     .artists { margin:7px 0 3px; color:var(--accent-dark); font-weight:700; overflow-wrap:anywhere; }
     .meta { color:var(--muted); font-size:13px; }
     .deleted { margin-top:8px; padding:6px 8px; border-left:3px solid var(--accent); background:#de3c2e18; color:var(--accent); font-size:13px; }
@@ -58,6 +60,15 @@ PAGE = r"""
     .pager { display:flex; justify-content:center; align-items:center; gap:14px; margin-top:24px; }
     .pager button { width:auto; min-width:90px; }
     .empty { padding:50px 15px; text-align:center; color:var(--muted); }
+    .search { position:relative; }
+    .suggest { position:absolute; z-index:10; top:100%; left:0; right:0; margin:4px 0 0; padding:4px 0; list-style:none; border:1px solid var(--line); border-radius:4px; background:#1d2321; box-shadow:0 10px 28px #00000080; max-height:360px; overflow-y:auto; }
+    .suggest[hidden] { display:none; }
+    .suggest li { display:flex; gap:10px; align-items:baseline; padding:7px 11px; cursor:pointer; }
+    .suggest li.active, .suggest li:hover { background:var(--panel); }
+    .suggest .name { flex:1; overflow-wrap:anywhere; }
+    .suggest .name mark { background:none; color:var(--accent); font-weight:700; }
+    .suggest .kind, .suggest .count { color:var(--muted); font:12px "Trebuchet MS", sans-serif; }
+    .suggest .kind.artist { color:var(--accent); }
     @media (max-width:700px) { .controls { grid-template-columns:1fr 1fr; } .controls .search { grid-column:1/-1; } .grid { grid-template-columns:repeat(auto-fill, minmax(160px, 1fr)); gap:9px; } }
   </style>
 </head>
@@ -65,7 +76,7 @@ PAGE = r"""
   <header><h1>Local E621 Archive</h1><p class="subtitle">Browse the files and metadata already in your archive.</p></header>
   <main>
     <form id="filters" class="controls">
-      <div class="search"><label for="q">Search</label><input id="q" name="q" placeholder="artist, tag, filename, or post ID"></div>
+      <div class="search"><label for="q">Search</label><input id="q" name="q" placeholder="artist, tag, filename, or post ID" autocomplete="off" role="combobox" aria-autocomplete="list" aria-controls="suggest" aria-expanded="false"><ul id="suggest" class="suggest" role="listbox" hidden></ul></div>
       <div><label for="rating">Rating</label><select id="rating"><option value="">All ratings</option><option>safe</option><option>questionable</option><option>explicit</option></select></div>
       <div><label for="deleted">Status</label><select id="deleted"><option value="">All posts</option><option value="0">Active</option><option value="1">Deleted</option></select></div>
     <div><label for="sort">Sort by</label><select id="sort"><option value="created_at_desc">Created: newest</option><option value="created_at_asc">Created: oldest</option><option value="deleted_at_desc">Deleted: newest</option><option value="deleted_at_asc">Deleted: oldest</option></select></div>
@@ -84,7 +95,7 @@ PAGE = r"""
     function card(post) {
       const media = post.has_file ? (post.is_video ? `<video class="preview" controls preload="metadata" src="${post.media_url}"></video>` : `<img class="preview" loading="lazy" src="${post.media_url}" alt="Post ${post.id}">`) : '<div class="preview missing">File unavailable</div>';
       const deleted = post.deleted ? `<div class="deleted">Deleted${post.deletion_reason ? ': ' + esc(post.deletion_reason) : ''}</div>` : '';
-    return `<article class="card"><a class="card-open" href="/post/${post.id}">${media}</a><div class="body"><div class="topline"><a class="id" href="/post/${post.id}">#${post.id}</a><span class="rating">${esc(post.rating)}</span></div><div class="artists">${esc(post.artists || 'Unknown artist')}</div><div class="meta">${esc(post.file_name || 'No filename')}</div>${deleted}<div class="links">${post.file_url ? `<a href="${esc(post.file_url)}" target="_blank" rel="noreferrer">Open source</a>` : ''}</div></div></article>`;
+    return `<article class="card"><a class="card-open" href="/post/${post.id}">${media}</a><div class="body"><div class="topline"><a class="id" href="/post/${post.id}">#${post.id}</a><span class="rating ${esc(post.rating)}">${esc(post.rating)}</span></div><div class="artists">${esc(post.artists || 'Unknown artist')}</div><div class="meta">${esc(post.file_name || 'No filename')}</div>${deleted}<div class="links">${post.file_url ? `<a href="${esc(post.file_url)}" target="_blank" rel="noreferrer">Open source</a>` : ''}</div></div></article>`;
     }
     async function load() {
       const grid = document.querySelector('#grid'); grid.innerHTML = '<div class="empty">Loading...</div>';
@@ -95,7 +106,44 @@ PAGE = r"""
       document.querySelector('#page').textContent = `Page ${data.page} of ${Math.max(1, data.pages)}`;
       document.querySelector('#prev').disabled = data.page <= 1; document.querySelector('#next').disabled = data.page >= data.pages;
     }
-    document.querySelector('#filters').addEventListener('submit', event => { event.preventDefault(); currentPage = 1; load(); });
+    document.querySelector('#filters').addEventListener('submit', event => { event.preventDefault(); hideSuggestions(); currentPage = 1; load(); });
+    const q = document.querySelector('#q'), list = document.querySelector('#suggest');
+    let suggestions = [], active = -1, suggestTimer = null, suggestSeq = 0;
+    function hideSuggestions() { clearTimeout(suggestTimer); suggestSeq++; list.hidden = true; q.setAttribute('aria-expanded', 'false'); suggestions = []; active = -1; }
+    function highlight(name, term) {
+      const i = name.toLowerCase().indexOf(term);
+      return i < 0 ? esc(name) : esc(name.slice(0, i)) + '<mark>' + esc(name.slice(i, i + term.length)) + '</mark>' + esc(name.slice(i + term.length));
+    }
+    function renderSuggestions(term) {
+      if (!suggestions.length) { hideSuggestions(); return; }
+      list.innerHTML = suggestions.map((s, i) => `<li role="option" data-i="${i}" class="${i === active ? 'active' : ''}"><span class="name">${highlight(s.name, term)}</span><span class="kind ${esc(s.type)}">${esc(s.type)}</span><span class="count">${s.count.toLocaleString()}</span></li>`).join('');
+      list.hidden = false; q.setAttribute('aria-expanded', 'true');
+      list.querySelector('.active')?.scrollIntoView({ block: 'nearest' });
+    }
+    function pick(i) { q.value = suggestions[i].name; hideSuggestions(); currentPage = 1; load(); }
+    q.addEventListener('input', () => {
+      clearTimeout(suggestTimer);
+      const term = q.value.trim().toLowerCase().replace(/ /g, '_');
+      if (term.length < 2) { hideSuggestions(); return; }
+      suggestTimer = setTimeout(async () => {
+        const seq = ++suggestSeq;
+        try {
+          const data = await (await fetch('/api/suggest?' + new URLSearchParams({ q: term }))).json();
+          if (seq !== suggestSeq) return;  // a newer keystroke already took over
+          suggestions = data.suggestions || []; active = -1; renderSuggestions(term);
+        } catch { hideSuggestions(); }
+      }, 150);
+    });
+    q.addEventListener('keydown', event => {
+      if (list.hidden) return;
+      const term = q.value.trim().toLowerCase().replace(/ /g, '_');
+      if (event.key === 'ArrowDown') { event.preventDefault(); active = (active + 1) % suggestions.length; renderSuggestions(term); }
+      else if (event.key === 'ArrowUp') { event.preventDefault(); active = active <= 0 ? suggestions.length - 1 : active - 1; renderSuggestions(term); }
+      else if ((event.key === 'Enter' || event.key === 'Tab') && active >= 0) { event.preventDefault(); pick(active); }
+      else if (event.key === 'Escape') { hideSuggestions(); }
+    });
+    list.addEventListener('mousedown', event => { const li = event.target.closest('li'); if (li) { event.preventDefault(); pick(+li.dataset.i); } });
+    q.addEventListener('blur', () => setTimeout(hideSuggestions, 100));
     document.querySelector('#prev').addEventListener('click', () => { if (currentPage > 1) { currentPage--; load(); } });
     document.querySelector('#next').addEventListener('click', () => { currentPage++; load(); });
     load();
@@ -128,6 +176,8 @@ DETAIL_PAGE = r"""
         h2 { margin:24px 0 8px; border-bottom:1px solid var(--line); padding-bottom:6px; font:700 16px "Trebuchet MS", sans-serif; text-transform:uppercase; }
         .subhead { margin:7px 0 0; color:var(--muted); }
         .rating { display:inline-block; margin-top:14px; padding:4px 8px; border-radius:3px; color:white; background:var(--accent); font:700 12px "Trebuchet MS", sans-serif; text-transform:uppercase; }
+        .rating.safe { background:#2f9e44; }
+        .rating.questionable { background:#f0c419; color:#1d2321; }
         .deleted { margin-top:16px; padding:10px; border-left:3px solid var(--accent); background:#de3c2e18; color:var(--accent); }
         .tags { display:flex; flex-wrap:wrap; gap:6px; }
         .tag { display:inline-block; padding:4px 7px; border:1px solid var(--line); border-radius:3px; background:#1d2321; color:var(--teal); text-decoration:none; font-size:13px; overflow-wrap:anywhere; }
@@ -152,7 +202,7 @@ DETAIL_PAGE = r"""
             <aside class="info-panel">
                 <h1>Post #{{ post.id }}</h1>
                 <p class="subhead">{{ post.file_name or 'No filename recorded' }}</p>
-                <span class="rating">{{ post.rating or 'unknown' }}</span>
+                <span class="rating {{ post.rating or '' }}">{{ post.rating or 'unknown' }}</span>
                 {% if post.deleted %}<div class="deleted"><strong>Deleted post</strong>{% if post.deletion_reason %}<br>{{ post.deletion_reason }}{% endif %}</div>{% endif %}
                 <h2>Artists</h2>
                 <div class="tags">{% for artist in artists %}<a class="tag artist" href="/?q={{ artist|urlencode }}">{{ artist }}</a>{% else %}<span>None recorded</span>{% endfor %}</div>
@@ -190,12 +240,17 @@ def post_filters(args):
 
     if query:
         like = f"%{query}%"
+        # Resolve matching tags/artists first and look their posts up by id; a
+        # per-post EXISTS re-scans the tag names for every post (~400x slower).
+        text_match = ("p.file_name LIKE %s OR p.deletion_reason LIKE %s"
+                      " OR p.id IN (SELECT qa.post_id FROM posts_artists qa JOIN artists qar ON qar.artist_id = qa.artist_id WHERE qar.name LIKE %s)"
+                      " OR p.id IN (SELECT qt.post_id FROM posts_tags qt JOIN tags qtag ON qtag.tag_id = qt.tag_id WHERE qtag.name LIKE %s)")
         if query.isdecimal():
-            where.append("(p.id = %s OR p.file_name LIKE %s OR p.deletion_reason LIKE %s OR EXISTS (SELECT 1 FROM posts_artists qa JOIN artists qar ON qar.artist_id = qa.artist_id WHERE qa.post_id = p.id AND qar.name LIKE %s) OR EXISTS (SELECT 1 FROM posts_tags qt JOIN tags qtag ON qtag.tag_id = qt.tag_id WHERE qt.post_id = p.id AND qtag.name LIKE %s))")
-            values.extend([int(query), like, like, like, like])
+            where.append(f"(p.id = %s OR {text_match})")
+            values.append(int(query))
         else:
-            where.append("(p.file_name LIKE %s OR p.deletion_reason LIKE %s OR EXISTS (SELECT 1 FROM posts_artists qa JOIN artists qar ON qar.artist_id = qa.artist_id WHERE qa.post_id = p.id AND qar.name LIKE %s) OR EXISTS (SELECT 1 FROM posts_tags qt JOIN tags qtag ON qtag.tag_id = qt.tag_id WHERE qt.post_id = p.id AND qtag.name LIKE %s))")
-            values.extend([like, like, like, like])
+            where.append(f"({text_match})")
+        values.extend([like, like, like, like])
     if rating in {"safe", "questionable", "explicit"}:
         where.append("p.rating = %s")
         values.append(rating)
@@ -332,6 +387,60 @@ def posts():
         })
     pages = (total + PAGE_SIZE - 1) // PAGE_SIZE
     return jsonify({"posts": result, "total": total, "page": page, "pages": pages})
+
+
+def like_escape(text):
+    return text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+@app.get("/api/suggest")
+def suggest():
+    # Tags are stored with underscores; let people type spaces instead.
+    term = request.args.get("q", "").strip().lower().replace(" ", "_")
+    if len(term) < 2:
+        return jsonify({"suggestions": []})
+    prefix = like_escape(term) + "%"
+    contains = "%" + like_escape(term) + "%"
+    # Prefix matches first, then substring matches, each ranked by how many
+    # archived posts use the name.
+    queries = (
+        """
+            SELECT a.name, 'artist', COUNT(*) AS uses
+            FROM artists a JOIN posts_artists pa ON pa.artist_id = a.artist_id
+            WHERE a.name LIKE %s
+            GROUP BY a.artist_id, a.name
+            ORDER BY a.name NOT LIKE %s, uses DESC LIMIT %s
+        """,
+        """
+            SELECT t.name, COALESCE(t.tag_type, 'general'), COUNT(*) AS uses
+            FROM tags t JOIN posts_tags pt ON pt.tag_id = t.tag_id
+            WHERE t.name LIKE %s
+            GROUP BY t.tag_id, t.name, t.tag_type
+            ORDER BY t.name NOT LIKE %s, uses DESC LIMIT %s
+        """,
+    )
+    candidates = []
+    try:
+        connection = database_connection()
+        cursor = connection.cursor()
+        for sql in queries:
+            cursor.execute(sql, (contains, prefix, 25))
+            candidates.extend(cursor.fetchall())
+        cursor.close()
+        connection.close()
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+    seen = set()
+    suggestions = []
+    for name, kind, count in sorted(candidates, key=lambda c: (not c[0].lower().startswith(term), -c[2], c[0])):
+        if name in seen:
+            continue
+        seen.add(name)
+        suggestions.append({"name": name, "type": kind, "count": count})
+        if len(suggestions) >= 12:
+            break
+    return jsonify({"suggestions": suggestions})
 
 
 @app.get("/media/<int:post_id>")

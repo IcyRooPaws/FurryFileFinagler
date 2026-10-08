@@ -206,33 +206,44 @@ class Config:
         return [rule for rule in rules if rule.get('enabled', True)]
 
     def get_tag_sorting_base_dirs(self) -> Dict[str, str]:
-        """Get base directories for tag sorting outputs (pictures/videos/gifs).
+        """Get base directories for tag sorting outputs.
 
-        Priority:
+        Returns pictures/videos/gifs (NSFW, the default) plus
+        sfw_pictures/sfw_videos/sfw_gifs, which receive files rated 'safe'.
+
+        Priority (per key):
         1. Explicit ``base_directories`` block in tag_sorting.yaml
         2. config.yaml ``destination_directories`` + ``tag_sort_subdirectory``
         3. Empty strings (no split-mode routing possible)
         """
         import os
         bases = self.tag_sorting_config.get('base_directories', {}) or {}
-        if any(bases.get(k, '') for k in ('pictures', 'videos', 'gifs')):
-            return {
-                'pictures': bases.get('pictures', ''),
-                'videos': bases.get('videos', ''),
-                'gifs': bases.get('gifs', ''),
-            }
-        # Derive automatically from config.yaml destination_directories
         subdir = self.tag_sorting_config.get('tag_sort_subdirectory', '') or ''
         dest = self.destination_directories or {}
         def _join(base: str) -> str:
             if not base:
                 return ''
             return os.path.join(base, subdir) if subdir else base
-        return {
-            'pictures': _join(dest.get('nsfw_image', '')),
-            'videos': _join(dest.get('nsfw_video', '')),
-            'gifs': _join(dest.get('nsfw_gif', '')),
+
+        if any(bases.get(k, '') for k in ('pictures', 'videos', 'gifs')):
+            nsfw = {
+                'pictures': bases.get('pictures', ''),
+                'videos': bases.get('videos', ''),
+                'gifs': bases.get('gifs', ''),
+            }
+        else:
+            # Derive automatically from config.yaml destination_directories
+            nsfw = {
+                'pictures': _join(dest.get('nsfw_image', '')),
+                'videos': _join(dest.get('nsfw_video', '')),
+                'gifs': _join(dest.get('nsfw_gif', '')),
+            }
+        sfw = {
+            'sfw_pictures': bases.get('sfw_pictures') or _join(dest.get('sfw_image', '')),
+            'sfw_videos': bases.get('sfw_videos') or _join(dest.get('sfw_video', '')),
+            'sfw_gifs': bases.get('sfw_gifs') or _join(dest.get('sfw_gif', '')),
         }
+        return {**nsfw, **sfw}
 
     def get_e621_database_config(self) -> Dict[str, any]:
         """Get e621 database configuration (falls back to main MySQL config)."""

@@ -128,6 +128,10 @@ class TagSorter:
             return "videos"
         return "pictures"
 
+    def _is_safe_rated(self, filename: str) -> bool:
+        # Also matches duplicate-suffixed names like 'artist-safe-123-1.png'
+        return re.search(r'-safe-\d+', filename, re.IGNORECASE) is not None
+
     def _resolve_destination_for_file(self, filename: str, destination_dir: Optional[str],
                                       base_directories: Optional[Dict[str, str]],
                                       folder_name: Optional[str],
@@ -138,6 +142,7 @@ class TagSorter:
         New behavior: use base_directories[type] + folder_name when both are supplied.
         If append_media_type_label is True, appends e.g. "- Pics" / "- Vids" / "- Gifs"
         to folder_name so each media type lands in a distinct sub-folder.
+        Files rated 'safe' go to base_directories['sfw_' + type] when it is set.
         """
         if destination_dir:
             return destination_dir
@@ -146,7 +151,10 @@ class TagSorter:
             return None
 
         media_type = self._classify_media_type(filename)
-        base = base_directories.get(media_type)
+        base = None
+        if self._is_safe_rated(filename):
+            base = base_directories.get(f"sfw_{media_type}")
+        base = base or base_directories.get(media_type)
         if not base:
             return None
         effective_folder = folder_name
