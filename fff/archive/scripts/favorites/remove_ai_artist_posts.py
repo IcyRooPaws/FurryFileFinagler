@@ -2,7 +2,7 @@
 """
 Remove Posts by AI Artists
 
-Reads artist names from data/ai_artist.md and for each matching post:
+Reads artist names from the ai_flagged_artists table and for each matching post:
   - Moves the local file to E:\\Image Sorter Working Folder\\AI\\AI_Artist_Trash
   - Unfavorites the post on e621
   - Downvotes the post on e621
@@ -28,7 +28,8 @@ import requests
 from fff.archive import paths as archive_paths
 
 from fff.archive.config import load_config
-from fff.archive.db import connect_to_mysql
+from fff.archive.db import connect_to_mysql, load_ai_flagged_artists
+from fff.archive.fa_unfavorite import unfavorite_fa_sources
 from fff.archive.logging_setup import setup_logging
 
 AI_ARTIST_DEST = archive_paths.ai_artist_directory()  # fff: config archive.ai_cleanup
@@ -95,6 +96,10 @@ def process_posts(conn, e621_config, posts, dry_run=False):
     removed = 0
     failed = 0
     total = len(posts)
+
+    # Unfavorite their FA sources while source_links still exist
+    if not dry_run:
+        unfavorite_fa_sources(conn, [post['id'] for post in posts], e621_config)
 
     for idx, post in enumerate(posts, 1):
         post_id   = post['id']
@@ -187,7 +192,7 @@ def process_posts(conn, e621_config, posts, dry_run=False):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(
-        description="Remove favorites by artists listed in data/ai_artist.md"
+        description="Remove favorites by artists listed in ai_flagged_artists"
     )
     parser.add_argument('--dry-run', action='store_true',
                         help="Preview changes without applying them")
@@ -205,21 +210,20 @@ def main(argv=None):
     mysql_config = config.get("mysql", {})
     e621_config  = config.get("e621", {})
 
-    # Load artist list
-    ai_artist_path = archive_paths.AI_ARTIST_MD
-    artists = load_ai_artists(str(ai_artist_path))
-    if not artists:
-        logging.error("No artists found in %s - nothing to do", ai_artist_path)
-        sys.exit(1)
-
-    logging.info("Loaded %d artist(s): %s", len(artists), ', '.join(artists))
-
     conn = connect_to_mysql(mysql_config)
     if conn is None:
         logging.error("Failed to connect to database")
         sys.exit(1)
 
     try:
+        # Load artist list
+        artists = load_ai_flagged_artists(conn)
+        if not artists:
+            logging.error("No artists found in ai_flagged_artists - nothing to do")
+            sys.exit(1)
+
+        logging.info("Loaded %d artist(s): %s", len(artists), ', '.join(artists))
+
         posts = fetch_posts_by_artists(conn, artists)
 
         if not posts:

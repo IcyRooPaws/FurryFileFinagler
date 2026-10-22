@@ -31,13 +31,14 @@ Global options: `fff [--config PATH] [--env prod|test] <command>`.
 | `fff e621 rename-artists` | Rename files whose artist tags changed |
 | `fff e621 report deletion-timestamps` | Report how accurate deleted_at timestamps are |
 | `fff e621 report takedowns` | Interactive takedown viewer |
-| `fff e621 ai cleanup-deleted` | Posts e621 deleted as AI: snapshot, unfavorite, optionally trash files, delete from DB (dry run by default) |
+| `fff e621 ai cleanup-deleted` | Posts e621 deleted as AI: snapshot, flag artist, unfavorite, optionally trash files, delete from DB (dry run by default; sync runs it with files trashed) |
 | `fff legacy migrate-ai-artists` | One-off: import data/ai_artist.md into ai_flagged_artists |
 | `fff e621 verify file-paths` | Verify posts.file_path and repair broken paths |
 | `fff e621 verify file-names` | Make posts.file_name agree with the files on disk |
 | `fff e621 match-downloads` | Build dl_fav/dl_nsfw/dl_sfw tables and match downloaded files to posts |
+| `fff e621 ai process` | All AI post processing (AI-deleted cleanup, AI tags, flagged AI artists); also part of 'fff e621 sync' |
 | `fff e621 ai remove-tagged` | Remove posts with AI tags (move file, unfavorite, downvote, delete from DB) |
-| `fff e621 ai remove-artists` | Remove posts by artists listed in data/ai_artist.md |
+| `fff e621 ai remove-artists` | Remove posts by artists listed in ai_flagged_artists |
 | `fff e621 favorites add-missing` | Favorite e621 posts the sorter knows about but that aren't favorited, then sync |
 | `fff e621 favorites swap-duplicates` | Move favorites from 'inferior/duplicate of' posts to their replacements |
 | `fff e621 favorites from-md5` | Look up md5s from data/md5_search/md5.txt and favorite the matches |

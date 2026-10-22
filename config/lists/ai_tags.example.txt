@@ -2,7 +2,7 @@
 # Posts matching any of these tags will be automatically:
 #   - Unfavorited on e621
 #   - Local file deleted (sent to recycle bin)
-#   - Artist name logged to data/ai_artist.md
+#   - Artist name flagged in the ai_flagged_artists table
 # One tag per line. Lines starting with # are comments.
 
 ai_assisted

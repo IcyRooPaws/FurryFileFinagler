@@ -27,6 +27,8 @@ from fff.clients.furaffinity import (
 )
 from fff.common import config as fff_config
 
+MAX_CHECK_ATTEMPTS = 10  # a source that keeps failing stops being retried after this many runs
+
 
 def load_config(config_path: str = None) -> Dict[str, Any]:
     """Load configuration from YAML file."""
@@ -203,13 +205,14 @@ def get_unchecked_sources(local_conn: mysql.connector.connection.MySQLConnection
             SELECT id, source_link, post_id, check_attempts
             FROM external_fa_sources
             WHERE checked = FALSE AND post_id IS NOT NULL
+              AND check_attempts < %s
             ORDER BY created_at ASC
         """
 
         if limit:
             query += f" LIMIT {limit}"
 
-        cursor.execute(query)
+        cursor.execute(query, (MAX_CHECK_ATTEMPTS,))
         results = cursor.fetchall()
         cursor.close()
 
@@ -427,7 +430,12 @@ def main():
                 # Check if favorited
                 is_fav = check_if_fa_favorited(post_id, cookies)
 
-                if is_fav:
+                if is_fav is None:
+                    # Couldn't read the page (FA down or blocking us) - leave unchecked to retry next run
+                    print("[ERROR] Could not check favorite status; will retry")
+                    update_check_attempt(local_conn, source_id, "favorite status check failed")
+                    error_count += 1
+                elif is_fav:
                     print("[OK] Already favorited")
                     already_favorited_count += 1
                     # Update database - mark as favorited
@@ -445,11 +453,10 @@ def main():
                         update_source_check_status(local_conn, source_id, True)
                         checked_count += 1
                     else:
-                        print("[ERROR] Failed to favorite")
+                        print("[ERROR] Failed to favorite; will retry")
                         failed_to_favorite_count += 1
-                        # Update database but mark as not favorited
-                        update_source_check_status(local_conn, source_id, False)
-                        checked_count += 1
+                        # Leave unchecked so the next run retries it
+                        update_check_attempt(local_conn, source_id, "favorite request failed")
 
             except FASubmissionNotFoundError as e:
                 print(f"[INFO] {str(e)}")

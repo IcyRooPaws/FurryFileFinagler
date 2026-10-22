@@ -2,14 +2,15 @@
 
 1. ``fff fluffle search``     find image sources and process matches
 2. ``fff sort workflow``      sort and organize downloaded files
-3. ``fff e621 sync``          sync favorites, downloads, and AI cleanup
-4. ``fff sort workflow``      organize files downloaded by the e621 sync
-5. ``fff fa sync-external``   sync external FurAffinity sources
+3. ``fff e621 sync``          sync favorites and downloads (``--skip-ai``: step 4 does that)
+4. ``fff e621 ai process``    AI post processing, its own stage so it runs even if the sync fails
+5. ``fff sort workflow``      organize files downloaded by the e621 sync
+6. ``fff fa sync-external``   sync external FurAffinity sources
 
 By default, a failed stage doesn't stop the run (unless --stop-on-error). Each stage
 runs as its own ``fff`` process (so logging setup, signal handlers and exit calls
 can't interfere with each other), with the same --env / --config. It adds no logic of its
-own: running the five commands by hand does exactly the same.
+own: running the six commands by hand does exactly the same.
 """
 from __future__ import annotations
 
@@ -25,6 +26,7 @@ STAGES = [
     ("fluffle", ["fluffle", "search"], "Reverse-image source search"),
     ("sort", ["sort", "workflow"], "Library workflow (1st)"),
     ("e621", ["e621", "sync"], "e621 favorites sync"),
+    ("ai", ["e621", "ai", "process"], "AI post processing"),
     ("sort", ["sort", "workflow"], "Library workflow (2nd)"),
     ("fa_sync", ["fa", "sync-external"], "External FA sources sync"),
 ]
@@ -32,6 +34,8 @@ STAGES = [
 
 def add_arguments(p) -> None:
     p.add_argument("--skip-e621", action="store_true", help="Don't run 'fff e621 sync'")
+    p.add_argument("--skip-ai", action="store_true",
+                   help="Don't run 'fff e621 ai process' (the e621 sync then does the AI processing itself)")
     p.add_argument("--skip-fluffle", action="store_true", help="Don't run 'fff fluffle search'")
     p.add_argument("--skip-sort", action="store_true", help="Don't run 'fff sort workflow' (either time)")
     p.add_argument("--skip-fa-sync", action="store_true", help="Don't run the final 'fff fa sync-external'")
@@ -50,6 +54,8 @@ def plan(args) -> list[tuple[str, list[str], str]]:
         argv = list(argv)
         if key == "e621" and args.skip_favorites:
             argv.append("--skip-favorites")
+        if key == "e621" and not args.skip_ai:
+            argv.append("--skip-ai")  # the AI stage right after does it
         stages.append((key, argv, label))
     return stages
 

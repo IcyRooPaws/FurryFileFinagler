@@ -4,14 +4,13 @@ import os
 import logging
 import argparse
 from send2trash import send2trash
-from fff.archive import paths as archive_paths
 from fff.archive.config import load_config
 from fff.archive.logging_setup import setup_logging
 from fff.archive.db import connect_to_mysql, create_tables_if_not_exists, get_existing_posts_info, insert_or_update_post, process_artists_and_tags, backfill_missing_file_names, normalize_ratings, backfill_missing_file_types, insert_post_sources, backfill_missing_sources, get_deleted_posts_count, insert_or_update_posts_bulk, process_artists_and_tags_bulk, insert_post_sources_bulk, backfill_media_hashes, backfill_missing_file_paths, verify_and_repair_file_paths, backfill_timestamps_from_api, check_and_update_file_artist_names, insert_post_relationships_bulk, insert_post_relationships, process_pools_bulk, process_pools, upsert_pools_metadata_bulk, get_pools_missing_metadata, archive_unfavorited_posts
 from fff.archive.api import fetch_favorites, cleanup_temp_responses, load_recent_favorites_from_temp, check_and_cleanup_stale_responses, fetch_pool_metadata
 from fff.archive.scripts.database.backfill_deletion_reasons import backfill_deletion_reasons
-from fff.archive.scripts.favorites.remove_ai_tagged_posts import load_ai_tags, fetch_ai_tagged_posts, log_ai_artists, process_posts as process_ai_tagged_posts
-from fff.archive.scripts.favorites.remove_ai_artist_posts import load_ai_artists, fetch_posts_by_artists, process_posts as process_ai_artist_posts
+from fff.archive.ai_processing import run_ai_processing
+from fff.archive.fa_unfavorite import retry_pending_fa_unfavorites, unfavorite_fa_sources
 from fff.archive.download import ensure_download_folder, download_missing_files, generate_media_hash
 from fff.archive.file_verification import verify_and_update_files
 
@@ -153,8 +152,9 @@ def handle_unfavorited_posts(conn, current_favorite_ids, e621_config):
         if not delete_files_flag and deleted_files_count == 0 and already_deleted_count == 0:
             logging.info("File deletion for unfavorited posts is disabled (delete_unfavorited_files: false)")
 
-        # Now delete the posts from the database
+        # Unfavorite their FA sources while source_links still exist, then delete from the database
         post_ids = [post['id'] for post in unfavorited_posts]
+        unfavorite_fa_sources(conn, post_ids, e621_config)
         delete_posts_from_db(conn, post_ids)
         logging.info(f"Deleted {len(post_ids)} unfavorited posts from database")
     else:
@@ -218,6 +218,8 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description='E621 Favorites Archive Manager')
     parser.add_argument('--skip-favorites', action='store_true',
                        help='Skip calling the API to fetch favorite pages')
+    parser.add_argument('--skip-ai', action='store_true',
+                       help="Skip AI post processing (run it separately with 'fff e621 ai process')")
     args = parser.parse_args(argv)
 
     config = load_config()
@@ -468,6 +470,9 @@ def main(argv=None):
         except Exception as e:
             logging.error("Deletion reason backfill failed: %s", e)
 
+    # Retry FA unfavorites that failed on earlier runs (their e621 posts are already gone)
+    retry_pending_fa_unfavorites(conn, e621_config)
+
     # Check for posts that are no longer in favorites (if enabled)
     # Skip if ingest_only_mode is enabled or if API fetch was skipped
     if ingest_only_mode:
@@ -505,41 +510,11 @@ def main(argv=None):
     else:
         logging.info("Artist filename updates are disabled in configuration")
 
-    # Remove posts with AI tags (unfav, move file, downvote, log artist, delete from DB)
-    try:
-        ai_tags_path = str(archive_paths.AI_TAGS)
-        ai_tags = load_ai_tags(ai_tags_path)
-        if ai_tags:
-            logging.info("Running AI tag removal (%d tag(s))...", len(ai_tags))
-            ai_tagged_posts = fetch_ai_tagged_posts(conn, ai_tags)
-            if ai_tagged_posts:
-                ai_artist_log = str(archive_paths.AI_ARTIST_MD)
-                log_ai_artists(conn, ai_tagged_posts, ai_artist_log)
-                removed, failed = process_ai_tagged_posts(conn, e621_config, ai_tagged_posts)
-                logging.info("AI tag removal complete - removed: %d, failed: %d", removed, failed)
-            else:
-                logging.info("No posts found matching AI tags")
-        else:
-            logging.info("No AI tags configured, skipping AI tag removal")
-    except Exception as e:
-        logging.error("AI tag removal failed: %s", e)
-
-    # Remove posts from known AI artists (unfav, move file, downvote, delete from DB)
-    try:
-        ai_artist_path = str(archive_paths.AI_ARTIST_MD)
-        ai_artists = load_ai_artists(ai_artist_path)
-        if ai_artists:
-            logging.info("Running AI artist removal (%d artist(s))...", len(ai_artists))
-            ai_artist_posts = fetch_posts_by_artists(conn, ai_artists)
-            if ai_artist_posts:
-                removed, failed = process_ai_artist_posts(conn, e621_config, ai_artist_posts)
-                logging.info("AI artist removal complete - removed: %d, failed: %d", removed, failed)
-            else:
-                logging.info("No posts found for known AI artists")
-        else:
-            logging.info("No AI artists listed, skipping AI artist removal")
-    except Exception as e:
-        logging.error("AI artist removal failed: %s", e)
+    # AI post processing (AI-deleted cleanup, AI tags, flagged AI artists)
+    if args.skip_ai:
+        logging.info("AI post processing skipped (--skip-ai flag set)")
+    else:
+        run_ai_processing(conn, e621_config)
 
     conn.close()
 

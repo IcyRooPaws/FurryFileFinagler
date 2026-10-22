@@ -45,6 +45,7 @@ from fff.archive import paths as archive_paths
 
 from fff.archive.config import load_config
 from fff.archive.db import connect_to_mysql, record_ai_flagged_artists
+from fff.archive.fa_unfavorite import unfavorite_fa_sources
 from fff.archive.logging_setup import setup_logging
 from fff.archive.api import api_get
 from fff.gui import host as tool_host, theme
@@ -837,6 +838,9 @@ class BlacklistReviewUI:
                 logging.error(f"Failed to unfavorite post {post_id} on e621: {e}")
                 messagebox.showwarning("Warning", f"Failed to unfavorite on e621: {e}\nPost will still be deleted locally.")
 
+            # Unfavorite its FA source while source_links still exist
+            unfavorite_fa_sources(self.conn, [post_id], self.e621_config)
+
             # Delete from database
             self.delete_from_database(post_id)
 
@@ -1285,6 +1289,9 @@ def auto_delete_critical_posts(conn, e621_config, critical_tags):
 
     logging.info(f"Found {len(posts)} posts with critical blacklist tags - auto-deleting...")
 
+    # Unfavorite their FA sources while source_links still exist
+    unfavorite_fa_sources(conn, [post['id'] for post in posts], e621_config)
+
     deleted_count = 0
     failed_count = 0
 
@@ -1380,8 +1387,8 @@ def _artist_from_filename(file_name):
     return None
 
 
-def log_ai_artists(conn, posts, output_path):
-    """Append artist names from AI-tagged posts to the ai_artist.md log file."""
+def log_ai_artists(conn, posts):
+    """Record artist names from AI-tagged posts in ai_flagged_artists."""
     artists_to_log = set()
     for post in posts:
         raw = post.get('artist_names') or ''
@@ -1399,34 +1406,10 @@ def log_ai_artists(conn, posts, output_path):
         return
 
     record_ai_flagged_artists(conn, artists_to_log)
-
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
-
-    # Load existing entries to avoid duplicates
-    existing = set()
-    if os.path.exists(output_path):
-        with open(output_path, 'r', encoding='utf-8') as f:
-            for line in f:
-                line = line.strip()
-                if line and not line.startswith('#'):
-                    existing.add(line.lstrip('- ').strip())
-
-    new_artists = sorted(artists_to_log - existing)
-    if not new_artists:
-        logging.info("All AI artist names already present in %s", output_path)
-        return
-
-    is_new_file = not os.path.exists(output_path)
-    with open(output_path, 'a', encoding='utf-8') as f:
-        if is_new_file:
-            f.write("# AI Artists\n\n")
-        for artist in new_artists:
-            f.write(f"- {artist}\n")
-
-    logging.info("Logged %d new AI artist(s) to %s: %s", len(new_artists), output_path, ', '.join(new_artists))
+    logging.info("Flagged %d AI artist(s): %s", len(artists_to_log), ', '.join(sorted(artists_to_log)))
 
 
-def auto_delete_ai_tagged_posts(conn, e621_config, ai_tags, ai_artist_log_path):
+def auto_delete_ai_tagged_posts(conn, e621_config, ai_tags):
     """Unfavorite and delete posts matching AI tags, logging their artists."""
     logging.info("Processing AI tags: %s", ai_tags)
 
@@ -1438,8 +1421,9 @@ def auto_delete_ai_tagged_posts(conn, e621_config, ai_tags, ai_artist_log_path):
 
     logging.info("Found %d posts with AI tags - processing...", len(posts))
 
-    # Log artists before deleting
-    log_ai_artists(conn, posts, ai_artist_log_path)
+    # Log artists and unfavorite their FA sources before deleting
+    log_ai_artists(conn, posts)
+    unfavorite_fa_sources(conn, [post['id'] for post in posts], e621_config)
 
     deleted_count = 0
     failed_count = 0
@@ -1554,8 +1538,7 @@ def prepare_review() -> dict:
         ai_deleted_count = 0
         if ai_tags:
             logging.info("Found %d AI tags", len(ai_tags))
-            ai_deleted_count = auto_delete_ai_tagged_posts(conn, e621_config, ai_tags,
-                                                           str(archive_paths.AI_ARTIST_MD))
+            ai_deleted_count = auto_delete_ai_tagged_posts(conn, e621_config, ai_tags)
         else:
             logging.info("No AI tags found (ai_tags.txt not found or empty)")
 

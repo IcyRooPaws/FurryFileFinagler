@@ -8,6 +8,7 @@ This script:
 3. Optionally deletes the local files
 4. Removes posts from database
 5. Archives post information before deletion
+6. Flags the posts' artists in ai_flagged_artists
 
 Usage:
     python scripts/database/cleanup_ai_generated_posts.py                # Dry-run mode
@@ -28,6 +29,8 @@ from fff.archive import paths as archive_paths
 
 from fff.archive.config import load_config
 from fff.archive.db import connect_to_mysql, create_tables_if_not_exists
+from fff.archive.fa_unfavorite import unfavorite_fa_sources
+from fff.archive.scripts.favorites.remove_ai_tagged_posts import log_ai_artists
 from send2trash import send2trash
 import requests
 
@@ -63,6 +66,7 @@ def get_ai_generated_posts(conn):
             SELECT
                 id,
                 MIN(a.artist_id) AS artist_id,
+                GROUP_CONCAT(DISTINCT a.name ORDER BY a.name SEPARATOR ', ') AS artist_names,
                 file_path,
                 file_name,
                 rating,
@@ -398,6 +402,7 @@ def cleanup_ai_generated_posts(conn, e621_config, delete_files=False, dry_run=Tr
         logging.info("\n" + "="*80)
         logging.info("DRY RUN MODE - No changes will be made")
         logging.info("="*80)
+        log_ai_artists(conn, ai_posts, dry_run=True)
         logging.info(f"\nWould unfavorite {len(ai_posts)} posts from e621")
         logging.info(f"Would delete {len(ai_posts)} posts from database")
         if delete_files:
@@ -413,6 +418,13 @@ def cleanup_ai_generated_posts(conn, e621_config, delete_files=False, dry_run=Tr
         logging.error("Failed to archive post information - ABORTING for safety")
         return stats
 
+    # Flag the artists before deletion cascades away their post links
+    try:
+        log_ai_artists(conn, ai_posts)
+    except Exception as e:
+        logging.error("Failed to flag AI artists - ABORTING for safety: %s", e)
+        return stats
+
     # Unfavorite posts from e621 first
     logging.info("\nUnfavoriting posts from e621...")
     post_ids = [p['id'] for p in ai_posts]
@@ -422,6 +434,8 @@ def cleanup_ai_generated_posts(conn, e621_config, delete_files=False, dry_run=Tr
 
     if stats['unfavorite_failed'] > 0:
         logging.warning(f"Failed to unfavorite {stats['unfavorite_failed']} posts - continuing with cleanup")
+
+    unfavorite_fa_sources(conn, post_ids, e621_config)
 
     # Delete files if requested
     if delete_files and stats['files_exist'] > 0:

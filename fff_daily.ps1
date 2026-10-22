@@ -1,7 +1,9 @@
 # FurryFileFinagler daily run: replaces media library manager_E621Manager_reverse search.ps1.
 #
-# Same order as the old script (see 'fff daily --help'):
-#   fluffle search -> sort workflow -> e621 sync -> sort workflow -> fa sync-external
+# Same order as the old script plus AI post processing (see 'fff daily --help'):
+#   fluffle search -> sort workflow -> e621 sync -> e621 ai process -> sort workflow -> fa sync-external
+# AI post processing (posts e621 deleted as AI, AI tags, flagged AI artists) is its own stage
+# so it still runs when the e621 sync fails; pass --skip-ai to leave it to the sync instead.
 # Like the old script, a failed stage doesn't stop the run. Unlike it, the exit code is
 # non-zero when any stage failed, so Task Scheduler's "Last Run Result" shows failures.
 #

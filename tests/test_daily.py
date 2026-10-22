@@ -1,4 +1,4 @@
-"""fff daily: runs the three pipelines in order, as separate fff processes."""
+"""fff daily: runs the pipelines in order, as separate fff processes."""
 import sys
 from types import SimpleNamespace
 
@@ -36,30 +36,45 @@ def test_runs_standard_stage_order():
     """Search, sorting, archive sync, sorting, then external source sync."""
     run = FakeRunner()
     assert daily.run(parse("daily"), runner=run) == 0
-    assert run.stages() == [["fluffle", "search"], ["sort", "workflow"], ["e621", "sync"],
-                            ["sort", "workflow"], ["fa", "sync-external"]]
+    assert run.stages() == [["fluffle", "search"], ["sort", "workflow"], ["e621", "sync", "--skip-ai"],
+                            ["e621", "ai", "process"], ["sort", "workflow"], ["fa", "sync-external"]]
 
 
 def test_skips_and_skip_favorites():
     run = FakeRunner()
     assert daily.run(parse("daily", "--skip-fluffle", "--skip-fa-sync", "--skip-favorites"), runner=run) == 0
-    assert run.stages() == [["sort", "workflow"], ["e621", "sync", "--skip-favorites"], ["sort", "workflow"]]
+    assert run.stages() == [["sort", "workflow"], ["e621", "sync", "--skip-favorites", "--skip-ai"],
+                            ["e621", "ai", "process"], ["sort", "workflow"]]
     run = FakeRunner()
-    assert daily.run(parse("daily", "--skip-e621", "--skip-fluffle", "--skip-sort", "--skip-fa-sync"), runner=run) == 0
+    assert daily.run(parse("daily", "--skip-e621", "--skip-ai", "--skip-fluffle", "--skip-sort", "--skip-fa-sync"),
+                     runner=run) == 0
     assert run.calls == []
+
+
+def test_skip_ai_leaves_ai_processing_to_the_sync():
+    """Without the AI stage, the e621 sync must not be told to skip it."""
+    run = FakeRunner()
+    assert daily.run(parse("daily", "--skip-ai", "--skip-fluffle", "--skip-sort", "--skip-fa-sync"), runner=run) == 0
+    assert run.stages() == [["e621", "sync"]]
+
+
+def test_ai_stage_runs_after_a_failed_sync():
+    run = FakeRunner(codes=[1, 0])
+    assert daily.run(parse("daily", "--skip-fluffle", "--skip-sort", "--skip-fa-sync"), runner=run) == 1
+    assert run.stages() == [["e621", "sync", "--skip-ai"], ["e621", "ai", "process"]]
 
 
 def test_env_and_config_pass_through():
     run = FakeRunner()
-    daily.run(parse("--env", "test", "--config", "x.yaml", "daily", "--skip-fluffle", "--skip-sort", "--skip-fa-sync"),
-              runner=run)
+    daily.run(parse("--env", "test", "--config", "x.yaml", "daily", "--skip-fluffle", "--skip-sort", "--skip-fa-sync",
+                    "--skip-ai"), runner=run)
     assert run.stages() == [["--env", "test", "--config", "x.yaml", "e621", "sync"]]
 
 
 def test_failure_keeps_going_by_default_but_exits_nonzero(log_dir):
-    run = FakeRunner(codes=[0, 0, 1, 0, 0])  # A failed stage does not stop later stages by default.
+    run = FakeRunner(codes=[0, 0, 1, 0, 0, 0])  # A failed stage does not stop later stages by default.
     assert daily.run(parse("daily"), runner=run) == 1
-    assert len(run.calls) == 5
+    assert len(run.calls) == 6
     summary = next(log_dir.glob("*.log")).read_text(encoding="utf-8")
     assert "FAIL e621 favorites sync" in summary and "OK   Library workflow (2nd)" in summary
 
@@ -76,7 +91,7 @@ def test_dry_run_runs_nothing(capsys):
     assert run.calls == []
     out = capsys.readouterr().out
     assert "1. Reverse-image source search: fff --env test fluffle search" in out
-    assert "5. External FA sources sync: fff --env test fa sync-external" in out
+    assert "6. External FA sources sync: fff --env test fa sync-external" in out
 
 
 @pytest.mark.parametrize("argv", sorted({tuple(s[1]) for s in daily.STAGES}), ids=lambda a: " ".join(a))

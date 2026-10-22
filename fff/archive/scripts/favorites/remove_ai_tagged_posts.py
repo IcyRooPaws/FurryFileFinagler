@@ -6,7 +6,7 @@ Standalone script that processes config/ai_tags.txt and for each matching post:
   - Sends the local file to the recycle bin
   - Unfavorites the post on e621
   - Deletes the post from the local database
-  - Logs the artist name(s) to data/ai_artist.md
+  - Flags the artist name(s) in the ai_flagged_artists table
 
 Usage:
     python scripts/favorites/remove_ai_tagged_posts.py [--dry-run]
@@ -29,6 +29,7 @@ from fff.archive import paths as archive_paths
 
 from fff.archive.config import load_config
 from fff.archive.db import connect_to_mysql, create_tables_if_not_exists, record_ai_flagged_artists
+from fff.archive.fa_unfavorite import unfavorite_fa_sources
 from fff.archive.logging_setup import setup_logging
 
 
@@ -102,8 +103,8 @@ def _artist_from_filename(file_name):
     return None
 
 
-def log_ai_artists(conn, posts, output_path, dry_run=False):
-    """Append new artist names from AI-tagged posts to data/ai_artist.md."""
+def log_ai_artists(conn, posts, dry_run=False):
+    """Record artist names from AI-tagged posts in ai_flagged_artists."""
     artists_to_log = set()
     for post in posts:
         raw = post.get('artist_names') or ''
@@ -120,44 +121,24 @@ def log_ai_artists(conn, posts, output_path, dry_run=False):
         logging.info("No artist names to log")
         return
 
-    if not dry_run:
-        record_ai_flagged_artists(conn, sorted(artists_to_log))
-
-    # Load already-logged artists to avoid duplicates
-    existing = set()
-    if os.path.exists(output_path):
-        with open(output_path, 'r', encoding='utf-8') as f:
-            for line in f:
-                line = line.strip()
-                if line and not line.startswith('#'):
-                    existing.add(line.lstrip('- ').strip())
-
-    new_artists = sorted(artists_to_log - existing)
-    if not new_artists:
-        logging.info("All artist names already present in %s", output_path)
-        return
-
     if dry_run:
-        logging.info("[DRY RUN] Would log %d new artist(s) to %s: %s",
-                     len(new_artists), output_path, ', '.join(new_artists))
+        logging.info("[DRY RUN] Would flag %d AI artist(s): %s",
+                     len(artists_to_log), ', '.join(sorted(artists_to_log)))
         return
 
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
-    is_new_file = not os.path.exists(output_path)
-    with open(output_path, 'a', encoding='utf-8') as f:
-        if is_new_file:
-            f.write("# AI Artists\n\n")
-        for artist in new_artists:
-            f.write(f"- {artist}\n")
-
-    logging.info("Logged %d new AI artist(s) to %s: %s",
-                 len(new_artists), output_path, ', '.join(new_artists))
+    record_ai_flagged_artists(conn, sorted(artists_to_log))
+    logging.info("Flagged %d AI artist(s): %s",
+                 len(artists_to_log), ', '.join(sorted(artists_to_log)))
 
 
 def process_posts(conn, e621_config, posts, dry_run=False):
     """Trash file, unfavorite on e621, and delete from DB for each post."""
     deleted_count = 0
     failed_count = 0
+
+    # Unfavorite their FA sources while source_links still exist
+    if not dry_run:
+        unfavorite_fa_sources(conn, [post['id'] for post in posts], e621_config)
 
     for post in posts:
         post_id = post['id']
@@ -288,8 +269,7 @@ def main(argv=None):
         logging.info("Found %d post(s) matching AI tags", len(posts))
 
         # Log artists first (before deletion)
-        ai_artist_log = str(archive_paths.AI_ARTIST_MD)
-        log_ai_artists(conn, posts, ai_artist_log, dry_run=args.dry_run)
+        log_ai_artists(conn, posts, dry_run=args.dry_run)
 
         # Process deletions
         deleted, failed = process_posts(conn, e621_config, posts, dry_run=args.dry_run)

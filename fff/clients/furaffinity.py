@@ -472,6 +472,60 @@ def add_to_fa_favorites(post_id: str, cookies: http.cookiejar.CookieJar) -> bool
         return False
 
 
+def remove_from_fa_favorites(post_id: str, cookies: http.cookiejar.CookieJar) -> bool:
+    """Remove a FurAffinity post from favorites. True if removed or not favorited."""
+    try:
+        view_url = f"https://www.furaffinity.net/view/{post_id}/"
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+
+        session = requests.Session()
+        session.cookies = cookies
+
+        # Get the page to find the unfav key
+        response = _fa_get_with_retry(
+            session,
+            view_url,
+            headers,
+            context=f"FA view page for unfav {post_id}",
+            timeout=30,
+        )
+
+        if not response or response.status_code != 200:
+            return False
+
+        # Check if submission doesn't exist (System Error)
+        if 'System Error' in response.text:
+            raise FASubmissionNotFoundError("The submission you are trying to find is not in our database.")
+
+        unfav_key_match = re.search(r'/unfav/(\d+)/\?key=([a-f0-9]+)', response.text)
+        if not unfav_key_match:
+            # A fav link means it is already not favorited
+            return bool(re.search(r'/fav/\d+/\?key=', response.text))
+
+        unfav_url = f"https://www.furaffinity.net/unfav/{unfav_key_match.group(1)}/?key={unfav_key_match.group(2)}"
+        headers['Referer'] = view_url
+
+        response = _fa_get_with_retry(
+            session,
+            unfav_url,
+            headers,
+            context=f"FA unfavorite request {post_id}",
+            timeout=30,
+            allow_redirects=True,
+        )
+
+        # FA redirects back to the view page, which shows a fav link once removed
+        return bool(response and response.status_code == 200 and '/unfav/' not in response.text)
+
+    except FASubmissionNotFoundError:
+        raise
+    except Exception as e:
+        print(f"\n    [DEBUG] Error removing from FA favorites: {e}")
+        return False
+
+
 def check_if_fa_favorited(post_id: str, cookies: http.cookiejar.CookieJar) -> bool:
     """Check if a FA post is already favorited by looking for the unfav link."""
     try:
@@ -494,11 +548,9 @@ def check_if_fa_favorited(post_id: str, cookies: http.cookiejar.CookieJar) -> bo
         if not response:
             return None
 
-        if response.status_code in FA_RETRYABLE_STATUS_CODES:
-            return None
-
+        # Any non-200 (e.g. a 403 when FA blocks us) means the status is unknown, not "not favorited"
         if response.status_code != 200:
-            return False
+            return None
 
         # Check if submission doesn't exist (System Error)
         if 'System Error' in response.text:
@@ -509,7 +561,7 @@ def check_if_fa_favorited(post_id: str, cookies: http.cookiejar.CookieJar) -> bo
 
     except Exception as e:
         print(f"Error checking FA favorites: {e}")
-        return False
+        return None
 
 
 def download_fa_post(post_data: Dict[str, Any], download_dir: Path, cookies: http.cookiejar.CookieJar,

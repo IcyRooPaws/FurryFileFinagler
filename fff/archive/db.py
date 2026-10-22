@@ -179,6 +179,16 @@ def record_ai_flagged_artists(conn, artist_names):
     finally:
         cursor.close()
 
+
+def load_ai_flagged_artists(conn):
+    """Return the artist names in ai_flagged_artists (the AI artist list)."""
+    cursor = conn.cursor()
+    try:
+        cursor.execute("SELECT artist_name FROM ai_flagged_artists ORDER BY artist_name")
+        return [row[0] for row in cursor.fetchall()]
+    finally:
+        cursor.close()
+
 def connect_to_image_sorting_hashes_db(mysql_config):
     """Connect to the external image hash database if configured.
 

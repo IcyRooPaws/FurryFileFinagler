@@ -52,7 +52,7 @@ COMMANDS = [
     Command(("e621", "report", "takedowns"), f"{S}.database.view_takedown_details",
             "Interactive takedown viewer"),
     Command(("e621", "ai", "cleanup-deleted"), f"{S}.database.cleanup_ai_generated_posts",
-            "Posts e621 deleted as AI: snapshot, unfavorite, optionally trash files, delete from DB (dry run by default)"),
+            "Posts e621 deleted as AI: snapshot, flag artist, unfavorite, optionally trash files, delete from DB (dry run by default; sync runs it with files trashed)"),
     Command(("legacy", "migrate-ai-artists"), f"{S}.database.migrate_ai_artists_to_db",
             "One-off: import data/ai_artist.md into ai_flagged_artists"),
     Command(("e621", "verify", "file-paths"), f"{S}.database.verify_and_repair_file_paths",
@@ -63,10 +63,12 @@ COMMANDS = [
             "Build dl_fav/dl_nsfw/dl_sfw tables and match downloaded files to posts",
             options=[(("--dry-run",), {"action": "store_true"}), (("--skip-to-id-matching",), {"action": "store_true"})]),
     # --- AI cleanup ------------------------------------------------------------------
+    Command(("e621", "ai", "process"), "fff.archive.ai_processing",
+            "All AI post processing (AI-deleted cleanup, AI tags, flagged AI artists); also part of 'fff e621 sync'"),
     Command(("e621", "ai", "remove-tagged"), f"{S}.favorites.remove_ai_tagged_posts",
             "Remove posts with AI tags (move file, unfavorite, downvote, delete from DB)"),
     Command(("e621", "ai", "remove-artists"), f"{S}.favorites.remove_ai_artist_posts",
-            "Remove posts by artists listed in data/ai_artist.md"),
+            "Remove posts by artists listed in ai_flagged_artists"),
     # --- favorites ---------------------------------------------------------------------
     Command(("e621", "favorites", "add-missing"), f"{S}.favorites.favorite_missing_posts",
             "Favorite e621 posts the sorter knows about but that aren't favorited, then sync"),
