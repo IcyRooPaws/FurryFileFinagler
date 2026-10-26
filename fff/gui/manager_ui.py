@@ -561,5 +561,9 @@ def main(argv=None, *, root=None, run_mainloop: bool = True) -> int:
     root = tk.Tk() if root is None else root
     build(root)
     if run_mainloop:
+        from fff.common import consent
+
+        # First run: actions launched from here have no console to ask in
+        root.after(300, lambda: consent.ask_in_dialog(consent.BROWSER_COOKIES, parent=root))
         root.mainloop()
     return 0

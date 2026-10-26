@@ -7,7 +7,7 @@ import argparse
 from fff.cli import archive_cmds
 from fff.cli.app import build_parser
 
-CORE = ("config", "db", "doctor", "setup")
+CORE = ("config", "consent", "db", "doctor", "setup")
 
 
 def _subparsers(parser):

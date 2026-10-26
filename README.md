@@ -7,7 +7,7 @@
 ### e621 archive
 
 - Sync favorites and post metadata to the local `e621_posts_db` database.
-- After syncing e621 favorites, check each post's FurAffinity source links and favorite linked FA posts that aren't already favorited. This requires an active FurAffinity login in Firefox.
+- After syncing e621 favorites, check each post's FurAffinity source links and favorite linked FA posts that aren't already favorited. This requires an active FurAffinity login in a Firefox-based browser (Waterfox, Firefox, LibreWolf, Floorp or Zen). FFF asks once before reading your FurAffinity cookies from it; agree in the Manager or with `fff consent browser-cookies`.
 - Match downloaded files to posts; backfill or repair file paths, names, relationships, pool data, and deletion details.
 - Find and restore files for deleted or unfavorited posts, and compare local records with live favorites.
 - Manage favorites by post ID or MD5, including duplicate replacement and missing-favorite workflows.
@@ -39,7 +39,7 @@
 
 ### Daily workflow
 
-`fff daily` runs source search, sorting, e621 synchronization (including the linked FurAffinity favorite check), sorting again, and external FurAffinity source synchronization. The FurAffinity steps require an active Firefox login. Use `--dry-run` to preview the stages, or skip selected stages and stop on errors.
+`fff daily` runs source search, sorting, e621 synchronization (including the linked FurAffinity favorite check), sorting again, and external FurAffinity source synchronization. The FurAffinity steps require an active FurAffinity login in a Firefox-based browser and your consent to read its FurAffinity cookies (a scheduled run cannot ask, so agree first with `fff consent browser-cookies`). Use `--dry-run` to preview the stages, or skip selected stages and stop on errors.
 
 The [command reference](docs/COMMANDS.md) lists all available commands. The [usage guide](docs/USAGE.md) covers setup, file effects, the test environment, and checks.
 

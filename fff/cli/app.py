@@ -139,6 +139,23 @@ def _cmd_setup(args) -> int:
     return setup_ui.main(args.config)
 
 
+def _cmd_consent(args) -> int:
+    from fff.common import consent
+
+    key = args.what.replace("-", "_")
+    if args.revoke:
+        consent.set_consent(key, False)
+        print(f"Revoked. FFF will ask again before using {args.what}.")
+        return 0
+    if args.status:
+        print("Agreed" if consent.has_consent(key) else "Not agreed")
+        return 0
+    print(consent.PROMPTS[key])
+    consent.set_consent(key, True)
+    print(f"\nAgreed and saved to {consent.CONSENT_FILE}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="fff", description="FurryFileFinagler")
     parser.add_argument("--version", action="version", version=f"fff {__version__}")
@@ -209,6 +226,16 @@ def build_parser() -> argparse.ArgumentParser:
     # first-run setup
     p = sub.add_parser("setup", help="Open the guided configuration and first-run checks")
     p.set_defaults(func=_cmd_setup, needs_config=False)
+
+    # consent
+    p = sub.add_parser("consent", help="Agree to (or revoke) FFF reading your FurAffinity browser cookies",
+                       description="FFF asks once before reading FurAffinity cookies from your browser. "
+                                   "This records that you agree, for scheduled runs that can't ask.")
+    p.add_argument("what", choices=["browser-cookies"], help="What to agree to")
+    group = p.add_mutually_exclusive_group()
+    group.add_argument("--revoke", action="store_true", help="Withdraw consent; FFF will ask again")
+    group.add_argument("--status", action="store_true", help="Show whether you have agreed")
+    p.set_defaults(func=_cmd_consent, needs_config=False)
 
     # doctor
     p = sub.add_parser("doctor", help="Check databases, folders and dependencies")

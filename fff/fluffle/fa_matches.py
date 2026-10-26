@@ -174,7 +174,8 @@ def process_single_fa_image(image_path: Path, post_id: str, config: Dict[str, An
     if is_fav:
         print("[OK] Already favorited")
     else:
-        print("[ERROR] Not favorited")
+        # None means FA didn't return the page (e.g. a Cloudflare 403), not "not favorited"
+        print("[WARN] Status unknown (FA blocked the request?)" if is_fav is None else "Not favorited yet")
         print(f"    Adding to FA favorites...", end=" ", flush=True)
         if add_to_fa_favorites(numeric_id, cookies):
             print("[OK] Successfully added to favorites")
