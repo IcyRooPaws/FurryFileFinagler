@@ -16,6 +16,57 @@ from .utils import (
 
 logger = logging.getLogger(__name__)
 
+
+def artist_alias_in_filename(filename_lower, alias):
+    """
+    Check if an artist alias matches in the filename using more precise matching.
+    This prevents false positives like 'benji' matching 'werebenjicom'.
+
+    Special handling: aliases containing dots (e.g., 'fenn.perrox') also check
+    with dots replaced by underscores, since platforms like e621 may normalize
+    dots to underscores in filenames.
+    """
+    if _check_alias_patterns(filename_lower, alias):
+        return True
+
+    # Special rule: if alias contains dots, also try matching with dots as underscores
+    if '.' in alias:
+        if _check_alias_patterns(filename_lower, alias.replace('.', '_')):
+            return True
+
+    return False
+
+def _check_alias_patterns(filename_lower, alias):
+    """Check regex patterns for an alias match in the filename."""
+    # Pattern 1: Artist name followed by underscore and parenthetical (e.g., "benji_(artist)")
+    pattern1 = rf'\b{re.escape(alias)}_\('
+    if re.search(pattern1, filename_lower):
+        return True
+
+    # Pattern 2: Artist name at word boundary followed by dash or underscore (e.g., "benji-explicit", "benji_commission")
+    pattern2 = rf'\b{re.escape(alias)}[-_]'
+    if re.search(pattern2, filename_lower):
+        return True
+
+    # Pattern 3: Artist name at the start of filename (e.g., "benji.jpg", "benji123.png")
+    pattern3 = rf'^{re.escape(alias)}\b'
+    if re.search(pattern3, filename_lower):
+        return True
+
+    # Pattern 4: Artist name as complete word surrounded by dots, dashes, or underscores
+    # (e.g., "commission.benji.final.jpg", "art_benji_sketch.png")
+    pattern4 = rf'[._-]{re.escape(alias)}[._-]'
+    if re.search(pattern4, filename_lower):
+        return True
+
+    # Pattern 5: Artist name as complete word at the end (e.g., "commission_by_benji.jpg")
+    pattern5 = rf'\b{re.escape(alias)}(?=\.|$)'
+    if re.search(pattern5, filename_lower):
+        return True
+
+    return False
+
+
 class ArtistManager:
     """Manages favorite artist detection and file processing."""
 
@@ -375,53 +426,8 @@ class ArtistManager:
             return {}
 
     def check_artist_match(self, filename_lower, alias):
-        """
-        Check if an artist alias matches in the filename using more precise matching.
-        This prevents false positives like 'benji' matching 'werebenjicom'.
-
-        Special handling: aliases containing dots (e.g., 'fenn.perrox') also check
-        with dots replaced by underscores, since platforms like e621 may normalize
-        dots to underscores in filenames.
-        """
-        if self._check_alias_patterns(filename_lower, alias):
-            return True
-
-        # Special rule: if alias contains dots, also try matching with dots as underscores
-        if '.' in alias:
-            if self._check_alias_patterns(filename_lower, alias.replace('.', '_')):
-                return True
-
-        return False
-
-    def _check_alias_patterns(self, filename_lower, alias):
-        """Check regex patterns for an alias match in the filename."""
-        # Pattern 1: Artist name followed by underscore and parenthetical (e.g., "benji_(artist)")
-        pattern1 = rf'\b{re.escape(alias)}_\('
-        if re.search(pattern1, filename_lower):
-            return True
-
-        # Pattern 2: Artist name at word boundary followed by dash or underscore (e.g., "benji-explicit", "benji_commission")
-        pattern2 = rf'\b{re.escape(alias)}[-_]'
-        if re.search(pattern2, filename_lower):
-            return True
-
-        # Pattern 3: Artist name at the start of filename (e.g., "benji.jpg", "benji123.png")
-        pattern3 = rf'^{re.escape(alias)}\b'
-        if re.search(pattern3, filename_lower):
-            return True
-
-        # Pattern 4: Artist name as complete word surrounded by dots, dashes, or underscores
-        # (e.g., "commission.benji.final.jpg", "art_benji_sketch.png")
-        pattern4 = rf'[._-]{re.escape(alias)}[._-]'
-        if re.search(pattern4, filename_lower):
-            return True
-
-        # Pattern 5: Artist name as complete word at the end (e.g., "commission_by_benji.jpg")
-        pattern5 = rf'\b{re.escape(alias)}(?=\.|$)'
-        if re.search(pattern5, filename_lower):
-            return True
-
-        return False
+        """See :func:`artist_alias_in_filename`."""
+        return artist_alias_in_filename(filename_lower, alias)
 
     def _get_artist_candidates_from_db(self, cache_days=7):
         """Query all_files view from database and return candidates that need artist checking.

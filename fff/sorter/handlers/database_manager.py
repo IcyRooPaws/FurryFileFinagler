@@ -1326,6 +1326,27 @@ class DatabaseManager:
                 if conn:
                     conn.close()
 
+    def remove_file_row(self, table, file_name, file_path):
+        """Remove the one entry for ``file_name`` stored at ``file_path``."""
+        for attempt in range(5):
+            conn = None
+            try:
+                conn = self.get_db_connection()
+                cursor = conn.cursor()
+                cursor.execute(f"DELETE FROM `{table}` WHERE file_name = %s AND file_path = %s",
+                               (file_name, file_path))
+                conn.commit()
+                cursor.close()
+                return
+            except Error as e:
+                if "lock" in str(e).lower() and attempt < 4:
+                    time.sleep(1)
+                else:
+                    raise
+            finally:
+                if conn:
+                    conn.close()
+
     def get_file_metadata(self, table, file_name):
         """
         Retrieve full file metadata from a table.
@@ -1488,6 +1509,11 @@ class DatabaseManager:
     def update_file_path(self, table, file_name, new_path):
         """Update file_path for a record in-place without changing tables.
 
+        A table can hold more than one row for ``file_name`` (a stale row left at an old
+        path, or a real copy elsewhere). Only one row is moved to ``new_path`` - preferably
+        one whose file is gone - and other rows whose file no longer exists are dropped,
+        so the path's unique key is never violated. Rows for copies still on disk are kept.
+
         Returns True if a row was updated, False if not found.
         """
         self.ensure_dest_table(table)
@@ -1500,14 +1526,27 @@ class DatabaseManager:
             try:
                 conn = self.get_db_connection()
                 cursor = conn.cursor()
-                cursor.execute(
-                    f"UPDATE `{table}` SET file_path = %s WHERE file_name = %s",
-                    (normalized_path, file_name),
-                )
-                updated = cursor.rowcount
+                cursor.execute(f"SELECT id, file_path FROM `{table}` WHERE file_name = %s", (file_name,))
+                rows = cursor.fetchall()
+                if not rows:
+                    cursor.close()
+                    return False
+                at_target = [row_id for row_id, path in rows if path == normalized_path]
+                others = [(row_id, path) for row_id, path in rows if path != normalized_path]
+                if not at_target:
+                    # Move the row whose file is gone (the one that was moved), if any
+                    others.sort(key=lambda row: os.path.exists(row[1]))
+                    row_id, _ = others.pop(0)
+                    cursor.execute(f"UPDATE `{table}` SET file_path = %s WHERE id = %s",
+                                   (normalized_path, row_id))
+                stale_ids = [row_id for row_id, path in others if not os.path.exists(path)]
+                for row_id in stale_ids:
+                    cursor.execute(f"DELETE FROM `{table}` WHERE id = %s", (row_id,))
+                if stale_ids:
+                    logger.info(f"Removed {len(stale_ids)} stale row(s) for {file_name} from {table}")
                 conn.commit()
                 cursor.close()
-                return updated > 0
+                return True
             except Error as e:
                 if "lock" in str(e).lower() and attempt < 4:
                     time.sleep(1)
@@ -1651,15 +1690,27 @@ class DatabaseManager:
                     conn.close()
 
     def cleanup_missing_files(self, table, existing_files_set):
-        """Remove database entries for files that no longer exist in the directory."""
+        """Remove database entries for files that no longer exist in the directory.
+
+        Also drops stale duplicates: when a file name has several rows, rows whose path no
+        longer exists are removed (the file was found on disk, just somewhere else).
+        """
         db_files = self.get_all_files_from_table(table)
         removed_count = 0
+        name_counts = {}
+        for file_name, _, _, _ in db_files:
+            name_counts[file_name] = name_counts.get(file_name, 0) + 1
 
         for file_name, file_hash, created_at, file_path in db_files:
             if file_name not in existing_files_set:
                 self.remove_file_from_table(table, file_name)
                 removed_count += 1
                 logger.info(f"Removed missing file from {table}: {file_name}")
+            elif name_counts[file_name] > 1 and file_path and not os.path.exists(file_path):
+                self.remove_file_row(table, file_name, file_path)
+                name_counts[file_name] -= 1
+                removed_count += 1
+                logger.info(f"Removed stale duplicate row from {table}: {file_path}")
 
         return removed_count
 

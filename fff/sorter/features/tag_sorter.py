@@ -186,6 +186,27 @@ class TagSorter:
         self._extended_artists_cache = extended_artists
         return extended_artists
 
+    def _named_after_favorite_artist(self, filename: str) -> bool:
+        """True when the artist scan would claim ``filename`` for a favorite artist."""
+        from fff.sorter.handlers.artist_manager import artist_alias_in_filename
+
+        name = filename.lower()
+        return any(alias in name and artist_alias_in_filename(name, alias)
+                   for alias in self.favorite_artist_aliases)
+
+    def _drop_files_named_after_favorite_artists(self, found_files: Dict[str, str]) -> int:
+        """Leave files named after a favorite artist to the artist scan.
+
+        The artist scan claims files by their name, not by e621's current artist data (which
+        can differ, e.g. a post re-credited after download), so moving such a file here would
+        be undone by the next scan and redone by the next sort, every run.
+        """
+        claimed = [f for f in found_files if self._named_after_favorite_artist(f)]
+        for f in claimed:
+            del found_files[f]
+        if claimed:
+            print(f"  [BLOCKED] Skipping {len(claimed)} file(s) named after favorite artists\n")
+
     def _load_favorite_artist_aliases(self) -> List[str]:
         """
         Load all artist names and aliases from artists.yaml.
@@ -1369,6 +1390,9 @@ class TagSorter:
                                                      normalize_conditional_dnp=not dry_run)
         print(f"  [OK] Found {len(found_files)} matching files on disk\n")
 
+        left_to_artist_scan = (self._drop_files_named_after_favorite_artists(found_files)
+                               if exclude_favorite_artists else 0)
+
         if not found_files:
             print("[ERROR] No matching files found in source directories")
             return {'db_matches': len(matching_filenames), 'files_found': 0, 'moved': 0}
@@ -1430,7 +1454,7 @@ class TagSorter:
         print(f"[OK] Files moved: {moved_count}")
         if set_post_date:
             print(f"[DATE] Post dates set: {dates_set_count}/{len(found_files)}")
-        print(f"[UNKNOWN] Missing files: {len(matching_filenames) - len(found_files)}")
+        print(f"[UNKNOWN] Missing files: {len(matching_filenames) - len(found_files) - left_to_artist_scan}")
         print(f"{'=' * 60}")
 
         return {
@@ -1438,7 +1462,7 @@ class TagSorter:
             'files_found': len(found_files),
             'moved': moved_count,
             'dates_set': dates_set_count,
-            'missing': len(matching_filenames) - len(found_files)
+            'missing': len(matching_filenames) - len(found_files) - left_to_artist_scan
         }
 
     def sort_by_pools(self, pool_ids: List[int], destination_dir: str = None, source_dirs: List[str] = None,
@@ -1602,6 +1626,9 @@ class TagSorter:
                                                      normalize_conditional_dnp=not dry_run)
         print(f"  [OK] Found {len(found_files)} matching files on disk\n")
 
+        left_to_artist_scan = (self._drop_files_named_after_favorite_artists(found_files)
+                               if exclude_favorite_artists else 0)
+
         if not found_files:
             print("[ERROR] No matching files found in source directories")
             return {'db_matches': len(matching_filenames), 'files_found': 0, 'moved': 0}
@@ -1633,7 +1660,7 @@ class TagSorter:
         print(f"[OK] Files moved: {moved_count}")
         if set_post_date:
             print(f"[DATE] Post dates set: {dates_set_count}/{len(found_files)}")
-        print(f"[UNKNOWN] Missing files: {len(matching_filenames) - len(found_files)}")
+        print(f"[UNKNOWN] Missing files: {len(matching_filenames) - len(found_files) - left_to_artist_scan}")
         print(f"{'=' * 60}")
 
         return {
@@ -1641,5 +1668,5 @@ class TagSorter:
             'files_found': len(found_files),
             'moved': moved_count,
             'dates_set': dates_set_count,
-            'missing': len(matching_filenames) - len(found_files)
+            'missing': len(matching_filenames) - len(found_files) - left_to_artist_scan
         }
