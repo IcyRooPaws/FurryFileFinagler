@@ -32,6 +32,7 @@ from fff.clients.furaffinity import (  # noqa: F401  (re-exported for callers of
     download_fa_post,
 )
 from fff.common import config as fff_config
+from fff.common.logging import logged_command
 from fff.common.naming import generate_fa_filename  # noqa: F401
 from fff.common.timestamps import copy_file_times as _copy_file_times
 from fff.fluffle import ops
@@ -401,6 +402,7 @@ def get_images_with_fa_matches(connection: mysql.connector.connection.MySQLConne
         return []
 
 
+@logged_command("fluffle", "process_fa", "fff.fluffle.fa_matches")
 def main(argv=None):  # fff: argv accepted for the CLI; no options
     """Main function."""
     print("FurAffinity Post Processor")

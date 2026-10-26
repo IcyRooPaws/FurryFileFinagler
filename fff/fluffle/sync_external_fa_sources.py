@@ -26,6 +26,7 @@ from fff.clients.furaffinity import (
     FASubmissionNotFoundError
 )
 from fff.common import config as fff_config
+from fff.common.logging import logged_command
 
 MAX_CHECK_ATTEMPTS = 10  # a source that keeps failing stops being retried after this many runs
 
@@ -302,6 +303,7 @@ def get_statistics(local_conn: mysql.connector.connection.MySQLConnection) -> Di
         return {}
 
 
+@logged_command("fluffle", "fa_sync_external", "fff.fluffle.sync_external_fa_sources")
 def main():
     """Main function."""
     print("External FurAffinity Source Links Monitor")

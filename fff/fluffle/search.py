@@ -20,6 +20,7 @@ from mysql.connector import Error
 from fff.clients.fluffle import resize_image_for_upload, search_image_fluffle  # noqa: F401
 from fff.clients.fuzzysearch import search_image_fuzzysearch
 from fff.common import config as fff_config
+from fff.common.logging import logged_command
 from fff.common.naming import sanitize_filename_component
 from fff.fluffle import ops
 
@@ -846,6 +847,7 @@ def cleanup_old_responses(responses_dir: str, max_age_days: int = 5) -> None:
         print(f"Cleaned up {deleted_count} response file(s) older than {max_age_days} days.")
 
 
+@logged_command("fluffle", "search", "fff.fluffle.search")
 def main(argv=None):  # fff: argv accepted for the CLI; no options
     """Main function to run the image search."""
     print("reverse-image source search Tool")

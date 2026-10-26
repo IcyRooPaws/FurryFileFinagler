@@ -30,6 +30,7 @@ from fff.clients.e621 import (  # noqa: F401  (re-exported for callers of the or
     check_blacklisted_tags,
 )
 from fff.common import config as fff_config
+from fff.common.logging import logged_command
 from fff.common.timestamps import copy_file_times as _copy_file_times
 from fff.fluffle import ops
 
@@ -308,6 +309,7 @@ def process_single_image(image_path: Path, post_id: str, config: Dict[str, Any],
             return False
 
 
+@logged_command("fluffle", "process_e621", "fff.fluffle.e621_matches")
 def main(argv=None):  # fff: argv accepted for the CLI; no options
     """Main function."""
     print("E621 Post Processor")

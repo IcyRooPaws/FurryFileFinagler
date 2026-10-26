@@ -35,7 +35,7 @@ Only the examples are committed. If you change the layout of `config.yaml`, run 
 | `config/secrets.yaml` | DB password, the e621 login and API key (one account, shared by every module), and the FuzzySearch key |
 | `config/*.yaml`, `config/lists/*.txt` | Sorting, review, and filtering rules |
 | `data/` | AI-artist list, kept-post lists, md5 lists, and runtime caches |
-| `logs/<archive\|sorter\|db>/` | One log file per run |
+| `logs/<archive\|sorter\|fluffle\|db>/` | One log file per run |
 
 ## A typical day
 
