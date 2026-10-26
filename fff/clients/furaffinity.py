@@ -1,4 +1,4 @@
-"""FurAffinity access: Firefox cookies, retrying GETs, page scraping, favorites, and downloads."""
+"""FurAffinity access: browser cookies (Waterfox/Firefox), retrying GETs, page scraping, favorites, and downloads."""
 import http.cookiejar
 import os
 import re
@@ -86,66 +86,131 @@ def _fa_get_with_retry(
     return None
 
 
+# Firefox-based browsers share Firefox's profile layout and cookies.sqlite format.
+# Profile folders, relative to %APPDATA% (Windows), ~/Library/Application Support (macOS) or ~ (Linux).
+GECKO_BROWSERS = {
+    'Waterfox': {'win32': 'Waterfox/Profiles', 'darwin': 'Waterfox/Profiles', 'linux': '.waterfox'},
+    'Firefox': {'win32': 'Mozilla/Firefox/Profiles', 'darwin': 'Firefox/Profiles', 'linux': '.mozilla/firefox'},
+    'LibreWolf': {'win32': 'librewolf/Profiles', 'darwin': 'librewolf/Profiles', 'linux': '.librewolf'},
+    'Floorp': {'win32': 'Floorp/Profiles', 'darwin': 'Floorp/Profiles', 'linux': '.floorp'},
+    'Zen': {'win32': 'zen/Profiles', 'darwin': 'zen/Profiles', 'linux': '.zen'},
+}
+
+DEFAULT_FA_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+
+# Cloudflare's clearance cookie only works with the browser's own User-Agent, so every FA
+# request sends the UA of the browser the cookies came from (set by get_firefox_cookies).
+_fa_user_agent = DEFAULT_FA_USER_AGENT
+
+
+def _fa_headers() -> Dict[str, str]:
+    return {'User-Agent': _fa_user_agent}
+
+
+def _browser_profile_dirs() -> list:
+    """(browser name, profile dir) for every Firefox-based browser profile on this machine."""
+    if sys.platform == 'win32':
+        base, key = Path(os.environ.get('APPDATA', '')), 'win32'
+    elif sys.platform == 'darwin':
+        base, key = Path.home() / 'Library' / 'Application Support', 'darwin'
+    else:
+        base, key = Path.home(), 'linux'
+    found = []
+    for browser, locations in GECKO_BROWSERS.items():
+        root = base / locations[key]
+        if root.is_dir():
+            found.extend((browser, p) for p in root.iterdir() if (p / 'cookies.sqlite').is_file())
+    return found
+
+
+def _read_fa_cookie_rows(cookie_file: Path) -> list:
+    """FurAffinity rows from a (possibly locked) cookies.sqlite, read from a temp copy."""
+    temp_cookie_file = Path(os.environ.get('TEMP', '/tmp')) / f'fa_cookies_{os.getpid()}.sqlite'
+    shutil.copy2(cookie_file, temp_cookie_file)
+    try:
+        conn = sqlite3.connect(temp_cookie_file)
+        try:
+            return conn.execute("""
+                SELECT host, name, value, path, expiry, isSecure, lastAccessed
+                FROM moz_cookies
+                WHERE host LIKE '%furaffinity.net'
+            """).fetchall()
+        finally:
+            conn.close()
+    finally:
+        temp_cookie_file.unlink(missing_ok=True)
+
+
+def _profile_user_agent(profile: Path) -> Optional[str]:
+    """The User-Agent the browser using ``profile`` sends, from its prefs or last-run version."""
+    try:
+        prefs = (profile / 'prefs.js').read_text(encoding='utf-8', errors='replace')
+    except OSError:
+        prefs = ''
+    override = re.search(r'user_pref\("general\.useragent\.override",\s*"([^"]+)"\)', prefs)
+    if override:
+        return override.group(1)
+    try:
+        compat = (profile / 'compatibility.ini').read_text(encoding='utf-8', errors='replace')
+    except OSError:
+        return None
+    version = re.search(r'^LastVersion=(\d+)\.', compat, re.M)
+    if not version:
+        return None
+    if sys.platform == 'win32':
+        platform_token = 'Windows NT 10.0; Win64; x64'
+    elif sys.platform == 'darwin':
+        platform_token = 'Macintosh; Intel Mac OS X 10.15'
+    else:
+        platform_token = 'X11; Linux x86_64'
+    major = version.group(1)
+    return f'Mozilla/5.0 ({platform_token}; rv:{major}.0) Gecko/20100101 Firefox/{major}.0'
+
+
 def get_firefox_cookies() -> Optional[http.cookiejar.CookieJar]:
     """
-    Extract FurAffinity cookies from Firefox.
-    Looks for cookies.sqlite in common Firefox profile locations.
+    Extract FurAffinity cookies from a Firefox-based browser (Waterfox, Firefox, LibreWolf, ...).
+    Uses the profile that visited FurAffinity most recently, and only with the user's consent.
     """
+    global _fa_user_agent
+    from fff.common import consent
+
+    if not consent.require_consent(consent.BROWSER_COOKIES):
+        return None
+
     try:
-        # Common Firefox profile locations
-        if sys.platform == 'win32':
-            firefox_dir = Path(os.environ.get('APPDATA', '')) / 'Mozilla' / 'Firefox' / 'Profiles'
-        elif sys.platform == 'darwin':
-            firefox_dir = Path.home() / 'Library' / 'Application Support' / 'Firefox' / 'Profiles'
-        else:  # Linux
-            firefox_dir = Path.home() / '.mozilla' / 'firefox'
-
-        if not firefox_dir.exists():
-            print(f"Firefox profile directory not found: {firefox_dir}")
-            return None
-
-        # Find all profile directories
-        profiles = [p for p in firefox_dir.iterdir() if p.is_dir()]
-
+        profiles = _browser_profile_dirs()
         if not profiles:
-            print("No Firefox profiles found")
+            print(f"No Firefox-based browser profile found (looked for {', '.join(GECKO_BROWSERS)})")
             return None
 
-        # Look for cookies.sqlite in each profile (use the most recently modified)
-        cookie_files = []
-        for profile in profiles:
-            cookie_file = profile / 'cookies.sqlite'
-            if cookie_file.exists():
-                cookie_files.append(cookie_file)
+        best = None  # (last accessed, browser, profile, rows)
+        for browser, profile in profiles:
+            try:
+                rows = _read_fa_cookie_rows(profile / 'cookies.sqlite')
+            except (OSError, sqlite3.Error) as e:
+                print(f"Could not read cookies from {browser} profile {profile.name}: {e}")
+                continue
+            if rows:
+                last_accessed = max(row[6] or 0 for row in rows)
+                if best is None or last_accessed > best[0]:
+                    best = (last_accessed, browser, profile, rows)
 
-        if not cookie_files:
-            print("No Firefox cookie database found")
+        if best is None:
+            print("No FurAffinity cookies found in any browser profile. Log in to FurAffinity "
+                  "in your browser first.")
             return None
 
-        # Use the most recently modified cookie file
-        cookie_file = max(cookie_files, key=lambda p: p.stat().st_mtime)
+        _, browser, profile, rows = best
+        print(f"Using {browser} cookies from: {profile.name}")
+        _fa_user_agent = _profile_user_agent(profile) or DEFAULT_FA_USER_AGENT
 
-        print(f"Using Firefox cookies from: {cookie_file.parent.name}")
-
-        # Copy cookie file to temp location (Firefox locks the original)
-        temp_cookie_file = Path(os.environ.get('TEMP', '/tmp')) / 'fa_cookies_temp.sqlite'
-        shutil.copy2(cookie_file, temp_cookie_file)
-
-        # Extract cookies from SQLite database
         jar = http.cookiejar.CookieJar()
-        conn = sqlite3.connect(temp_cookie_file)
-        cursor = conn.cursor()
-
-        # Query for FurAffinity cookies
-        cursor.execute("""
-            SELECT host, name, value, path, expiry, isSecure
-            FROM moz_cookies
-            WHERE host LIKE '%furaffinity.net%'
-        """)
-
-        cookies_found = 0
-        for host, name, value, path, expiry, is_secure in cursor.fetchall():
-            cookie = http.cookiejar.Cookie(
+        for host, name, value, path, expiry, is_secure, _ in rows:
+            # Newer Firefox versions store expiry in milliseconds
+            if expiry and expiry > 10_000_000_000:
+                expiry //= 1000
+            jar.set_cookie(http.cookiejar.Cookie(
                 version=0,
                 name=name,
                 value=value,
@@ -163,22 +228,16 @@ def get_firefox_cookies() -> Optional[http.cookiejar.CookieJar]:
                 comment_url=None,
                 rest={},
                 rfc2109=False
-            )
-            jar.set_cookie(cookie)
-            cookies_found += 1
+            ))
 
-        conn.close()
-        temp_cookie_file.unlink()
-
-        if cookies_found == 0:
-            print("No FurAffinity cookies found in Firefox")
-            return None
-
-        print(f"[OK] Loaded {cookies_found} FurAffinity cookie(s)")
+        if not any(c.name == 'cf_clearance' for c in jar):
+            print(f"[WARN] No Cloudflare clearance cookie; if FurAffinity blocks requests, "
+                  f"open it in {browser} and try again")
+        print(f"[OK] Loaded {len(rows)} FurAffinity cookie(s)")
         return jar
 
     except Exception as e:
-        print(f"Error extracting Firefox cookies: {e}")
+        print(f"Error extracting browser cookies: {e}")
         return None
 
 
@@ -186,9 +245,7 @@ def get_fa_post_data(post_id: str, cookies: http.cookiejar.CookieJar) -> Optiona
     """Get FurAffinity post data by scraping the page."""
     try:
         url = f"https://www.furaffinity.net/view/{post_id}/"
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        }
+        headers = _fa_headers()
 
         session = requests.Session()
         session.cookies = cookies
@@ -394,9 +451,7 @@ def add_to_fa_favorites(post_id: str, cookies: http.cookiejar.CookieJar) -> bool
     try:
         # First, get the submission page to extract the fav key
         view_url = f"https://www.furaffinity.net/view/{post_id}/"
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        }
+        headers = _fa_headers()
 
         session = requests.Session()
         session.cookies = cookies
@@ -476,9 +531,7 @@ def remove_from_fa_favorites(post_id: str, cookies: http.cookiejar.CookieJar) ->
     """Remove a FurAffinity post from favorites. True if removed or not favorited."""
     try:
         view_url = f"https://www.furaffinity.net/view/{post_id}/"
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        }
+        headers = _fa_headers()
 
         session = requests.Session()
         session.cookies = cookies
@@ -530,9 +583,7 @@ def check_if_fa_favorited(post_id: str, cookies: http.cookiejar.CookieJar) -> bo
     """Check if a FA post is already favorited by looking for the unfav link."""
     try:
         url = f"https://www.furaffinity.net/view/{post_id}/"
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        }
+        headers = _fa_headers()
 
         session = requests.Session()
         session.cookies = cookies
@@ -617,7 +668,7 @@ def download_fa_post(post_data: Dict[str, Any], download_dir: Path, cookies: htt
             return filepath
 
         headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            **_fa_headers(),
             'Referer': f'https://www.furaffinity.net/view/{post_data["post_id"]}/'
         }
 

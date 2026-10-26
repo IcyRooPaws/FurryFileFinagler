@@ -296,5 +296,8 @@ def main(config_path: str | Path | None = None) -> int:
     root.minsize(820, 600)
     theme.apply(root)
     build(root, config_path)
+    from fff.common import consent
+
+    root.after(300, lambda: consent.ask_in_dialog(consent.BROWSER_COOKIES, parent=root))
     root.mainloop()
     return 0
