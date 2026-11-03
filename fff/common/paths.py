@@ -15,6 +15,7 @@ CONFIG_DIR = ROOT / "config"
 LISTS_DIR = CONFIG_DIR / "lists"
 DATA_DIR = ROOT / "data"
 CACHE_DIR = DATA_DIR / "cache"
+LOCK_DIR = DATA_DIR / "locks"                   # fff.common.single_instance
 LOG_DIR = ROOT / "logs"
 SQL_DIR = ROOT / "sql"
 

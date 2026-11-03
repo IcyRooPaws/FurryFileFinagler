@@ -7,6 +7,9 @@
 5. ``fff sort workflow``      organize files downloaded by the e621 sync
 6. ``fff fa sync-external``   sync external FurAffinity sources
 
+Stages run one after another, and only one ``fff daily`` runs at a time (a second one
+exits with code 1 without running anything).
+
 By default, a failed stage doesn't stop the run (unless --stop-on-error). Each stage
 runs as its own ``fff`` process (so logging setup, signal handlers and exit calls
 can't interfere with each other), with the same --env / --config. It adds no logic of its
@@ -20,6 +23,7 @@ import time
 from datetime import datetime
 
 from fff.common import paths
+from fff.common.single_instance import AlreadyRunning, single_instance
 
 # (skip key, fff command, label).
 STAGES = [
@@ -80,6 +84,15 @@ def run(args, runner=subprocess.run) -> int:
             print(f"{i}. {label}: fff {' '.join(_global_args(args) + argv)}")
         return 0
 
+    try:
+        with single_instance("daily"):
+            return _run_stages(args, stages, base, runner)
+    except AlreadyRunning as exc:
+        print(f"[fff daily] Not starting: {exc}. Wait for it to finish, or stop it first.")
+        return 1
+
+
+def _run_stages(args, stages, base, runner) -> int:
     results = []
     started = datetime.now()
     for i, (key, argv, label) in enumerate(stages, 1):

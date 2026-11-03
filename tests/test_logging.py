@@ -84,3 +84,35 @@ def test_logged_command_names_the_file_and_logs_crashes(tmp_path, monkeypatch):
     assert "INFO - process_fa finished" in text
     assert "INFO - about to fail" in text
     assert "ERROR - process_fa failed" in text and "RuntimeError: boom" in text
+
+
+def test_capture_print_survives_a_lost_console(tmp_path):
+    from fff.common.logging import PrintToLog
+
+    class DeadPipe:
+        def write(self, text):
+            raise OSError(22, "Invalid argument")
+
+        def flush(self):
+            raise OSError(22, "Invalid argument")
+
+    root = logging.getLogger()
+    saved = list(root.handlers), root.level
+    try:
+        log_file = setup_logging("fluffle", log_dir=tmp_path, console=False)
+        tee = PrintToLog(DeadPipe(), logging.getLogger("fff.fluffle.search"))
+        print("    Checking FA favorite status...", end=" ", flush=True, file=tee)
+        print("[OK] Already favorited", file=tee)
+        for handler in root.handlers:
+            handler.flush()
+    finally:
+        for handler in list(root.handlers):
+            root.removeHandler(handler)
+            handler.close()
+        for handler in saved[0]:
+            root.addHandler(handler)
+        root.setLevel(saved[1])
+
+    log = log_file.read_text(encoding="utf-8")
+    assert "Checking FA favorite status... [OK] Already favorited" in log
+    assert log.count("Console output lost") == 1

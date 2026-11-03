@@ -19,15 +19,20 @@ FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 class PrintToLog:
     """``sys.stdout`` stand-in for print-based scripts: the text still reaches the console
     unchanged, and each non-blank line is also logged (``[ERROR]``/``[WARNING]`` lines at
-    those levels). The records carry ``from_print`` so the console handler skips them."""
+    those levels). The records carry ``from_print`` so the console handler skips them.
+
+    If the console goes away mid-run (e.g. FFF Manager closed while its child keeps running,
+    so the stdout pipe has no reader and Windows raises ``[Errno 22]``), console output is
+    dropped and the run carries on, still logging to the file."""
 
     def __init__(self, stream, logger: logging.Logger):
         self._stream = stream
+        self._console_ok = True
         self._logger = logger
         self._buffer = ""
 
     def write(self, text: str) -> int:
-        self._stream.write(text)
+        self._to_console(lambda: self._stream.write(text))
         self._buffer += text
         while "\n" in self._buffer:
             line, self._buffer = self._buffer.split("\n", 1)
@@ -35,7 +40,17 @@ class PrintToLog:
         return len(text)
 
     def flush(self) -> None:
-        self._stream.flush()
+        self._to_console(self._stream.flush)
+
+    def _to_console(self, action) -> None:
+        if not self._console_ok:
+            return
+        try:
+            action()
+        except (OSError, ValueError):  # broken pipe / closed console
+            self._console_ok = False
+            self._logger.warning("Console output lost; continuing with file logging only",
+                                 extra={"from_print": True})
 
     def close_buffer(self) -> None:
         """Log a trailing line that never got its newline."""

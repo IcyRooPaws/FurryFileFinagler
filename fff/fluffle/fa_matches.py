@@ -66,6 +66,39 @@ def move_to_not_found(image_path: Path, not_found_dir: Path,
                                  reason="fa_not_found", error_label="Error moving file")
 
 
+def is_named_fa_download(image_path: Path, numeric_id: str) -> bool:
+    """True if ``image_path`` already has the name ``download_fa_post`` would give this post
+    (``{artist}-{rating}-FA-{postid}.ext``), i.e. it is that FA download already."""
+    return re.fullmatch(rf".+-(general|mature|adult)-FA-{re.escape(numeric_id)}", image_path.stem,
+                        re.IGNORECASE) is not None
+
+
+def move_named_fa_download(image_path: Path, download_dir: Path, source_found_dir: Path,
+                           base_search_dir: Path = None, preserve_structure: bool = False) -> bool:
+    """Put an already-named FA download where a fresh download would land, instead of
+    downloading it again. If that spot already holds the file, this copy is a duplicate
+    and goes to source_found (as it would after a download)."""
+    destination_dir = download_dir
+    if preserve_structure and base_search_dir:
+        try:
+            destination_dir = download_dir / image_path.parent.relative_to(base_search_dir)
+        except ValueError:
+            pass
+    if image_path.parent == destination_dir:
+        print(f"    [OK] Already named and in the download folder")
+        return True
+    if (destination_dir / image_path.name).exists():
+        print(f"    [i] {image_path.name} is already in the download folder - moving this copy to source_found...",
+              end=" ")
+        moved = move_to_source_found(image_path, source_found_dir, base_search_dir, preserve_structure)
+    else:
+        print(f"    Already named as the FA download - moving to download folder...", end=" ")
+        moved = ops.move_to_directory(image_path, download_dir, base_search_dir, preserve_structure,
+                                      reason="fa_already_named")
+    print("[OK]" if moved else "[ERROR]")
+    return moved
+
+
 def connect_database(db_config: Dict[str, Any]) -> Optional[mysql.connector.connection.MySQLConnection]:
     """Connect to the database."""
     try:
@@ -194,6 +227,11 @@ def process_single_fa_image(image_path: Path, post_id: str, config: Dict[str, An
             print(f"    [i] Image has e621 match - skipping FA download")
             print(f"    [OK] FA favorite complete (no download needed)")
             return True
+
+    # Already the FA download (same name and post id) - move it rather than download it again
+    if is_named_fa_download(image_path, numeric_id):
+        return move_named_fa_download(image_path, download_dir, source_found_dir, base_search_dir,
+                                      preserve_structure)
 
     # Get post data
     print(f"    Fetching FA post data...", end=" ", flush=True)
@@ -564,6 +602,14 @@ def main(argv=None):  # fff: argv accepted for the CLI; no options
         if has_e621:
             print(f"  [i] Image has e621 match - skipping FA download")
             processed += 1
+            print()
+            continue
+
+        # Already the FA download (same name and post id) - move it rather than download it again
+        if is_named_fa_download(image_path, numeric_id):
+            if move_named_fa_download(image_path, download_dir, source_found_dir, base_search_dir,
+                                      preserve_structure):
+                processed += 1
             print()
             continue
 

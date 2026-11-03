@@ -21,6 +21,7 @@ from fff.clients.fluffle import resize_image_for_upload, search_image_fluffle  #
 from fff.clients.fuzzysearch import search_image_fuzzysearch
 from fff.common import config as fff_config
 from fff.common.logging import logged_command
+from fff.common.single_instance import exclusive_command
 from fff.common.naming import sanitize_filename_component
 from fff.fluffle import ops
 
@@ -848,6 +849,7 @@ def cleanup_old_responses(responses_dir: str, max_age_days: int = 5) -> None:
 
 
 @logged_command("fluffle", "search", "fff.fluffle.search")
+@exclusive_command("fluffle_search")
 def main(argv=None):  # fff: argv accepted for the CLI; no options
     """Main function to run the image search."""
     print("reverse-image source search Tool")

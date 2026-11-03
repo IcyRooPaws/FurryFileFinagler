@@ -17,6 +17,20 @@ from dataclasses import dataclass
 from fff.common import paths
 
 
+def stop_process_tree(process: subprocess.Popen) -> None:
+    """Stop ``process`` and everything it started. ``terminate()`` alone isn't enough on
+    Windows: the venv python.exe is a launcher, so it would leave the real fff process (and
+    any stage it is running) going in the background, where it overlaps the next run."""
+    if process.poll() is not None:
+        return
+    if sys.platform == "win32":
+        result = subprocess.run(["taskkill", "/PID", str(process.pid), "/T", "/F"], capture_output=True,
+                                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        if result.returncode == 0 or process.poll() is not None:
+            return
+    process.terminate()
+
+
 @dataclass(frozen=True)
 class Action:
     title: str
@@ -474,7 +488,7 @@ class ManagerApp:
             self.status.set("Stopping local archive gallery…")
             self.log_line("Stopping local archive gallery…", "warning")
             self.stop_web_button.configure(state="disabled")
-            self.active_process.terminate()
+            stop_process_tree(self.active_process)
 
     def _poll_events(self) -> None:
         try:
@@ -546,7 +560,7 @@ class ManagerApp:
         if not self.close_all_tools():
             return
         if running:
-            self.active_process.terminate()
+            stop_process_tree(self.active_process)
         self.closing = True
         self.root.destroy()
 

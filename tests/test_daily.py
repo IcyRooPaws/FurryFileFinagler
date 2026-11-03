@@ -29,7 +29,17 @@ class FakeRunner:
 @pytest.fixture(autouse=True)
 def log_dir(tmp_path, monkeypatch):
     monkeypatch.setattr(paths, "LOG_DIR", tmp_path / "logs")
+    monkeypatch.setattr(paths, "LOCK_DIR", tmp_path / "locks")
     return tmp_path / "logs" / "daily"
+
+
+def test_refuses_to_start_while_another_daily_runs():
+    from fff.common.single_instance import single_instance
+
+    run = FakeRunner()
+    with single_instance("daily"):
+        assert daily.run(parse("daily"), runner=run) == 1
+    assert run.calls == []
 
 
 def test_runs_standard_stage_order():
