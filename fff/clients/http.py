@@ -88,7 +88,9 @@ class RateLimiter:
 
     def wait(self):
         with self._lock:  # sleeping under the lock queues other threads behind this request
-            delay = self._next - time.monotonic()
+            # perf_counter, not monotonic: on Windows before Python 3.13, monotonic() ticks only
+            # every ~15.6 ms, so a spacing computed from it could come out short.
+            delay = self._next - time.perf_counter()
             if delay > 0:
                 time.sleep(delay)
             self.count += 1
@@ -96,7 +98,7 @@ class RateLimiter:
                 logger.info("Reached %s %s requests. Pausing %.0f seconds...",
                             self.count, self.name, self.pause_seconds)
                 time.sleep(self.pause_seconds)
-            self._next = time.monotonic() + self.interval
+            self._next = time.perf_counter() + self.interval
 
 
 def limiter(service: str) -> RateLimiter:

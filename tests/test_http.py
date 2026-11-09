@@ -131,13 +131,14 @@ def test_e621_user_agent_from_config_and_caller_override(cfg, server):
 
 def test_rate_limit_spacing_is_shared_across_threads(cfg, server):
     cfg["e621"]["min_request_interval"] = 0.2
-    start = time.monotonic()
+    start = time.perf_counter()
     threads = [threading.Thread(target=http.get, args=("e621", server["url"])) for _ in range(4)]
     for t in threads:
         t.start()
     for t in threads:
         t.join()
-    assert time.monotonic() - start >= 0.6   # 4 requests, 3 gaps of 0.2 s
+    # 4 requests, 3 gaps of 0.2 s; a few ms of slack for the OS timer
+    assert time.perf_counter() - start >= 0.59
     assert len(server["calls"]) == 4
 
 
