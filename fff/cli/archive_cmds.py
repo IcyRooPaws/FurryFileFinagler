@@ -80,7 +80,9 @@ COMMANDS = [
     Command(("e621", "files", "find-deleted"), f"{S}.file_management.check_deleted_posts_files_enhanced",
             "Look for local files of deleted posts (checks up to 10 posts)", options=[]),
     Command(("e621", "files", "unfavorited"), f"{S}.file_management.manage_unfavorited_posts",
-            "Interactive menu for unfavorited posts (archive / delete)", options=[]),
+            "Interactive menu for unfavorited posts (archive / delete; files move to the unfavorited folder)", options=[]),
+    Command(("e621", "files", "orphaned"), f"{S}.file_management.move_orphaned_files",
+            "Move library files of posts no longer in the database or favorites to the unfavorited folder"),
     Command(("e621", "files", "restore"), f"{S}.file_management.restore_deleted_files",
             "Restore files listed in a deleted-files CSV (one-off tool)"),
     # --- reports ------------------------------------------------------------------------

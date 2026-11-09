@@ -31,7 +31,7 @@ from fff.archive.config import load_config
 from fff.archive.db import connect_to_mysql, create_tables_if_not_exists
 from fff.archive.fa_unfavorite import unfavorite_fa_sources
 from fff.archive.scripts.favorites.remove_ai_tagged_posts import log_ai_artists
-from send2trash import send2trash
+from fff.archive.post_files import trash_post_files
 import requests
 
 def setup_logging():
@@ -437,20 +437,14 @@ def cleanup_ai_generated_posts(conn, e621_config, delete_files=False, dry_run=Tr
 
     unfavorite_fa_sources(conn, post_ids, e621_config)
 
-    # Delete files if requested
-    if delete_files and stats['files_exist'] > 0:
-        logging.info(f"\nDeleting {stats['files_exist']} local files...")
-        for post in ai_posts:
-            if post['file_exists']:
-                file_path = post['file_path']
-                try:
-                    send2trash(file_path)
-                    stats['files_deleted'] += 1
-                    logging.info(f"  Deleted file: {file_path}")
-                except Exception as e:
-                    stats['files_failed'] += 1
-                    logging.error(f"  Failed to delete {file_path}: {e}")
-
+    # Delete files if requested: every local copy, not just posts.file_path (often stale after
+    # sorting). A post whose file could not be trashed stays in the database for the next run.
+    if delete_files:
+        logging.info("\nSending local files of %s posts to the recycle bin...", len(post_ids))
+        trashed = trash_post_files(conn, post_ids, reason="ai_deleted")
+        stats['files_deleted'] += trashed['trashed']
+        stats['files_failed'] += trashed['failed']
+        post_ids = [pid for pid in post_ids if pid in trashed['cleared']]
         logging.info(f"File deletion complete: {stats['files_deleted']} deleted, {stats['files_failed']} failed")
     elif stats['files_exist'] > 0:
         logging.info(f"\nSkipping file deletion for {stats['files_exist']} files (--delete-files not specified)")

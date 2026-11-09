@@ -72,7 +72,8 @@ def check_if_favorited(post_id, e621_config):
     auth = get_auth(e621_config)
 
     # Get post details to check if it's favorited
-    url = f"https://e621.net/posts/{post_id}.json?v2=true"
+    # Not ?v2=true: that response format has no is_favorited field, which read as "not favorited".
+    url = f"https://e621.net/posts/{post_id}.json"
 
     try:
         # Rate limit: 1 second between API calls
@@ -88,8 +89,11 @@ def check_if_favorited(post_id, e621_config):
         data = response.json()
         post = data if "id" in data else data.get("post", {})
 
-        # Check if current user has favorited it
-        is_favorited = post.get("is_favorited", False)
+        # Check if current user has favorited it; a response without the field is "unknown"
+        if "is_favorited" not in post:
+            logging.error(f"No is_favorited field for post {post_id} (not logged in?)")
+            return None
+        is_favorited = bool(post["is_favorited"])
         logging.debug(f"Post {post_id}: is_favorited={is_favorited}")
 
         return is_favorited

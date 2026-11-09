@@ -11,7 +11,9 @@ from pathlib import Path
 
 from fff.archive.config import load_config
 from fff.archive.logging_setup import setup_logging
+from fff.archive import paths as archive_paths
 from fff.archive.db import connect_to_mysql, create_tables_if_not_exists, archive_unfavorited_posts
+from fff.archive.post_files import move_post_files
 
 def get_unfavorited_posts(conn, config):
     """Get detailed information about posts in DB but not in current favorites."""
@@ -99,6 +101,21 @@ def delete_posts_from_db(conn, post_ids):
     finally:
         cursor.close()
 
+def remove_posts(conn, posts):
+    """Move every local copy of the posts' files to the unfavorited folder, then delete the posts.
+
+    Posts whose files could not be moved stay in the database. Returns the number deleted.
+    """
+    destination = archive_paths.unfavorited_directory()
+    result = move_post_files(conn, [p['id'] for p in posts], destination, reason="unfavorited:manual")
+    print(f"Moved {result['moved']} files to {destination}.")
+    if result['failed']:
+        print(f"Failed to move {result['failed']} files; those posts stay in the database.")
+    post_ids = [p['id'] for p in posts if p['id'] in result['cleared']]
+    delete_posts_from_db(conn, post_ids)
+    return len(post_ids)
+
+
 def main(argv=None):
     """Main function with interactive options. fff: argv is accepted for the CLI but unused."""
     config = load_config()
@@ -130,7 +147,7 @@ def main(argv=None):
         print(f"Found {len(posts)} posts in database that are no longer in your favorites.")
         print()
         print("Options:")
-        print("1. Archive and delete all unfavorited posts")
+        print("1. Archive and delete all unfavorited posts (files move to the unfavorited folder)")
         print("2. Just archive post information (no deletion)")
         print("3. Delete without archiving")
         print("4. Show detailed post information")
@@ -148,11 +165,10 @@ def main(argv=None):
             print(f"\nArchiving information for {len(posts)} posts...")
             if archive_unfavorited_posts(conn, posts):
                 print("Archive created successfully.")
-                confirm = input(f"Are you sure you want to DELETE {len(posts)} posts from the database? (yes/no): ")
+                confirm = input(f"Are you sure you want to DELETE {len(posts)} posts from the database "
+                                "and move their files to the unfavorited folder? (yes/no): ")
                 if confirm.lower() == 'yes':
-                    post_ids = [p['id'] for p in posts]
-                    delete_posts_from_db(conn, post_ids)
-                    print(f"Deleted {len(posts)} posts from database.")
+                    print(f"Deleted {remove_posts(conn, posts)} posts from database.")
                 else:
                     print("Deletion cancelled.")
             else:
@@ -168,11 +184,10 @@ def main(argv=None):
 
         elif choice == '3':
             # Delete without archiving
-            confirm = input(f"Are you sure you want to DELETE {len(posts)} posts WITHOUT archiving? (yes/no): ")
+            confirm = input(f"Are you sure you want to DELETE {len(posts)} posts WITHOUT archiving "
+                            "(their files move to the unfavorited folder)? (yes/no): ")
             if confirm.lower() == 'yes':
-                post_ids = [p['id'] for p in posts]
-                delete_posts_from_db(conn, post_ids)
-                print(f"Deleted {len(posts)} posts from database.")
+                print(f"Deleted {remove_posts(conn, posts)} posts from database.")
             else:
                 print("Deletion cancelled.")
 

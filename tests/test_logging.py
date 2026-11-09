@@ -116,3 +116,32 @@ def test_capture_print_survives_a_lost_console(tmp_path):
     log = log_file.read_text(encoding="utf-8")
     assert "Checking FA favorite status... [OK] Already favorited" in log
     assert log.count("Console output lost") == 1
+
+
+def test_archive_setup_logging_writes_its_file_when_logging_is_already_configured(tmp_path):
+    """A tool opened inside the Manager (root already has handlers) still gets a working log."""
+    import logging
+
+    from fff.archive import logging_setup
+
+    root = logging.getLogger()
+    saved = (root.handlers[:], root.level)
+    outer = logging.StreamHandler()
+    root.addHandler(outer)
+    try:
+        logging_setup.setup_logging(str(tmp_path / "a"))
+        logging.info("first tool")
+        logging_setup.setup_logging(str(tmp_path / "b"))   # a second tool replaces the first file
+        logging.info("second tool")
+        first, = (tmp_path / "a").glob("*.log")
+        second, = (tmp_path / "b").glob("*.log")
+        assert "first tool" in first.read_text(encoding="utf-8")
+        assert "second tool" not in first.read_text(encoding="utf-8")
+        assert "second tool" in second.read_text(encoding="utf-8")
+    finally:
+        if logging_setup._file_handler is not None:
+            root.removeHandler(logging_setup._file_handler)
+            logging_setup._file_handler.close()
+            logging_setup._file_handler = None
+        root.handlers[:] = saved[0]
+        root.setLevel(saved[1])

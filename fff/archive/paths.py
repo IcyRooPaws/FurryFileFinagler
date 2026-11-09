@@ -72,6 +72,18 @@ def ai_artist_directory() -> str:
     return _ai_cleanup().get("ai_artist_directory") or _test_path(DEFAULT_AI_ARTIST_DIRECTORY)
 
 
+DEFAULT_UNFAVORITED_DIRECTORY = r"E:\Image Sorter Working Folder\Unfavorited"
+
+
+def unfavorited_directory() -> str:
+    """Where files of posts removed from favorites are moved (archive.e621.unfavorited_directory)."""
+    try:
+        configured = (fff_config.legacy_view("archive").get("e621") or {}).get("unfavorited_directory")
+    except fff_config.ConfigError:
+        configured = None
+    return configured or _test_path(DEFAULT_UNFAVORITED_DIRECTORY)
+
+
 def db_names() -> dict:
     """module -> schema for the active environment (prod or test_*)."""
     return fff_config.database_names(fff_config.load())

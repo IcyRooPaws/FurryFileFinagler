@@ -79,6 +79,7 @@ archive:
     bulk_processing_batch_size: 250
     check_unfavorited_posts: true
     delete_unfavorited_files: true
+    unfavorited_directory: D:/Work/Unfavorited
     update_artist_filenames: true
   download:
     download_missing_files: true

@@ -21,7 +21,6 @@ import argparse
 import logging
 from pathlib import Path
 
-import shutil
 
 import requests
 
@@ -30,6 +29,7 @@ from fff.archive import paths as archive_paths
 from fff.archive.config import load_config
 from fff.archive.db import connect_to_mysql, create_tables_if_not_exists, record_ai_flagged_artists
 from fff.archive.fa_unfavorite import unfavorite_fa_sources
+from fff.archive.post_files import move_post_files
 from fff.archive.logging_setup import setup_logging
 
 
@@ -136,8 +136,14 @@ def process_posts(conn, e621_config, posts, dry_run=False):
     deleted_count = 0
     failed_count = 0
 
-    # Unfavorite their FA sources while source_links still exist
+    # Move every copy of their files to the AI folder (fff: config archive.ai_cleanup), not just
+    # posts.file_path; a post whose file could not be moved is kept for the next run
     if not dry_run:
+        moved = move_post_files(conn, [post['id'] for post in posts], archive_paths.ai_tag_directory(),
+                                reason="ai_tags")
+        failed_count += len(posts) - len([p for p in posts if p['id'] in moved["cleared"]])
+        posts = [p for p in posts if p['id'] in moved["cleared"]]
+        # Unfavorite their FA sources while source_links still exist
         unfavorite_fa_sources(conn, [post['id'] for post in posts], e621_config)
 
     for post in posts:
@@ -156,18 +162,7 @@ def process_posts(conn, e621_config, posts, dry_run=False):
             continue
 
         try:
-            # 1. Move file to AI folder
-            if file_path and os.path.exists(file_path):
-                try:
-                    ai_dest_dir = archive_paths.ai_tag_directory()  # fff: config archive.ai_cleanup
-                    os.makedirs(ai_dest_dir, exist_ok=True)
-                    dest = os.path.join(ai_dest_dir, os.path.basename(file_path))
-                    shutil.move(file_path, dest)
-                    logging.info("Moved file to AI folder: %s -> %s", file_path, dest)
-                except Exception as e:
-                    logging.error("Failed to move file %s: %s", file_path, e)
-
-            # 2. Unfavorite on e621
+            # 1. Files were moved above. 2. Unfavorite on e621
             try:
                 url = f"https://e621.net/favorites/{post_id}.json"
                 auth = (e621_config.get("login"), e621_config.get("api_key"))

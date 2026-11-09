@@ -44,7 +44,8 @@ Global options: `fff [--config PATH] [--env prod|test] <command>`.
 | `fff e621 favorites swap-duplicates` | Move favorites from 'inferior/duplicate of' posts to their replacements |
 | `fff e621 favorites from-md5` | Look up md5s from data/md5_search/md5.txt and favorite the matches |
 | `fff e621 files find-deleted` | Look for local files of deleted posts (checks up to 10 posts) |
-| `fff e621 files unfavorited` | Interactive menu for unfavorited posts (archive / delete) |
+| `fff e621 files unfavorited` | Interactive menu for unfavorited posts (archive / delete; files move to the unfavorited folder) |
+| `fff e621 files orphaned` | Move library files of posts no longer in the database or favorites to the unfavorited folder |
 | `fff e621 files restore` | Restore files listed in a deleted-files CSV (one-off tool) |
 | `fff e621 report favorites-diff` | Compare database post ids with live favorites |
 | `fff e621 report relationships` | Print parent/child relationship statistics |

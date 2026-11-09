@@ -15,11 +15,9 @@ Options:
     --dry-run   Preview what would be removed without making any changes.
 """
 
-import os
 import sys
 import argparse
 import logging
-import shutil
 import time
 from pathlib import Path
 
@@ -30,6 +28,7 @@ from fff.archive import paths as archive_paths
 from fff.archive.config import load_config
 from fff.archive.db import connect_to_mysql, load_ai_flagged_artists
 from fff.archive.fa_unfavorite import unfavorite_fa_sources
+from fff.archive.post_files import move_post_files
 from fff.archive.logging_setup import setup_logging
 
 AI_ARTIST_DEST = archive_paths.ai_artist_directory()  # fff: config archive.ai_cleanup
@@ -97,8 +96,14 @@ def process_posts(conn, e621_config, posts, dry_run=False):
     failed = 0
     total = len(posts)
 
-    # Unfavorite their FA sources while source_links still exist
+    # Move every copy of their files (not just posts.file_path); a post whose file could not be
+    # moved is kept for the next run
     if not dry_run:
+        moved = move_post_files(conn, [post['id'] for post in posts], AI_ARTIST_DEST, reason="ai_artists")
+        failed += len(posts) - len([p for p in posts if p['id'] in moved["cleared"]])
+        posts = [p for p in posts if p['id'] in moved["cleared"]]
+        total = len(posts)
+        # Unfavorite their FA sources while source_links still exist
         unfavorite_fa_sources(conn, [post['id'] for post in posts], e621_config)
 
     for idx, post in enumerate(posts, 1):
@@ -116,17 +121,7 @@ def process_posts(conn, e621_config, posts, dry_run=False):
             removed += 1
             continue
         try:
-            # 1. Move file to AI_Artist_Trash
-            if file_path and os.path.exists(file_path):
-                try:
-                    logging.info("Moving file: %s", file_path)
-                    os.makedirs(AI_ARTIST_DEST, exist_ok=True)
-                    dest = os.path.join(AI_ARTIST_DEST, os.path.basename(file_path))
-                    shutil.move(file_path, dest)
-                    logging.info("Moved file: %s -> %s", file_path, dest)
-                except Exception as e:
-                    logging.error("Failed to move file %s: %s", file_path, e)
-
+            # 1. Files were moved to AI_Artist_Trash above.
             auth = (e621_config.get("login"), e621_config.get("api_key"))
             headers = {"User-Agent": e621_config.get("user_agent", "e621 archive/1.0")}
 

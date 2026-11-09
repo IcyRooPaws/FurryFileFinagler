@@ -3,8 +3,9 @@ import sys
 import os
 import logging
 import argparse
-from send2trash import send2trash
+from fff.archive import paths as archive_paths
 from fff.archive.config import load_config
+from fff.archive.post_files import move_post_files
 from fff.archive.logging_setup import setup_logging
 from fff.archive.db import connect_to_mysql, create_tables_if_not_exists, get_existing_posts_info, insert_or_update_post, process_artists_and_tags, backfill_missing_file_names, normalize_ratings, backfill_missing_file_types, insert_post_sources, backfill_missing_sources, get_deleted_posts_count, insert_or_update_posts_bulk, process_artists_and_tags_bulk, sync_changed_post_tags, insert_post_sources_bulk, backfill_media_hashes, backfill_missing_file_paths, verify_and_repair_file_paths, backfill_timestamps_from_api, check_and_update_file_artist_names, insert_post_relationships_bulk, insert_post_relationships, process_pools_bulk, process_pools, upsert_pools_metadata_bulk, get_pools_missing_metadata, archive_unfavorited_posts
 from fff.archive.api import fetch_favorites, cleanup_temp_responses, load_recent_favorites_from_temp, check_and_cleanup_stale_responses, fetch_pool_metadata
@@ -119,41 +120,22 @@ def handle_unfavorited_posts(conn, current_favorite_ids, e621_config):
     if archive_unfavorited_posts(conn, unfavorited_posts):
         logging.info("Unfavorited posts information archived to unfavorited_posts_archive table")
 
-        # Handle file deletion for unfavorited posts
-        delete_files_flag = e621_config.get("delete_unfavorited_files", False)
-        deleted_files_count = 0
-        failed_deletions = 0
-        already_deleted_count = 0
+        post_ids = [post['id'] for post in unfavorited_posts]
 
-        for post in unfavorited_posts:
-            file_path = post.get('file_path')
-            if file_path:
-                if os.path.exists(file_path):
-                    # File exists - only delete if configured to do so
-                    if delete_files_flag:
-                        try:
-                            send2trash(file_path)
-                            deleted_files_count += 1
-                            logging.info(f"Deleted file for unfavorited post {post['id']}: {file_path}")
-                        except Exception as e:
-                            failed_deletions += 1
-                            logging.error(f"Failed to delete file for post {post['id']}: {file_path} - {e}")
-                else:
-                    # File already deleted from disk - just note it
-                    already_deleted_count += 1
-                    logging.info(f"File for unfavorited post {post['id']} already deleted from disk: {file_path}")
-
-        if deleted_files_count > 0:
-            logging.info(f"Deleted {deleted_files_count} files for unfavorited posts")
-        if already_deleted_count > 0:
-            logging.info(f"Found {already_deleted_count} unfavorited posts with files already deleted from disk")
-        if failed_deletions > 0:
-            logging.warning(f"Failed to delete {failed_deletions} files")
-        if not delete_files_flag and deleted_files_count == 0 and already_deleted_count == 0:
-            logging.info("File deletion for unfavorited posts is disabled (delete_unfavorited_files: false)")
+        # Move every local copy (not just posts.file_path, which the sorter leaves stale) out of
+        # the library into the unfavorited folder. Kept, not deleted, in case of a mistake.
+        if e621_config.get("delete_unfavorited_files", False):
+            destination = archive_paths.unfavorited_directory()
+            result = move_post_files(conn, post_ids, destination, reason="unfavorited")
+            logging.info("Moved %s files of unfavorited posts to %s", result["moved"], destination)
+            if result["failed"]:
+                logging.warning("Failed to move %s files; their posts stay in the database and are "
+                                "retried on the next run", result["failed"])
+            post_ids = [pid for pid in post_ids if pid in result["cleared"]]
+        else:
+            logging.info("Leaving files of unfavorited posts in place (delete_unfavorited_files: false)")
 
         # Unfavorite their FA sources while source_links still exist, then delete from the database
-        post_ids = [post['id'] for post in unfavorited_posts]
         unfavorite_fa_sources(conn, post_ids, e621_config)
         delete_posts_from_db(conn, post_ids)
         logging.info(f"Deleted {len(post_ids)} unfavorited posts from database")

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # fff: run as 'fff gui blacklist-review'; main(argv=None) ignores argv (the original had no options).
-# fff: file deletes go to the recycle bin (send2trash) instead of os.remove: both the critical
-# fff: auto-delete and the manual Delete button use the recycle bin.
+# fff: the critical auto-delete and the manual Delete button move every copy of the post's file
+# fff: (found via fff.archive.post_files) to archive.e621.unfavorited_directory, not the recycle bin.
 # fff: the AI folder comes from config archive.ai_cleanup (default E:\Image Sorter Working Folder\AI).
 """
 Blacklist Review UI
@@ -41,14 +41,13 @@ from io import BytesIO
 import threading
 import yaml
 from pathlib import Path
-import shutil
-from send2trash import send2trash
 
 from fff.archive import paths as archive_paths
 
 from fff.archive.config import load_config
 from fff.archive.db import connect_to_mysql, record_ai_flagged_artists
 from fff.archive.fa_unfavorite import unfavorite_fa_sources
+from fff.archive.post_files import move_post_files
 from fff.archive.logging_setup import setup_logging
 from fff.archive.api import api_get
 from fff.gui import host as tool_host, theme
@@ -852,7 +851,7 @@ class BlacklistReviewUI:
             "Confirm Deletion",
             f"Delete post {post_id} and remove from e621 favorites?\n\n"
             f"This will:\n"
-            f"- Delete the file from disk (if exists)\n"
+            f"- Move its files to the unfavorited folder\n"
             f"- Remove from e621 favorites\n"
             f"- Remove from local database"
         )
@@ -861,14 +860,13 @@ class BlacklistReviewUI:
             return
 
         try:
-            # Delete file if it exists
-            file_path = post.get('file_path')
-            if file_path and os.path.exists(file_path):
-                try:
-                    send2trash(file_path)
-                    logging.info(f"Deleted file (sent to recycle bin): {file_path}")
-                except Exception as e:
-                    logging.error(f"Failed to delete file {file_path}: {e}")
+            # Move every copy of its file, not just posts.file_path (often stale after sorting)
+            moved = move_post_files(self.conn, [post_id], archive_paths.unfavorited_directory(),
+                                    reason="blacklist_review:delete")
+            if post_id not in moved["cleared"]:
+                messagebox.showerror("Error", f"Could not move the file(s) of post {post_id}; "
+                                              "nothing was changed. See the log for details.")
+                return
 
             # Unfavorite on e621
             try:
@@ -1528,24 +1526,20 @@ def auto_delete_critical_posts(conn, e621_config, critical_tags):
 
     logging.info(f"Found {len(posts)} posts with critical blacklist tags - auto-deleting...")
 
+    # Move every copy of their files first; a post whose file could not be moved is kept
+    moved = move_post_files(conn, [post['id'] for post in posts], archive_paths.unfavorited_directory(),
+                            reason="blacklist_review:critical")
+    failed_count = len(posts) - len([p for p in posts if p['id'] in moved["cleared"]])
+    posts = [p for p in posts if p['id'] in moved["cleared"]]
+
     # Unfavorite their FA sources while source_links still exist
     unfavorite_fa_sources(conn, [post['id'] for post in posts], e621_config)
 
     deleted_count = 0
-    failed_count = 0
 
     for post in posts:
         post_id = post['id']
         try:
-            # Delete file if it exists
-            file_path = post.get('file_path')
-            if file_path and os.path.exists(file_path):
-                try:
-                    send2trash(file_path)
-                    logging.info(f"Deleted file (sent to recycle bin): {file_path}")
-                except Exception as e:
-                    logging.error(f"Failed to delete file {file_path}: {e}")
-
             # Unfavorite on e621
             try:
                 url = f"https://e621.net/favorites/{post_id}.json"
@@ -1660,28 +1654,20 @@ def auto_delete_ai_tagged_posts(conn, e621_config, ai_tags):
 
     logging.info("Found %d posts with AI tags - processing...", len(posts))
 
-    # Log artists and unfavorite their FA sources before deleting
+    # Log artists, then move every copy of their files to the AI folder (fff: config
+    # archive.ai_cleanup); a post whose file could not be moved is kept for the next run
     log_ai_artists(conn, posts)
+    moved = move_post_files(conn, [post['id'] for post in posts], archive_paths.ai_tag_directory(),
+                            reason="ai_tags")
+    failed_count = len(posts) - len([p for p in posts if p['id'] in moved["cleared"]])
+    posts = [p for p in posts if p['id'] in moved["cleared"]]
     unfavorite_fa_sources(conn, [post['id'] for post in posts], e621_config)
 
     deleted_count = 0
-    failed_count = 0
 
     for post in posts:
         post_id = post['id']
         try:
-            # Move file to AI folder
-            file_path = post.get('file_path')
-            if file_path and os.path.exists(file_path):
-                try:
-                    ai_dest_dir = archive_paths.ai_tag_directory()  # fff: config archive.ai_cleanup
-                    os.makedirs(ai_dest_dir, exist_ok=True)
-                    dest = os.path.join(ai_dest_dir, os.path.basename(file_path))
-                    shutil.move(file_path, dest)
-                    logging.info("Moved file to AI folder: %s -> %s", file_path, dest)
-                except Exception as e:
-                    logging.error("Failed to move file %s: %s", file_path, e)
-
             # Unfavorite on e621
             try:
                 url = f"https://e621.net/favorites/{post_id}.json"
