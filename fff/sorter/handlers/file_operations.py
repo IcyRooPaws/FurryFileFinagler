@@ -3,6 +3,9 @@ File operations module for moving, hashing, and validating files.
 """
 import os
 import logging
+from pathlib import Path
+
+from fff.common.fileops import unique_destination
 from .utils import (
     hash_file, compute_md5_hash, ensure_directory_exists,
     is_configured_file, is_video, is_image, is_gif, move_file_with_logging, is_furaffinity_file, get_furaffinity_rating
@@ -208,6 +211,21 @@ class FileOperations:
             logger.debug(f"Error in fast duplicate detection: {e}")
             return False, None
 
+    def move_incoming_duplicate(self, file_path, existing, reason):
+        """Move an incoming file whose content is already in the library to the duplicates folder."""
+        ensure_directory_exists(self.duplicate_directory)
+        dup_path = str(unique_destination(Path(self.duplicate_directory) / os.path.basename(file_path)))
+        move_file_with_logging(
+            file_path, dup_path,
+            db_manager=self.db_manager, logger_obj=logger,
+            destination_directory='duplicates',
+            reason=f"{reason}:{existing['table']}"
+        )
+        logger.info("'%s' is already in the library (%s match: %s); moved to duplicates as '%s'",
+                    os.path.basename(file_path), existing['match'], existing['file_path'],
+                    os.path.basename(dup_path))
+        return 1
+
     def process_file(self, file, source_directory, destination_directory, file_condition):
         """Process a single file for moving to destination."""
         moved = 0
@@ -257,12 +275,14 @@ class FileOperations:
                     current_file_hash = hash_file(file_path, logger=logger)
                     md5_hash = compute_md5_hash(file_path, logger=logger)
 
-                # Also check if file exists in archives
-                if not duplicate_name:
-                    archive_table, archive_file = self.db_manager.is_duplicate_in_any_dest(current_file_hash, check_archives=True)
-                    if archive_table and archive_table.startswith('archive_'):
-                        logger.info(f"File '{file}' already exists in archive table '{archive_table}' as '{archive_file}'")
-                        duplicate_name = archive_file  # Treat as duplicate
+                # An incoming file whose content is already anywhere in the library (favorites,
+                # archives, manual sort, another destination ...) is a duplicate: keep the existing
+                # copy and move this one to the duplicates folder. The old check looked at archives
+                # only, and compared the combined hash with single-hash columns, so it never matched.
+                if not duplicate_name and not self.db_manager.is_tracked(file_path):
+                    existing = self.db_manager.find_existing_copy(file_path, md5_hash, current_file_hash)
+                    if existing:
+                        return (0, self.move_incoming_duplicate(file_path, existing, 'sort_duplicate_of_existing'))
 
                 if duplicate_name:
                     # Found a duplicate - compare sizes and ages

@@ -9,6 +9,7 @@ import logging
 import threading
 
 from fff.common import db, schema
+from fff.common.naming import is_image
 
 logger = logging.getLogger(__name__)
 
@@ -635,61 +636,64 @@ class DatabaseManager:
 
         return tables
 
-    def is_duplicate_in_any_dest(self, file_hash, check_archives=True):
-        """Check if file hash is duplicate in any destination or archive table.
+    def is_tracked(self, file_path):
+        """True if file_path is already in one of the hash tables (a library file, not an incoming one)."""
+        variants = (file_path, file_path.replace("\\", "/"), file_path.replace("/", "\\"))
+        conn = None
+        try:
+            conn = self.get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute(f"SELECT 1 FROM `{self.database}`.all_files WHERE file_path IN (%s, %s, %s) LIMIT 1",
+                           variants)
+            found = cursor.fetchone() is not None
+            cursor.close()
+            return found
+        except Error as e:
+            logger.warning(f"Could not check whether {file_path} is in the library: {e}")
+            return True  # unknown: treat as a library file, so nothing is moved on a guess
+        finally:
+            if conn is not None:
+                conn.close()
 
-        Args:
-            file_hash: Hash to check for duplicates
-            check_archives: If True, also check archive tables
+    def find_existing_copy(self, file_path, md5_hash=None, composite_hash=None):
+        """Another file in the library with the same content as file_path, across every hash table.
 
-        Returns:
-            Tuple of (table_name, file_name) if duplicate found, else (None, None)
+        Matches on MD5 (byte-identical), then, for still images only, on all four perceptual hashes
+        (composite "avg|dhash|phash|whash" from hash_file). Perceptual hashes of videos and GIFs
+        come from a few frames and can collide (two videos with the same blank first frame), so
+        they only count when the MD5 matches. file_path's own row and rows whose file is gone are
+        ignored. Returns {"table", "file_name", "file_path", "match"} or None.
         """
-        tables_to_check = self.get_all_table_names(include_archives=check_archives)
-
-        for table in tables_to_check:
-            # Ensure table exists
-            try:
-                self.ensure_dest_table(table)
-            except Exception as e:
-                logger.debug(f"Could not ensure table {table}: {e}")
-                continue
-
-            # Check for duplicate in this table
-            for attempt in range(5):
-                conn = None
-                try:
-                    conn = self.get_db_connection()
-                    cursor = conn.cursor()
-                    # Check if hash matches any of the perceptual hash columns or md5_hash
-                    cursor.execute(f"""
-                        SELECT file_name, file_path
-                        FROM `{table}`
-                        WHERE perceptual_hash_phash = %s
-                           OR perceptual_hash_dhash = %s
-                           OR perceptual_hash_average = %s
-                           OR perceptual_hash_whash = %s
-                           OR md5_hash = %s
-                        LIMIT 1
-                    """, (file_hash, file_hash, file_hash, file_hash, file_hash))
-                    row = cursor.fetchone()
+        own = os.path.normcase(os.path.abspath(file_path))
+        lookups = []
+        if md5_hash:
+            lookups.append(("md5", "md5_hash = %s", (md5_hash,)))
+        parts = composite_hash.split("|") if composite_hash and composite_hash.count("|") == 3 else None
+        if parts and all(parts) and is_image(file_path):
+            lookups.append(("perceptual",
+                            "perceptual_hash_average = %s AND perceptual_hash_dhash = %s "
+                            "AND perceptual_hash_phash = %s AND perceptual_hash_whash = %s", tuple(parts)))
+        if not lookups:
+            return None
+        conn = None
+        try:
+            conn = self.get_db_connection()
+            cursor = conn.cursor()
+            for match, where, args in lookups:
+                cursor.execute(f"SELECT table_name, file_name, file_path FROM `{self.database}`.all_files "
+                               f"WHERE {where}", args)
+                for table, name, path in cursor.fetchall():
+                    if not path or os.path.normcase(os.path.abspath(path)) == own or not os.path.isfile(path):
+                        continue
                     cursor.close()
-
-                    if row:
-                        return (table, row[0])  # Return table name and filename
-                    break  # No duplicate in this table, move to next
-
-                except Error as e:
-                    if "lock" in str(e).lower() and attempt < 4:
-                        time.sleep(1)
-                    else:
-                        logger.warning(f"Error checking duplicates in {table}: {e}")
-                        break
-                finally:
-                    if conn:
-                        conn.close()
-
-        return (None, None)  # No duplicate found
+                    return {"table": table, "file_name": name, "file_path": path, "match": match}
+            cursor.close()
+        except Error as e:
+            logger.warning(f"Could not look for existing copies of {file_path}: {e}")
+        finally:
+            if conn is not None:
+                conn.close()
+        return None
 
     def load_file_hash_from_dest(self, dest_dir, file_name):
         """Load file hash from destination table."""

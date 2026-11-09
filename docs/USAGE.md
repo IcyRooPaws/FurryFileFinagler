@@ -73,7 +73,7 @@ Use each command's `--help` to see its options. For example:
 |---|---|
 | `fff e621 sync` | Writes `e621_posts_db`. Downloads into `download.missing_files_directory`. Renames files whose artist tags changed. Moves every local copy of an unfavorited post's file to `archive.e621.unfavorited_directory` (`delete_unfavorited_files`). Unfavorites and downvotes AI-tagged posts on e621 and moves their files to `archive.ai_cleanup`. Favorites on FurAffinity. |
 | `fff fluffle search` / `process-e621` / `process-fa` | Favorites on e621 and FurAffinity. Downloads files. Moves the existing code to the source-found, not-found, blacklisted and other-sourced folders. Every file operation is logged to `file_operations`. |
-| `fff sort ...` | Moves files between the library folders and archives. Writes `image_sorting_hashes`. |
+| `fff sort ...` | Moves files between the library folders and archives. Writes `image_sorting_hashes`. An incoming file (normal sort or tag sort) whose content is already anywhere in the library goes to the duplicates folder instead: same MD5, or for still images the same four perceptual hashes. |
 | `fff gui blacklist-review` | Auto-removes posts with critical or AI tags and unfavorites them on e621, before the window opens. Their files move to the unfavorited folder (critical tags) or `archive.ai_cleanup` (AI tags). |
 | `fff e621 files orphaned --execute` | Moves library files of posts that are no longer in the database or your favorites to the unfavorited folder. |
 | `fff db restore <backup> --prod` | Replaces the production databases with a backup, after you type a confirmation. Backs up the current state first. |

@@ -8,11 +8,15 @@ then moves matching files to configured destinations.
 import os
 import re
 import shutil
+from pathlib import Path
 import logging
 from typing import List, Dict, Set, Optional, Tuple
 from mysql.connector import Error
 
 from fff.common import db
+from fff.common.fileops import unique_destination
+from fff.common.naming import is_image
+from fff.sorter.handlers.utils import compute_md5_hash, hash_file
 
 # Import database logging functions
 try:
@@ -831,6 +835,15 @@ class TagSorter:
         logger.info(f"Found {len(found_files)} files out of {len(filenames)} database matches")
         return found_files
 
+    def _existing_copy_for_incoming(self, src_path: str) -> Optional[Dict]:
+        """The library copy of an incoming file, or None (also None for files already in the library)."""
+        db = self.db_manager
+        if not db or not hasattr(db, "find_existing_copy") or db.is_tracked(src_path):
+            return None
+        md5 = compute_md5_hash(src_path, logger=logger)
+        composite = hash_file(src_path, logger=logger) if is_image(src_path) else None
+        return db.find_existing_copy(src_path, md5, composite)
+
     def move_files_to_destination(self, files: Dict[str, str], destination_dir: Optional[str],
                                   base_directories: Optional[Dict[str, str]], folder_name: Optional[str],
                                   dry_run: bool = False, reason_tags: Optional[List[str]] = None,
@@ -976,6 +989,30 @@ class TagSorter:
                             print(f"  [WARNING] File exists (older): {filename}")
                             print(f"    Moved to duplicates: {os.path.basename(dup_path)}")
                 else:
+                    # An incoming file (not in the library yet) whose content is already somewhere
+                    # in the library is a duplicate: keep the existing copy, don't add a second one.
+                    existing = self._existing_copy_for_incoming(src_path)
+                    if existing:
+                        if dry_run:
+                            print(f"  [DRY RUN] Would move '{filename}' to duplicates: already in the library "
+                                  f"({existing['match']} match: {existing['file_path']})")
+                        else:
+                            os.makedirs(duplicate_dir, exist_ok=True)
+                            dup_path = str(unique_destination(Path(duplicate_dir) / filename))
+                            if HAS_LOGGING and self.db_manager:
+                                move_file_with_logging(
+                                    src_path, dup_path,
+                                    db_manager=self.db_manager,
+                                    logger_obj=logger,
+                                    destination_directory='duplicates',
+                                    reason=f"tag_sort_duplicate_of_existing:{existing['table']}"
+                                )
+                            else:
+                                shutil.move(src_path, dup_path)
+                            print(f"  [DUPLICATE] {filename}: already in the library ({existing['file_path']})")
+                            print(f"    Moved to duplicates: {os.path.basename(dup_path)}")
+                        continue
+
                     # No existing file - simple move
                     if dry_run:
                         print(f"  [DRY RUN] Would move: {filename}")
