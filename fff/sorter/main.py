@@ -38,10 +38,8 @@ For detailed help on any command:
 """
 
 import sys
-import os
 import argparse
 import logging
-from pathlib import Path
 
 # Import configuration and logging
 from fff.common import paths as fff_paths

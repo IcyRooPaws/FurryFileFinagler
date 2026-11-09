@@ -2,13 +2,10 @@
 File operations module for moving, hashing, and validating files.
 """
 import os
-import shutil
 import logging
 from .utils import (
     hash_file, compute_md5_hash, ensure_directory_exists,
-    is_configured_file, is_video, is_image, is_gif, log_file_move,
-    move_file_with_logging, copy_file_with_logging, delete_file_with_logging,
-    is_furaffinity_file, get_furaffinity_rating
+    is_configured_file, is_video, is_image, is_gif, move_file_with_logging, is_furaffinity_file, get_furaffinity_rating
 )
 
 # Import advanced deduplicator for fast duplicate detection

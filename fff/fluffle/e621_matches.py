@@ -9,7 +9,6 @@ preserves timestamps, and moves original images to source_found directory.
 Run as 'fff fluffle process-e621'.
 """
 
-import sys
 import time
 from pathlib import Path
 from typing import List, Dict, Any
@@ -154,12 +153,12 @@ def process_single_image(image_path: Path, post_id: str, config: Dict[str, Any],
     request_delay = 1.0
 
     if not login or not api_key:
-        print(f"    Error: e621 credentials not configured")
+        print("    Error: e621 credentials not configured")
         return False
 
     # Check if file exists
     if not image_path.exists():
-        print(f"    Warning: File not found, skipping e621 processing")
+        print("    Warning: File not found, skipping e621 processing")
         return False
 
     # Extract numeric post ID
@@ -169,7 +168,7 @@ def process_single_image(image_path: Path, post_id: str, config: Dict[str, Any],
         numeric_id = post_id
 
     # Check if favorited (using cache if available)
-    print(f"    Checking e621 favorite status...", end=" ", flush=True)
+    print("    Checking e621 favorite status...", end=" ", flush=True)
     is_fav = check_if_favorited(numeric_id, login, api_key, user_agent, favorites_cache)
 
     if is_fav:
@@ -177,19 +176,19 @@ def process_single_image(image_path: Path, post_id: str, config: Dict[str, Any],
     else:
         print("[ERROR] Not favorited")
         if auto_favorite:
-            print(f"    Adding to e621 favorites...", end=" ", flush=True)
+            print("    Adding to e621 favorites...", end=" ", flush=True)
             if add_to_favorites(numeric_id, login, api_key, user_agent, favorites_cache):
                 print("[OK] Successfully added to favorites")
                 time.sleep(request_delay)
             else:
                 print("[ERROR] Failed to add to favorites")
         else:
-            print(f"    Skipping favorite (auto_favorite disabled)")
+            print("    Skipping favorite (auto_favorite disabled)")
 
     time.sleep(request_delay)
 
     # Get post data
-    print(f"    Fetching e621 post data...", end=" ", flush=True)
+    print("    Fetching e621 post data...", end=" ", flush=True)
     save_json = e621_config.get('save_json_responses', False)
     responses_dir = e621_config.get('responses_directory', './responses/e621')
     post_data = get_post_data(numeric_id, login, api_key, user_agent, save_json, responses_dir)
@@ -208,14 +207,14 @@ def process_single_image(image_path: Path, post_id: str, config: Dict[str, Any],
 
             # Remove from favorites if it's favorited
             if is_fav:
-                print(f"    Removing from e621 favorites...", end=" ", flush=True)
+                print("    Removing from e621 favorites...", end=" ", flush=True)
                 if remove_from_favorites(numeric_id, login, api_key, user_agent, favorites_cache):
                     print("[OK]")
                     time.sleep(request_delay)
                 else:
                     print("[ERROR]")
 
-            print(f"    Moving to blacklisted directory...", end=" ", flush=True)
+            print("    Moving to blacklisted directory...", end=" ", flush=True)
             if move_to_blacklisted(image_path, blacklisted_dir, base_search_dir, preserve_structure):
                 print("[OK]")
                 return True
@@ -226,7 +225,7 @@ def process_single_image(image_path: Path, post_id: str, config: Dict[str, Any],
     # Deleted on e621: there's nothing to download, so our copy becomes the post's file
     if is_deleted_without_file(post_data):
         original_path = Path(str(image_path))
-        print(f"    [i] Post deleted on e621 - keeping the local file under its e621 name...", end=" ", flush=True)
+        print("    [i] Post deleted on e621 - keeping the local file under its e621 name...", end=" ", flush=True)
         kept_path = keep_local_file_as_post(post_data, image_path, download_dir, login, api_key, user_agent,
                                             base_search_dir, preserve_structure,
                                             move=lambda src, dest: ops.move(src, dest, "e621_deleted_post_kept_local"))
@@ -235,7 +234,7 @@ def process_single_image(image_path: Path, post_id: str, config: Dict[str, Any],
             return False
         print(f"[OK] -> {kept_path.name}")
         if replace_with_source:
-            print(f"    Copying renamed file back to original location...", end=" ", flush=True)
+            print("    Copying renamed file back to original location...", end=" ", flush=True)
             try:
                 ops.copy(kept_path, original_path, "replace_with_source")
                 print("[OK]")
@@ -246,7 +245,7 @@ def process_single_image(image_path: Path, post_id: str, config: Dict[str, Any],
     time.sleep(request_delay)
 
     # Download post
-    print(f"    Downloading from e621...", end=" ", flush=True)
+    print("    Downloading from e621...", end=" ", flush=True)
     downloaded_path = download_post(post_data, download_dir, login, api_key, user_agent,
                                    image_path, base_search_dir, preserve_structure)
 
@@ -265,7 +264,7 @@ def process_single_image(image_path: Path, post_id: str, config: Dict[str, Any],
 
     if downloaded_size < original_size:
         print(f"    [i] Downloaded file is smaller ({downloaded_size:,} vs {original_size:,} bytes)")
-        print(f"    Using current file with new filename...")
+        print("    Using current file with new filename...")
 
         # Generate the new filename for the original
         new_filename = downloaded_path.name
@@ -284,7 +283,7 @@ def process_single_image(image_path: Path, post_id: str, config: Dict[str, Any],
             downloaded_path = new_path  # Update path for later operations
             # Create a copy at original location if replace_with_source is enabled
             if replace_with_source:
-                print(f"    Copying renamed file back to original location...", end=" ", flush=True)
+                print("    Copying renamed file back to original location...", end=" ", flush=True)
                 try:
                     ops.copy(new_path, original_path, "replace_with_source")
                     print("[OK]")
@@ -299,13 +298,13 @@ def process_single_image(image_path: Path, post_id: str, config: Dict[str, Any],
         copy_file_times(image_path, downloaded_path)
 
         # Move original to source_found
-        print(f"    Moving original to source_found...", end=" ", flush=True)
+        print("    Moving original to source_found...", end=" ", flush=True)
         if move_to_source_found(image_path, source_found_dir, base_search_dir, preserve_structure):
             print("[OK]")
 
             # If replace_with_source is enabled, copy downloaded file to original location
             if replace_with_source:
-                print(f"    Copying downloaded file to original location...", end=" ", flush=True)
+                print("    Copying downloaded file to original location...", end=" ", flush=True)
                 try:
                     ops.copy(downloaded_path, original_path, "replace_with_source")
                     print("[OK]")
@@ -363,7 +362,7 @@ def main(argv=None):  # fff: argv accepted for the CLI; no options
     download_dir.mkdir(exist_ok=True)
     source_found_dir.mkdir(exist_ok=True)
 
-    print(f"\nConfiguration:")
+    print("\nConfiguration:")
     print(f"  Base search directory: {base_search_dir}")
     print(f"  Preserve directory structure: {preserve_structure}")
 
@@ -438,7 +437,7 @@ def main(argv=None):  # fff: argv accepted for the CLI; no options
 
         # Check if file exists
         if not image_path.exists():
-            print(f"  [WARNING] Warning: File not found, skipping")
+            print("  [WARNING] Warning: File not found, skipping")
             continue
 
         # Process the best match (highest distance/confidence)
@@ -455,7 +454,7 @@ def main(argv=None):  # fff: argv accepted for the CLI; no options
         print(f"  Author: {best_match['author_name']}")
 
         # Check if favorited (using cache)
-        print(f"  Checking favorites...", end=" ", flush=True)
+        print("  Checking favorites...", end=" ", flush=True)
         is_fav = check_if_favorited(numeric_id, login, api_key, user_agent, favorites_cache)
 
         if is_fav:
@@ -463,7 +462,7 @@ def main(argv=None):  # fff: argv accepted for the CLI; no options
         else:
             print("[ERROR] Not favorited")
             if auto_favorite:
-                print(f"  Adding to favorites...", end=" ", flush=True)
+                print("  Adding to favorites...", end=" ", flush=True)
                 if add_to_favorites(numeric_id, login, api_key, user_agent, favorites_cache):
                     print("[OK] Successfully added to favorites")
                     favorited += 1
@@ -471,12 +470,12 @@ def main(argv=None):  # fff: argv accepted for the CLI; no options
                 else:
                     print("[ERROR] Failed to add to favorites")
             else:
-                print(f"  Skipping favorite (auto_favorite disabled)")
+                print("  Skipping favorite (auto_favorite disabled)")
 
         time.sleep(request_delay)
 
         # Get post data
-        print(f"  Fetching post data...", end=" ", flush=True)
+        print("  Fetching post data...", end=" ", flush=True)
         save_json = e621_config.get('save_json_responses', False)
         responses_dir = e621_config.get('responses_directory', './responses/e621')
         post_data = get_post_data(numeric_id, login, api_key, user_agent, save_json, responses_dir)
@@ -493,13 +492,13 @@ def main(argv=None):  # fff: argv accepted for the CLI; no options
             if blacklisted_tags:
                 print(f"  [WARNING] Post contains blacklisted tags: {', '.join(blacklisted_tags)}")
                 if is_fav:
-                    print(f"  Removing from e621 favorites...", end=" ", flush=True)
+                    print("  Removing from e621 favorites...", end=" ", flush=True)
                     if remove_from_favorites(numeric_id, login, api_key, user_agent, favorites_cache):
                         print("[OK]")
                         time.sleep(request_delay)
                     else:
                         print("[ERROR]")
-                print(f"  Moving to blacklisted directory...", end=" ", flush=True)
+                print("  Moving to blacklisted directory...", end=" ", flush=True)
                 if move_to_blacklisted(image_path, blacklisted_dir, base_search_dir, preserve_structure):
                     print("[OK]")
                     processed += 1
@@ -510,7 +509,7 @@ def main(argv=None):  # fff: argv accepted for the CLI; no options
 
         # Deleted on e621: there's nothing to download, so our copy becomes the post's file
         if is_deleted_without_file(post_data):
-            print(f"  [i] Post deleted on e621 - keeping the local file under its e621 name...", end=" ", flush=True)
+            print("  [i] Post deleted on e621 - keeping the local file under its e621 name...", end=" ", flush=True)
             kept_path = keep_local_file_as_post(post_data, image_path, download_dir, login, api_key, user_agent,
                                                 base_search_dir, preserve_structure,
                                                 move=lambda src, dest: ops.move(src, dest, "e621_deleted_post_kept_local"))
@@ -526,7 +525,7 @@ def main(argv=None):  # fff: argv accepted for the CLI; no options
         time.sleep(request_delay)
 
         # Download post
-        print(f"  Downloading...", end=" ", flush=True)
+        print("  Downloading...", end=" ", flush=True)
         downloaded_path = download_post(post_data, download_dir, login, api_key, user_agent,
                                        image_path, base_search_dir, preserve_structure)
 
@@ -543,7 +542,7 @@ def main(argv=None):  # fff: argv accepted for the CLI; no options
 
         if downloaded_size < original_size:
             print(f"  [i] Downloaded file is smaller ({downloaded_size:,} vs {original_size:,} bytes)")
-            print(f"  Using current file with new filename...", end=" ", flush=True)
+            print("  Using current file with new filename...", end=" ", flush=True)
 
             # Generate the new filename for the original
             new_filename = downloaded_path.name
@@ -565,12 +564,12 @@ def main(argv=None):  # fff: argv accepted for the CLI; no options
                 continue
         else:
             # Copy file times from original to downloaded
-            print(f"  Copying timestamps...", end=" ", flush=True)
+            print("  Copying timestamps...", end=" ", flush=True)
             copy_file_times(image_path, downloaded_path)
             print("[OK]")
 
         # Move original to source_found
-        print(f"  Moving original...", end=" ", flush=True)
+        print("  Moving original...", end=" ", flush=True)
         if move_to_source_found(image_path, source_found_dir, base_search_dir, preserve_structure):
             print(f"[OK] -> {source_found_dir}")
             moved += 1

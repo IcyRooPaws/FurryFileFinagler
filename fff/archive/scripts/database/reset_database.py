@@ -15,7 +15,6 @@ Usage:
 import sys
 import logging
 import argparse
-from pathlib import Path
 
 from fff.archive import paths as archive_paths
 

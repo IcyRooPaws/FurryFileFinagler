@@ -95,13 +95,13 @@ class DedupeStats:
 
     def __str__(self):
         lines = [
-            f"=== Deduplication Statistics ===",
+            "=== Deduplication Statistics ===",
             f"Total files scanned: {self.total_files:,}",
             f"Duplicate groups found: {self.duplicate_groups:,}",
             f"Duplicate files: {self.duplicate_files:,}",
             f"Wasted space: {self._format_bytes(self.wasted_space)}",
             f"Total time: {self.total_time:.2f}s",
-            f"\nStage execution times:"
+            "\nStage execution times:"
         ]
         for stage in self.stages_run:
             time_taken = self.stage_times.get(stage, 0)

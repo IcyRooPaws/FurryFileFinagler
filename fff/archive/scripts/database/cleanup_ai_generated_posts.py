@@ -23,7 +23,6 @@ import argparse
 import json
 import time
 from datetime import datetime
-from pathlib import Path
 
 from fff.archive import paths as archive_paths
 
@@ -341,7 +340,7 @@ def delete_posts_from_db(conn, post_ids):
             total_related = sum(related_counts.values())
             logging.info(f"[OK] Cascade deleted {total_related} related records across {len(related_counts)} tables")
         else:
-            logging.info(f"[OK] No related records found (posts were isolated)")
+            logging.info("[OK] No related records found (posts were isolated)")
 
     except Exception as e:
         logging.error(f"Failed to delete posts from database: {e}")

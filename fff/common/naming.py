@@ -133,7 +133,6 @@ def extract_e621_post_id(filename):
     Returns:
         int: The post ID if pattern matches, None otherwise
     """
-    import re
 
     # Convert to lowercase for case-insensitive matching
     filename_lower = filename.lower()

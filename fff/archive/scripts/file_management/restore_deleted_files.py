@@ -2,9 +2,7 @@
 # fff: to the original values; argparse replaces the sys.argv flag check.
 import argparse
 import csv
-import os
 import shutil
-import sys
 from pathlib import Path
 
 # fff: hard-coded paths became options (defaults are the original values)
@@ -15,7 +13,7 @@ DEFAULT_NOT_FOUND_CSV = r"d:\Code Projects\e621 archive\not_found_files.csv"
 
 def find_and_copy_files(check_only=False, csv_file=DEFAULT_CSV_FILE, search_root=DEFAULT_SEARCH_ROOT,
                         duplicates_dir=DEFAULT_DUPLICATES_DIR, not_found_csv=DEFAULT_NOT_FOUND_CSV):
-    """
+    r"""
     Read deleted_files CSV, search for files in P:\Testing\,
     and restore them to their original locations.
     If a file already exists, keep the older one and move the newer to P:\Test\Duplicates
@@ -80,7 +78,7 @@ def find_and_copy_files(check_only=False, csv_file=DEFAULT_CSV_FILE, search_root
 
                     # Check if file already exists at destination
                     if original_path.exists():
-                        print(f"  [WARNING] File already exists at destination")
+                        print("  [WARNING] File already exists at destination")
 
                         # Get modification times
                         found_mtime = found_file.stat().st_mtime
@@ -88,7 +86,7 @@ def find_and_copy_files(check_only=False, csv_file=DEFAULT_CSV_FILE, search_root
 
                         if found_mtime < existing_mtime:
                             # Found file is older - keep it, move existing to duplicates
-                            print(f"  -> Found file is OLDER (keeping it)")
+                            print("  -> Found file is OLDER (keeping it)")
                             temp_existing = duplicates_dir / file_name
 
                             # Handle duplicate names in duplicates folder
@@ -108,7 +106,7 @@ def find_and_copy_files(check_only=False, csv_file=DEFAULT_CSV_FILE, search_root
                             duplicate_count += 1
                         else:
                             # Existing file is older - keep it, move found to duplicates
-                            print(f"  -> Existing file is OLDER (keeping it)")
+                            print("  -> Existing file is OLDER (keeping it)")
                             temp_found = duplicates_dir / file_name
 
                             # Handle duplicate names in duplicates folder

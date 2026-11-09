@@ -5,9 +5,7 @@ Script to find posts that are in the database but not in current favorites.
 This helps identify posts that may have been unfavorited or removed from favorites.
 """
 
-import sys
 import logging
-from pathlib import Path
 
 
 from fff.archive.config import load_config

@@ -5,7 +5,6 @@ This module provides functionality to archive old files based on age criteria,
 integrated with the main database and configuration system.
 """
 import os
-import shutil
 import datetime
 import threading
 import logging

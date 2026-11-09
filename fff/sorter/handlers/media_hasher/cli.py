@@ -9,8 +9,6 @@ Provides easy access to hashing functionality from the command line
 import argparse
 import sys
 import json
-from pathlib import Path
-from typing import Optional
 
 from .core import MediaHasher, HAS_IMAGE_SUPPORT
 from .utils import (

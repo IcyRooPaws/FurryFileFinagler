@@ -2,8 +2,6 @@
 """
 Quick test to verify archive tables are created correctly.
 """
-import sys
-import os
 
 import pytest
 

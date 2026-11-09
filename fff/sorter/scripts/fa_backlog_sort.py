@@ -28,7 +28,6 @@ import sys
 import shutil
 import logging
 import argparse
-from pathlib import Path
 
 from fff.sorter.handlers import Config, DatabaseManager
 from fff.sorter.handlers.utils import (

@@ -351,7 +351,7 @@ def download_missing_files(conn, download_config, e621_config, mysql_config=None
                             # Remove the downloaded file if database update fails
                             try:
                                 os.remove(target_path)
-                            except:
+                            except Exception:
                                 pass
                             failed_count += 1
                         finally:
@@ -360,7 +360,7 @@ def download_missing_files(conn, download_config, e621_config, mysql_config=None
                         logging.error(f"Downloaded file for post {post_id} is empty or missing")
                         try:
                             os.remove(target_path)
-                        except:
+                        except Exception:
                             pass
                         failed_count += 1
                 except Exception as e:

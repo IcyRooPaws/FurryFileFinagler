@@ -45,7 +45,6 @@ def process_directory(conn, directory, e621_config):
                 logging.error("Error processing file %s: %s", file_path, e)
 
 def process_orphan_file(conn, filepath, e621_config):
-    import requests
     post_id = extract_post_id_from_file_name(filepath)
     if not post_id:
         logging.error("Could not extract post id from file_name: %s", filepath)

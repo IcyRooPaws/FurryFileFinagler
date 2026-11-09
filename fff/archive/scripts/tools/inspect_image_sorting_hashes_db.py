@@ -8,7 +8,6 @@ and understand the actual table schema for proper integration.
 
 import sys
 import logging
-from pathlib import Path
 
 from fff.archive import paths as archive_paths
 
@@ -74,7 +73,7 @@ def inspect_database_structure(conn):
             column_info = cursor.fetchall()
             column_names = [col[0] for col in column_info]
             
-            print(f"\nSAMPLE DATA (first 5 rows):")
+            print("\nSAMPLE DATA (first 5 rows):")
             if sample_data:
                 # Print header
                 print("  " + " | ".join(f"{name:<20}" for name in column_names))

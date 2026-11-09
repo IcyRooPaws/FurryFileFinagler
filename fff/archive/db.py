@@ -1111,7 +1111,7 @@ def check_and_update_file_artist_names(conn, batch_limit=None, dry_run=False):
                     # Try to rename file back
                     try:
                         os.rename(new_file_path, current_file_path)
-                    except:
+                    except Exception:
                         pass
                     stats["failed"] += 1
                 finally:
@@ -2595,7 +2595,7 @@ def verify_and_repair_file_paths(conn, mysql_config, batch_limit: int | None = N
         conn.commit()
         update_cursor.close()
 
-        logging.info(f"File path verification complete:")
+        logging.info("File path verification complete:")
         logging.info(f"  Checked: {stats['checked']} posts")
         logging.info(f"  Missing files: {stats['missing']}")
         logging.info(f"  Repaired paths: {stats['repaired']}")
@@ -4084,7 +4084,7 @@ def check_old_favs_deletion_status(conn, e621_config, batch_limit: int | None = 
                 """, (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), post_id))
                 conn.commit()
                 cursor.close()
-            except:
+            except Exception:
                 pass
 
     logging.info("Completed deletion status check for old_favs. Checked %s posts, found %s deleted.", checked_count, deleted_count)

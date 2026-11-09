@@ -9,7 +9,6 @@ Requires Firefox cookies for authentication. Run as 'fff fluffle process-fa'.
 """
 
 import re
-import sys
 import time
 import http.cookiejar
 from pathlib import Path
@@ -123,14 +122,14 @@ def move_named_fa_download(image_path: Path, download_dir: Path, source_found_di
         except ValueError:
             pass
     if image_path.parent == destination_dir:
-        print(f"    [OK] Already named and in the download folder")
+        print("    [OK] Already named and in the download folder")
         return True
     if (destination_dir / image_path.name).exists():
         print(f"    [i] {image_path.name} is already in the download folder - moving this copy to source_found...",
               end=" ")
         moved = move_to_source_found(image_path, source_found_dir, base_search_dir, preserve_structure)
     else:
-        print(f"    Already named as the FA download - moving to download folder...", end=" ")
+        print("    Already named as the FA download - moving to download folder...", end=" ")
         moved = ops.move_to_directory(image_path, download_dir, base_search_dir, preserve_structure,
                                       reason="fa_already_named")
     print("[OK]" if moved else "[ERROR]")
@@ -214,19 +213,19 @@ def process_single_fa_image(image_path: Path, post_id: str, config: Dict[str, An
     request_delay = 2.0  # FA is stricter, use 2 second delay
 
     if not cookies:
-        print(f"    Error: No Firefox cookies available")
+        print("    Error: No Firefox cookies available")
         return False
 
     # Check if file exists
     if not image_path.exists():
-        print(f"    Warning: File not found, skipping FA processing")
+        print("    Warning: File not found, skipping FA processing")
         return False
 
     # Extract numeric post ID
     numeric_id = post_id.replace('furAffinity_', '').replace('fa_', '')
 
     # Get post data first: its tags decide whether the post is blocked before it is favorited
-    print(f"    Fetching FA post data...", end=" ", flush=True)
+    print("    Fetching FA post data...", end=" ", flush=True)
     post_data = get_fa_post_data(numeric_id, cookies)
 
     if not post_data:
@@ -243,7 +242,7 @@ def process_single_fa_image(image_path: Path, post_id: str, config: Dict[str, An
     time.sleep(request_delay)
 
     # Check if favorited
-    print(f"    Checking FA favorite status...", end=" ", flush=True)
+    print("    Checking FA favorite status...", end=" ", flush=True)
     is_fav = check_if_fa_favorited(numeric_id, cookies)
 
     if is_fav:
@@ -251,7 +250,7 @@ def process_single_fa_image(image_path: Path, post_id: str, config: Dict[str, An
     else:
         # None means FA didn't return the page (e.g. a Cloudflare 403), not "not favorited"
         print("[WARN] Status unknown (FA blocked the request?)" if is_fav is None else "Not favorited yet")
-        print(f"    Adding to FA favorites...", end=" ", flush=True)
+        print("    Adding to FA favorites...", end=" ", flush=True)
         if add_to_fa_favorites(numeric_id, cookies):
             print("[OK] Successfully added to favorites")
             time.sleep(request_delay)
@@ -265,8 +264,8 @@ def process_single_fa_image(image_path: Path, post_id: str, config: Dict[str, An
     if image_id and connection:
         has_e621 = check_has_e621_match(image_id, connection)
         if has_e621:
-            print(f"    [i] Image has e621 match - skipping FA download")
-            print(f"    [OK] FA favorite complete (no download needed)")
+            print("    [i] Image has e621 match - skipping FA download")
+            print("    [OK] FA favorite complete (no download needed)")
             return True
 
     # Already the FA download (same name and post id) - move it rather than download it again
@@ -276,14 +275,14 @@ def process_single_fa_image(image_path: Path, post_id: str, config: Dict[str, An
 
     # Check if post was not found or deleted
     if post_data.get('not_found'):
-        print(f"    [WARN] Post deleted/not found")
+        print("    [WARN] Post deleted/not found")
 
         author_name = 'unknown'
         rating = 'Adult'  # Default to Adult for safety
 
         # If we have reverse search match data, use it to rename the file
         if fluffle_match_data:
-            print(f"    [i] Using reverse search data to rename file with metadata")
+            print("    [i] Using reverse search data to rename file with metadata")
             try:
                 # Extract info from reverse search match data with robust fallback logic
                 authors = fluffle_match_data.get('authors', [])
@@ -308,7 +307,7 @@ def process_single_fa_image(image_path: Path, post_id: str, config: Dict[str, An
                 print(f"    [WARN] Error extracting reverse search data: {e}")
         else:
             # No reverse search data - try to extract artist from filename
-            print(f"    [i] No reverse search data - attempting to extract artist from filename")
+            print("    [i] No reverse search data - attempting to extract artist from filename")
             try:
                 # Filename format is often: timestamp.artist_title.ext
                 # Example: 1302921337.doodlies_hot_lucario_on_gabumon_action.jpg
@@ -364,7 +363,7 @@ def process_single_fa_image(image_path: Path, post_id: str, config: Dict[str, An
                 ops.rename(image_path, new_path, "fa_deleted_renamed")
                 print(f"    [OK] Renamed to: {new_path.name}")
             else:
-                print(f"    [OK] File already has correct name")
+                print("    [OK] File already has correct name")
             
             # Copy to download directory for record keeping (always do this for deleted posts)
             download_dir.mkdir(exist_ok=True)
@@ -384,12 +383,12 @@ def process_single_fa_image(image_path: Path, post_id: str, config: Dict[str, An
             print(f"    [OK] Copied to download dir: {download_copy.name}")
             
             # Return tuple with new path
-            print(f"    [i] Source was deleted - returning renamed path")
+            print("    [i] Source was deleted - returning renamed path")
             return ('deleted', new_path)
 
         except Exception as e:
             print(f"    [WARN] Could not rename file: {e}")
-            print(f"    [i] Source was deleted - treating as not found")
+            print("    [i] Source was deleted - treating as not found")
             return 'deleted'
 
     # Check if post has an error (like no download link found)
@@ -400,7 +399,7 @@ def process_single_fa_image(image_path: Path, post_id: str, config: Dict[str, An
     time.sleep(request_delay)
 
     # Download post
-    print(f"    Downloading from FurAffinity...", end=" ", flush=True)
+    print("    Downloading from FurAffinity...", end=" ", flush=True)
     downloaded_path = download_fa_post(post_data, download_dir, cookies,
                                        image_path, base_search_dir, preserve_structure)
 
@@ -417,13 +416,13 @@ def process_single_fa_image(image_path: Path, post_id: str, config: Dict[str, An
     original_path = image_path
 
     # Move original to source_found
-    print(f"    Moving original to source_found...", end=" ")
+    print("    Moving original to source_found...", end=" ")
     if move_to_source_found(image_path, source_found_dir, base_search_dir, preserve_structure):
         print("[OK]")
 
         # If replace_with_source is enabled, copy downloaded file to original location
         if replace_with_source:
-            print(f"    Copying downloaded file to original location...", end=" ", flush=True)
+            print("    Copying downloaded file to original location...", end=" ", flush=True)
             try:
                 ops.copy(downloaded_path, original_path, "replace_with_source")
                 print("[OK]")
@@ -507,7 +506,7 @@ def main(argv=None):  # fff: argv accepted for the CLI; no options
     source_found_dir.mkdir(exist_ok=True)
     not_found_dir.mkdir(exist_ok=True)
 
-    print(f"\nConfiguration:")
+    print("\nConfiguration:")
     print(f"  Base search directory: {base_search_dir}")
     print(f"  Preserve directory structure: {preserve_structure}")
 
@@ -604,7 +603,7 @@ def main(argv=None):  # fff: argv accepted for the CLI; no options
         print(f"  Author: {best_match['author_name']}")
 
         # Get post data first: its tags decide whether the post is blocked before it is favorited
-        print(f"  Fetching post data...", end=" ", flush=True)
+        print("  Fetching post data...", end=" ", flush=True)
         post_data = get_fa_post_data(numeric_id, cookies)
 
         if not post_data:
@@ -625,7 +624,7 @@ def main(argv=None):  # fff: argv accepted for the CLI; no options
         time.sleep(request_delay)
 
         # Check if favorited
-        print(f"  Checking favorites...", end=" ", flush=True)
+        print("  Checking favorites...", end=" ", flush=True)
         is_fav = check_if_fa_favorited(numeric_id, cookies)
 
         if is_fav is None:
@@ -636,7 +635,7 @@ def main(argv=None):  # fff: argv accepted for the CLI; no options
             print("[OK] Already favorited")
         else:
             print("[ERROR] Not favorited")
-            print(f"  Adding to favorites...", end=" ", flush=True)
+            print("  Adding to favorites...", end=" ", flush=True)
             fav_result = add_to_fa_favorites(numeric_id, cookies)
             if fav_result is None:
                 print("[WARN] FA server error (502/5xx) while adding favorite - skipping file")
@@ -655,7 +654,7 @@ def main(argv=None):  # fff: argv accepted for the CLI; no options
         has_e621 = check_has_e621_match(img_id, connection)
 
         if has_e621:
-            print(f"  [i] Image has e621 match - skipping FA download")
+            print("  [i] Image has e621 match - skipping FA download")
             processed += 1
             print()
             continue
@@ -677,7 +676,7 @@ def main(argv=None):  # fff: argv accepted for the CLI; no options
                 print("  [ERROR] Post not found in FA database")
 
             # Move to not_found folder (using configured directory)
-            print(f"  Moving to not_found...", end=" ", flush=True)
+            print("  Moving to not_found...", end=" ", flush=True)
             if move_to_not_found(image_path, not_found_dir, base_search_dir, preserve_structure):
                 print("[OK]")
                 moved_to_not_found += 1
@@ -691,7 +690,7 @@ def main(argv=None):  # fff: argv accepted for the CLI; no options
         time.sleep(request_delay)
 
         # Download post
-        print(f"  Downloading...", end=" ", flush=True)
+        print("  Downloading...", end=" ", flush=True)
         downloaded_path = download_fa_post(post_data, download_dir, cookies,
                                           image_path, base_search_dir, preserve_structure)
 
@@ -708,7 +707,7 @@ def main(argv=None):  # fff: argv accepted for the CLI; no options
 
         if downloaded_size < original_size:
             print(f"  [i] Downloaded file is smaller ({downloaded_size:,} vs {original_size:,} bytes)")
-            print(f"  Using current file with new filename...")
+            print("  Using current file with new filename...")
 
             # Generate the new filename for the original
             new_filename = downloaded_path.name
@@ -733,7 +732,7 @@ def main(argv=None):  # fff: argv accepted for the CLI; no options
             copy_file_times(image_path, downloaded_path)
 
         # Move original to source_found
-        print(f"  Moving original...", end=" ", flush=True)
+        print("  Moving original...", end=" ", flush=True)
         if move_to_source_found(image_path, source_found_dir, base_search_dir, preserve_structure):
             print("[OK]")
             moved_to_source += 1

@@ -1,6 +1,5 @@
 """The prod/test database toggle."""
 import re
-from pathlib import Path
 
 import pytest
 
@@ -131,7 +130,7 @@ def test_no_hard_coded_database_names_in_package():
 
 @pytest.mark.parametrize("prod,test", [
     ("P:/IPL/Pictures/- SFW Pics", "E:/Testing/P/IPL/Pictures/- SFW Pics"),
-    ("P:\IPL\- Need to be Sorted", "E:\Testing\P\IPL\- Need to be Sorted"),
+    (r"P:\IPL\- Need to be Sorted", r"E:\Testing\P\IPL\- Need to be Sorted"),
     ("E:/Work/AI", "E:/Testing/E/Work/AI"),
     ("c:/Users/IPL/Downloads", "E:/Testing/C/Users/IPL/Downloads"),
     ("P:/", "E:/Testing/P"),
@@ -175,10 +174,10 @@ def test_custom_root_and_opt_out():
 
 
 def test_reroute_tree_handles_lists_and_multiline():
-    tree = {"a": ["P:/IPL/one", "rel"], "b": {"src": "P:\IPL\in\n  P:\IPL\two\n"}, "n": 3, "flag": True}
+    tree = {"a": ["P:/IPL/one", "rel"], "b": {"src": "P:\\IPL\\in\n  P:\\IPL\two\n"}, "n": 3, "flag": True}
     out = fff_config.reroute_paths(tree, cfg("test"))
     assert out == {"a": ["E:/Testing/P/IPL/one", "rel"],
-                   "b": {"src": "E:\Testing\P\IPL\in\n  E:\Testing\P\IPL\two\n"}, "n": 3, "flag": True}
+                   "b": {"src": "E:\\Testing\\P\\IPL\\in\n  E:\\Testing\\P\\IPL\two\n"}, "n": 3, "flag": True}
 
 
 def test_real_config_views_have_no_prod_paths_in_test():

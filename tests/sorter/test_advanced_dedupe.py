@@ -18,7 +18,6 @@ from fff.sorter.core.advanced_deduplicator import (
 
 def create_test_files():
     """Create temporary test files for demonstration"""
-    import hashlib
 
     # Create temp directory
     temp_dir = tempfile.mkdtemp(prefix="dedupe_test_")
@@ -97,7 +96,7 @@ def test_basic_deduplication():
                 mode=mode
             )
 
-            print(f"\nResults:")
+            print("\nResults:")
             print(f"  Duplicate groups: {len(groups)}")
             print(f"  Total duplicates: {sum(len(g.files) for g in groups)}")
             print(f"  Wasted space: {stats.wasted_space / 1024:.1f} KB")
@@ -115,7 +114,7 @@ def test_basic_deduplication():
         # Cleanup
         import shutil
         shutil.rmtree(temp_dir)
-        print(f"\n🧹 Cleaned up test directory")
+        print("\n🧹 Cleaned up test directory")
 
 
 def test_size_filtering():
@@ -148,9 +147,9 @@ def test_size_filtering():
             mode=DedupeMode.NORMAL
         )
 
-        print(f"\nResults:")
+        print("\nResults:")
         print(f"  Duplicate groups: {len(groups)}")
-        print(f"  Expected: 1 group (the 2MB files)")
+        print("  Expected: 1 group (the 2MB files)")
 
         if len(groups) == 1 and len(groups[0].files) == 2:
             print("✅ Size filtering works correctly!")
@@ -160,7 +159,7 @@ def test_size_filtering():
     finally:
         import shutil
         shutil.rmtree(temp_dir)
-        print(f"\n🧹 Cleaned up test directory")
+        print("\n🧹 Cleaned up test directory")
 
 
 def test_performance():
@@ -170,13 +169,12 @@ def test_performance():
     print("="*70)
 
     import time
-    import hashlib
 
     temp_dir = tempfile.mkdtemp(prefix="dedupe_perf_")
 
     try:
         # Create 100 files (50 duplicate pairs)
-        print(f"📁 Creating 100 test files...")
+        print("📁 Creating 100 test files...")
         files = []
 
         for i in range(50):
@@ -222,7 +220,7 @@ def test_performance():
         print(f"  Time: {full_time:.3f}s")
         print(f"  Groups: {len(groups)}")
 
-        print(f"\n📈 Performance:")
+        print("\n📈 Performance:")
         print(f"  FAST is {full_time/fast_time:.1f}x faster than FULL")
         print(f"  NORMAL is {full_time/normal_time:.1f}x faster than FULL")
 
@@ -231,7 +229,7 @@ def test_performance():
     finally:
         import shutil
         shutil.rmtree(temp_dir)
-        print(f"\n🧹 Cleaned up test directory")
+        print("\n🧹 Cleaned up test directory")
 
 
 def main():

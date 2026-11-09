@@ -9,7 +9,7 @@ Provides unified configuration management with validation and easy access to set
 import os
 import logging
 import yaml
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 from fff.common import config as fff_config
 from fff.sorter import paths as sorter_paths

@@ -5,9 +5,8 @@ Utility functions for MediaHasher - helper functions for common use cases
 """
 
 from pathlib import Path
-from typing import List, Dict, Set, Optional, Tuple, Any
+from typing import List, Dict, Set, Optional, Any
 from collections import defaultdict
-import os
 
 from .core import MediaHasher
 

@@ -8,12 +8,10 @@ Does not download files since e621 versions are already downloaded.
 
 import sys
 import time
-from pathlib import Path
 from typing import Dict, Any, List
 import yaml
 import mysql.connector
 from mysql.connector import Error
-import http.cookiejar
 
 # Use the shared FurAffinity client and unified project configuration.
 from fff.clients.furaffinity import (
@@ -132,7 +130,7 @@ def main(argv=None):  # fff: argv accepted for the CLI; no options
         print(f"  Author: {fa_author}")
 
         # Check if favorited
-        print(f"  Checking favorites...", end=" ")
+        print("  Checking favorites...", end=" ")
         is_fav = check_if_fa_favorited(numeric_id, cookies)
 
         if is_fav:
@@ -140,7 +138,7 @@ def main(argv=None):  # fff: argv accepted for the CLI; no options
             already_favorited += 1
         else:
             print("[ERROR] Not favorited")
-            print(f"  Adding to favorites...", end=" ")
+            print("  Adding to favorites...", end=" ")
             if add_to_fa_favorites(numeric_id, cookies):
                 print("[OK] Successfully added to favorites")
                 favorited += 1

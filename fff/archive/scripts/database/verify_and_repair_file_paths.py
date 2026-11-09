@@ -15,10 +15,8 @@ Options:
 """
 
 import sys
-import os
 import logging
 import argparse
-from pathlib import Path
 
 
 from fff.archive.config import load_config

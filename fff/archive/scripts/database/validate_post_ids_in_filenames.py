@@ -35,7 +35,6 @@ from fff.archive.config import load_config
 from fff.archive.db import (
     connect_to_mysql,
     scan_for_post_id_mismatches,
-    extract_post_id_from_filename,
     check_and_update_file_artist_names,
     normalize_file_path
 )

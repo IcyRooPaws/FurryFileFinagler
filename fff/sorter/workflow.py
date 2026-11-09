@@ -32,12 +32,10 @@ from argparse import Namespace
 
 # fff: the stdout/stderr UTF-8 reconfigure moved into main() (no import-time side effects)
 from datetime import datetime
-from pathlib import Path
 
 from fff.sorter.config import Config, DEFAULT_CONFIG_FILE
 from fff.sorter.logging_setup import setup_logging
 from fff.sorter.cli.commands import (
-    TagSortCommand,
     SortCommand,
     ArtistSortCommand,
     ArchiveCommand,

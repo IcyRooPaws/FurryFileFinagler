@@ -49,7 +49,7 @@ def get_database_schema(conn, database_name):
 
         for table_name in tables:
             # Check if it's a view or table
-            cursor.execute(f"""
+            cursor.execute("""
                 SELECT TABLE_TYPE
                 FROM information_schema.TABLES
                 WHERE TABLE_SCHEMA = %s AND TABLE_NAME = %s
@@ -76,7 +76,7 @@ def get_database_schema(conn, database_name):
                 logging.info(f"  Copied view: {table_name}")
 
         # Get triggers
-        cursor.execute(f"""
+        cursor.execute("""
             SELECT TRIGGER_NAME
             FROM information_schema.TRIGGERS
             WHERE TRIGGER_SCHEMA = %s
@@ -91,7 +91,7 @@ def get_database_schema(conn, database_name):
                 logging.info(f"  Copied trigger: {trigger_name}")
 
         # Get stored procedures
-        cursor.execute(f"SHOW PROCEDURE STATUS WHERE Db = %s", (database_name,))
+        cursor.execute("SHOW PROCEDURE STATUS WHERE Db = %s", (database_name,))
         procedures = [row[1] for row in cursor.fetchall()]
         for proc_name in procedures:
             cursor.execute(f"SHOW CREATE PROCEDURE `{database_name}`.`{proc_name}`")
@@ -101,7 +101,7 @@ def get_database_schema(conn, database_name):
                 logging.info(f"  Copied procedure: {proc_name}")
 
         # Get functions
-        cursor.execute(f"SHOW FUNCTION STATUS WHERE Db = %s", (database_name,))
+        cursor.execute("SHOW FUNCTION STATUS WHERE Db = %s", (database_name,))
         functions = [row[1] for row in cursor.fetchall()]
         for func_name in functions:
             cursor.execute(f"SHOW CREATE FUNCTION `{database_name}`.`{func_name}`")
@@ -275,7 +275,7 @@ def apply_schema_to_database(conn, test_db_name, schema, original_db_name, dry_r
         if not dry_run:
             try:
                 cursor.execute("SET FOREIGN_KEY_CHECKS = 1")
-            except:
+            except Exception:
                 pass
     finally:
         cursor.close()

@@ -86,4 +86,5 @@ The setup UI starts from the committed examples. It stores credentials separatel
 .venv\Scripts\python -m pytest                     # unit and CLI tests
 $env:FFF_INTEGRATION=1; .venv\Scripts\python -m pytest -m integration   # test databases only
 python tools/gui_smoke.py manager                   # smoke-test the manager: every page, plus an embedded tool
+.venv\Scripts\python -m ruff check fff tests tools  # lint (rules in pyproject.toml)
 ```

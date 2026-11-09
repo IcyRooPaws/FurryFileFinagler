@@ -3,7 +3,6 @@
 Test that artist processing config is loaded correctly.
 """
 import sys
-import os
 
 import pytest
 

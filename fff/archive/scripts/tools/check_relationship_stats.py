@@ -5,8 +5,6 @@ Quick script to check relationship statistics in the database.
 Shows how many posts have parents, favorited vs non-favorited parents, etc.
 """
 
-import sys
-from pathlib import Path
 
 
 from fff.archive.config import load_config
@@ -28,13 +26,13 @@ def main(argv=None):
         stats = get_relationship_stats(conn)
         
         print(f"\nTotal posts with relationship data: {stats['total_with_relationships']:,}")
-        print(f"\nParent Relationships:")
+        print("\nParent Relationships:")
         print(f"  - Posts with parents: {stats['posts_with_parent']:,}")
         print(f"  - Parents that ARE favorited: {stats['posts_with_favorited_parent']:,}")
         print(f"  - Parents that are NOT favorited: {stats['posts_with_non_favorited_parent']:,}")
         print(f"  - Orphaned relationships: {stats['orphaned_relationships']:,}")
         
-        print(f"\nChild Relationships:")
+        print("\nChild Relationships:")
         print(f"  - Posts with children: {stats['posts_with_children']:,}")
         print(f"  - Posts with active children: {stats['posts_with_active_children']:,}")
         
@@ -46,7 +44,7 @@ def main(argv=None):
             
             examples = get_posts_with_non_favorited_parents(conn, limit=10)
             if examples:
-                print(f"\nThese posts have parents that aren't in our favorites:")
+                print("\nThese posts have parents that aren't in our favorites:")
                 for post_id, parent_id in examples:
                     print(f"  Post {post_id} → Parent {parent_id} (https://e621.net/posts/{parent_id})")
         

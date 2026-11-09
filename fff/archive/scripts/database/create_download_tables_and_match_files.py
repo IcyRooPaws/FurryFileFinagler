@@ -41,7 +41,6 @@ import sys
 import hashlib
 import logging
 import re
-from pathlib import Path
 
 
 from fff.archive.config import load_config, normalize_file_path

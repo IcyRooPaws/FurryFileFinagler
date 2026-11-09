@@ -9,11 +9,9 @@ causing deletion of database entries for other file types.
 Solution: Process each directory once with all file types together instead of separately.
 """
 import os
-import threading
 import time
 import logging
 import signal
-import sys
 from concurrent.futures import ThreadPoolExecutor
 from .utils import hash_file, compute_md5_hash, is_configured_file, is_video, is_gif, is_image
 
@@ -141,7 +139,7 @@ class HashManager:
                 logger.debug(f"[OK] Committed to DB: {table_name} - {file_id} - hash:{file_hash[:16]}... md5:{md5_hash[:16] if md5_hash else 'N/A'}...")
             else:
                 if self.verbose:
-                    print(f"       [FAILED] Could not compute hash")
+                    print("       [FAILED] Could not compute hash")
                 logger.warning(f"Failed to hash {entry.name}")
             return file_id, file_hash
         except Exception as e:
@@ -242,7 +240,7 @@ class HashManager:
 
     def hash_archive_directory(self, archive_dir, table_name):
         """Hash all files in an archive directory including subdirectories (like favorites)."""
-        print(f"   Hashing archive directory (including subdirectories)...")
+        print("   Hashing archive directory (including subdirectories)...")
         self.db_manager.ensure_dest_table(table_name)
 
         # Import normalize_path from utils
@@ -642,10 +640,10 @@ class HashManager:
         archived_fav_dir = getattr(self.config, 'archived_favorites_directory', None)
         if archived_fav_dir:
             if os.path.exists(archived_fav_dir):
-                print(f"\n[HOT] PHASE 4.5: Archived favorites directory")
+                print("\n[HOT] PHASE 4.5: Archived favorites directory")
                 print(f"[PACKAGE] archived_favorites -> {archived_fav_dir}")
                 self.hash_archive_directory(archived_fav_dir, 'archived_favorites')
-                print(f"   [OK] Completed all files for archived_favorites")
+                print("   [OK] Completed all files for archived_favorites")
                 total_processed += 1
             else:
                 print(f"\n[WARNING]  Skipping archived_favorites: Directory not found ({archived_fav_dir})")

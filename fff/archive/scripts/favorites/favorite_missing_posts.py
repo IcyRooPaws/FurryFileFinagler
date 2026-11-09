@@ -20,8 +20,6 @@ import logging
 import argparse
 import time
 import requests
-import sys
-from pathlib import Path
 
 from fff.archive import paths as archive_paths
 
@@ -119,7 +117,7 @@ def favorite_post(post_id, e621_config):
     auth = get_auth(e621_config)
 
     # e621 API endpoint for favoriting
-    url = f"https://e621.net/favorites.json"
+    url = "https://e621.net/favorites.json"
     data = {"post_id": post_id}
 
     try:

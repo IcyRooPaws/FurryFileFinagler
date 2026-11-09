@@ -10,7 +10,6 @@ import sys
 import logging
 import json
 from datetime import datetime
-from pathlib import Path
 
 from fff.archive import paths as archive_paths
 

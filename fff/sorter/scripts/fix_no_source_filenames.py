@@ -6,9 +6,7 @@ Standalone script to fix mismatched filenames.
 Queries e621 posts database to find files where the actual filename on disk
 doesn't match the correct filename in the database, then renames them.
 """
-import os
 import sys
-import yaml
 from mysql.connector import Error
 import logging
 from pathlib import Path
@@ -146,14 +144,14 @@ def rename_file(old_path, new_filename, dry_run=False):
         return True
 
     if dry_run:
-        logger.info(f"[DRY RUN] Would rename:")
+        logger.info("[DRY RUN] Would rename:")
         logger.info(f"  FROM: {old_path}")
         logger.info(f"  TO:   {new_path}")
         return True
 
     try:
         old_path.rename(new_path)
-        logger.info(f"✓ Renamed successfully:")
+        logger.info("✓ Renamed successfully:")
         logger.info(f"  FROM: {old_path}")
         logger.info(f"  TO:   {new_path}")
         return True
@@ -217,7 +215,7 @@ def main(argv=None):
 
             # Attempt rename
             if current_name == correct_name:
-                print(f"  ✓ Already correct")
+                print("  ✓ Already correct")
                 skipped_count += 1
             else:
                 success = rename_file(file_path, correct_name, dry_run=dry_run)

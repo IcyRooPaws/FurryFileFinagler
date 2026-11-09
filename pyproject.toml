@@ -27,7 +27,7 @@ dependencies = [
 
 [project.optional-dependencies]
 audio = ["pygame-ce>=2.4"]
-dev = ["pytest>=8.0"]
+dev = ["pytest>=8.0", "ruff==0.17.3"]
 
 [project.scripts]
 fff = "fff.cli.app:main"
@@ -37,3 +37,13 @@ include = ["fff*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py310"
+extend-exclude = [".venv"]
+
+[tool.ruff.lint]
+# Starting rule set (docs/IMPROVEMENT_PLAN.md part 8); add rules gradually.
+select = ["E9", "F", "W605", "E722"]
+# F841 (unused variable): 24 left that each need a look, not a bulk fix (plan part 8).
+ignore = ["F841"]

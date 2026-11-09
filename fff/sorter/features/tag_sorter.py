@@ -9,7 +9,6 @@ import os
 import re
 import shutil
 import logging
-import yaml
 from typing import List, Dict, Set, Optional, Tuple
 from mysql.connector import Error
 
@@ -18,7 +17,7 @@ from fff.common import db
 # Import database logging functions
 try:
     from fff.sorter.handlers.utils import move_file_with_logging
-    from fff.sorter.handlers.database_manager import DatabaseManager
+    from fff.sorter.handlers.database_manager import DatabaseManager  # noqa: F401  (availability check)
     HAS_LOGGING = True
 except ImportError:
     HAS_LOGGING = False
@@ -431,7 +430,7 @@ class TagSorter:
             else:
                 # OR logic: post must have ANY of the tags
                 tag_placeholders = ', '.join(['%s'] * len(tags))
-                query = f"""
+                query = """
                     SELECT DISTINCT p.file_name, p.id
                     FROM posts p
                     LEFT JOIN posts_tags pt ON pt.post_id = p.id
@@ -796,7 +795,7 @@ class TagSorter:
             for root, dirs, files in os.walk(source_dir):
                 # Early exit if all files found
                 if not remaining_files:
-                    logger.debug(f"All files found, stopping search early")
+                    logger.debug("All files found, stopping search early")
                     break
 
                 # Check if current directory is in exclude list
@@ -943,12 +942,12 @@ class TagSorter:
                                 dates_set += 1
 
                             print(f"  [OK] Moved (older): {filename}")
-                            print(f"    Existing file moved to duplicates (newer)")
+                            print("    Existing file moved to duplicates (newer)")
                     else:
                         # Destination is older or same age - move source to duplicates
                         if dry_run:
                             print(f"  [DRY RUN] Would move '{filename}' to duplicates (newer/same age)")
-                            print(f"    Existing file kept at destination (older/same age)")
+                            print("    Existing file kept at destination (older/same age)")
                         else:
                             os.makedirs(duplicate_dir, exist_ok=True)
                             dup_path = os.path.join(duplicate_dir, filename)
@@ -1191,7 +1190,7 @@ class TagSorter:
         use_new_format = needed_tags is not None or can_have_tags is not None
         has_tag_criteria = bool(tags or needed_tags or can_have_tags)
 
-        print(f"[SEARCH] Tag-based File Sorting")
+        print("[SEARCH] Tag-based File Sorting")
         if use_new_format:
             if needed_tags:
                 print(f"[Clipboard] Needed tags (ALL required): {', '.join(needed_tags)}")
@@ -1218,7 +1217,7 @@ class TagSorter:
         if exclude_tags:
             print(f"[BLOCKED] Excluding posts with tags: {', '.join(exclude_tags)}")
         if only_fav_directory:
-            print(f"[PIN] Searching ONLY in favorites directory")
+            print("[PIN] Searching ONLY in favorites directory")
 
         if dry_run:
             print("[ANALYZE] DRY RUN MODE - No files will be moved\n")
@@ -1496,7 +1495,7 @@ class TagSorter:
 
         base_directories = base_directories or {}
 
-        print(f"[SEARCH] Pool-based File Sorting")
+        print("[SEARCH] Pool-based File Sorting")
         print(f"[Clipboard] Pool IDs: {', '.join(str(p) for p in pool_ids)}")
 
         if destination_dir:
@@ -1513,7 +1512,7 @@ class TagSorter:
         if exclude_tags:
             print(f"[BLOCKED] Excluding posts with tags: {', '.join(exclude_tags)}")
         if only_fav_directory:
-            print(f"[PIN] Searching ONLY in favorites directory")
+            print("[PIN] Searching ONLY in favorites directory")
 
         if dry_run:
             print("[ANALYZE] DRY RUN MODE - No files will be moved\n")

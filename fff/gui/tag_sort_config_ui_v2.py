@@ -35,7 +35,7 @@ from tkinter import filedialog
 from pathlib import Path
 from copy import deepcopy
 from dataclasses import dataclass, field
-from typing import Optional, List
+from typing import Optional
 
 import yaml
 
@@ -3103,7 +3103,7 @@ class TagSortConfigApp:
             from fff.sorter.features.tag_sorter import TagSorter
             from fff.sorter.handlers.database_manager import DatabaseManager
         except Exception as e:
-            self.root.after(0, lambda: done_callback(None, str(e)))
+            self.root.after(0, lambda msg=str(e): done_callback(None, msg))
             return
 
         def worker():
@@ -3190,7 +3190,6 @@ class TagSortConfigApp:
     # ------------------------------------------------------------------
 
     def _show_context_menu(self, flat_idx: int, x: int, y: int):
-        from tkinter import messagebox
         node = self._flat[flat_idx]
         is_depth0 = (node.depth == 0)
 

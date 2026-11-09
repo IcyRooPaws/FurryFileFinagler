@@ -7,13 +7,10 @@ Integrates with main.py command structure
 """
 
 import logging
-from pathlib import Path
-from typing import Optional, List, Set
 
 from fff.sorter.core.advanced_deduplicator import (
-    AdvancedDeduplicator, DedupeMode, DuplicateFile, DuplicateGroup
+    DedupeMode
 )
-from fff.sorter.config import Config
 
 logger = logging.getLogger('fff.sorter.advanced_duplicates')
 

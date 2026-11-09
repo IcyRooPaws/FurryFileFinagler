@@ -11,7 +11,6 @@ import sys
 import re
 from pathlib import Path
 from typing import Dict, List, Tuple
-from datetime import datetime
 import yaml
 import mysql.connector
 from mysql.connector import Error
@@ -165,20 +164,20 @@ def process_files(files: List[Path], author_mappings: List[Tuple[str, str]], dry
                                   file_path.resolve() == new_path.resolve())
 
             if new_path.exists() and not is_case_only_rename:
-                print(f"[WARNING]  SKIP: Target already exists")
+                print("[WARNING]  SKIP: Target already exists")
                 print(f"    {file_path}")
                 print(f"    -> {new_path.name}")
                 skipped_count += 1
                 continue
 
             if dry_run:
-                print(f"Would rename:")
+                print("Would rename:")
                 print(f"  FROM: {file_path}")
                 print(f"  TO:   {new_path.name}")
                 print(f"  (Matched author: {matched_author[1]} -> {matched_author[0]})")
                 renamed_count += 1
             else:
-                print(f"Renaming:")
+                print("Renaming:")
                 print(f"  FROM: {file_path}")
                 print(f"  TO:   {new_path.name}")
                 print(f"  (Matched author: {matched_author[1]} -> {matched_author[0]})")
@@ -208,12 +207,12 @@ def main(argv=None):  # fff: argv accepted for the CLI; no options
     search_directory = config.get('furaffinity', {}).get('rename_search_directory',
                                                           'P:/IPL/Pictures')
 
-    print(f"\nConfiguration:")
+    print("\nConfiguration:")
     print(f"  Database: {config['database']['host']}")
     print(f"  Search directory: {search_directory}")
 
     # Ask user to confirm or override directory
-    print(f"\nPress Enter to use the above directory, or type a new path:")
+    print("\nPress Enter to use the above directory, or type a new path:")
     user_input = input().strip()
     if user_input:
         search_directory = user_input
@@ -235,7 +234,7 @@ def main(argv=None):  # fff: argv accepted for the CLI; no options
             return
 
         # Show sample mappings
-        print(f"\nSample author mappings:")
+        print("\nSample author mappings:")
         for author_id, author_name in author_mappings[:5]:
             print(f"  {author_name} -> {author_id}")
         if len(author_mappings) > 5:

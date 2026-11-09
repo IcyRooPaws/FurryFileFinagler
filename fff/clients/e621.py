@@ -121,7 +121,7 @@ def get_all_favorites(login: str, api_key: str, user_agent: str) -> set:
 
         while page <= max_pages:
             print(f"  Page {page}...", end=" ", flush=True)
-            url = f"https://e621.net/favorites.json"
+            url = "https://e621.net/favorites.json"
             params = {
                 "page": page,
                 "limit": 320  # Max allowed by e621
@@ -211,7 +211,7 @@ def add_to_favorites(post_id: str, login: str, api_key: str, user_agent: str,
         else:
             numeric_id = post_id
 
-        url = f"https://e621.net/favorites.json"
+        url = "https://e621.net/favorites.json"
         headers = {"User-Agent": user_agent}
         auth = (login, api_key)
 
@@ -272,7 +272,7 @@ def get_artist_main_name(artist_tag: str, login: str, api_key: str, user_agent: 
     If this is an alias, returns the tag it points to. Otherwise returns the original tag.
     """
     try:
-        url = f"https://e621.net/tags.json"
+        url = "https://e621.net/tags.json"
         headers = {"User-Agent": user_agent}
         auth = (login, api_key)
         params = {
@@ -535,7 +535,7 @@ def download_post(post_data: Dict[str, Any], output_dir: Path, login: str, api_k
         file_url = file_info.get('url')
 
         if not file_url:
-            print(f"    Error: No file URL found in post data")
+            print("    Error: No file URL found in post data")
             return None
 
         # Generate proper filename with artist name resolution

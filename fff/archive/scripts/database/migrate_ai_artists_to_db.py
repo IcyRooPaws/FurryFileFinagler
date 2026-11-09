@@ -3,8 +3,6 @@
 """Import the existing AI artist list into the database ledger."""
 
 import argparse  # fff: for main(argv)
-import sys
-from pathlib import Path
 
 from fff.archive import paths as archive_paths
 

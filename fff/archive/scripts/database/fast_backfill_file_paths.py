@@ -23,8 +23,6 @@ import sys
 import os
 import logging
 import argparse
-from collections import defaultdict
-from pathlib import Path
 
 from fff.archive import paths as archive_paths
 

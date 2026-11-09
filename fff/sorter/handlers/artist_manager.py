@@ -5,13 +5,11 @@ Artist management for favorite file detection and processing.
 import os
 import yaml
 import re
-import shutil
 import logging
 import time
 from fff.sorter import paths as sorter_paths
 from .utils import (
-    ensure_directory_exists, is_configured_file, log_file_move,
-    move_file_with_logging
+    ensure_directory_exists, is_configured_file, move_file_with_logging
 )
 
 logger = logging.getLogger(__name__)
@@ -282,44 +280,6 @@ class ArtistManager:
 
         return False
 
-        base_dirs = {}
-        try:
-            if hasattr(self.config, "get_tag_sorting_base_dirs"):
-                base_dirs = self.config.get_tag_sorting_base_dirs() or {}
-        except Exception as e:
-            logger.warning("Could not load tag sorting base directories: %s", e)
-            base_dirs = {}
-
-        paths = []
-        seen = set()
-        for rule in rules:
-            if not isinstance(rule, dict):
-                continue
-
-            if not rule.get("exclude_favorite_artists", False):
-                continue
-
-            folder_name = rule.get("folder_name")
-            target_dir = rule.get("target_directory")
-
-            candidate_dirs = []
-            if folder_name and base_dirs:
-                for base in base_dirs.values():
-                    if base:
-                        candidate_dirs.append(os.path.join(base, folder_name))
-
-            if not candidate_dirs and target_dir:
-                candidate_dirs.append(target_dir)
-
-            for c_dir in candidate_dirs:
-                abs_dir = os.path.abspath(c_dir)
-                if abs_dir in seen:
-                    continue
-                seen.add(abs_dir)
-                paths.append(c_dir)
-
-        return paths
-
     def _get_tag_sort_include_dirs(self):
         """Return tag sorting target directories that do NOT exclude favorite artists.
 
@@ -470,7 +430,7 @@ class ArtistManager:
                     continue
 
             extra_clauses = ''.join(
-                f"\n                  AND file_path NOT LIKE CONCAT(%s, '%%')"
+                "\n                  AND file_path NOT LIKE CONCAT(%s, '%%')"
                 for _ in extra_exclude_dirs
             )
 
@@ -729,7 +689,7 @@ class ArtistManager:
         logger.info(f"DB-backed artist scan: {raw_count} from DB, {skipped_count} pre-filtered, {total_files_checked} to check")
 
         if not candidates:
-            print(f"[INFO] No candidates to process")
+            print("[INFO] No candidates to process")
             return 0
 
         # Cache-update writes are batched instead of one DB round trip (+ commit)
@@ -924,7 +884,7 @@ class ArtistManager:
                             if os.path.normcase(os.path.abspath(d)) != archived_fav_abs]
 
         if skip_archives:
-            print(f"[SPEED] Skipping archive directories for performance (use --scan-archives to include)")
+            print("[SPEED] Skipping archive directories for performance (use --scan-archives to include)")
             logger.info("Artist processing scan will skip archive directories for performance")
         elif archive_dirs:
             directories_to_scan.extend((f"archive_{i}", d) for i, d in enumerate(archive_dirs, 1))
@@ -1095,7 +1055,7 @@ class ArtistManager:
 
         # Check artist directory based on scan mode
         if scan_all_fav_subdirs:
-            print(f"\n[FOLDER] Checking ALL subdirectories of artist directory recursively...")
+            print("\n[FOLDER] Checking ALL subdirectories of artist directory recursively...")
             logger.info("Artist processing recursive scan enabled for artist directory: %s", self.artist_directory)
             # Recursive scan of ALL artist subdirectories
             if os.path.exists(self.artist_directory):
@@ -1190,7 +1150,7 @@ class ArtistManager:
                 print(f"   [WARNING]  Artist directory does not exist: {self.artist_directory}")
                 logger.info("Artist directory does not exist for recursive scan: %s", self.artist_directory)
         else:
-            print(f"\n[FOLDER] Checking files directly in artist directory root (NOT child directories)...")
+            print("\n[FOLDER] Checking files directly in artist directory root (NOT child directories)...")
             logger.info("Artist processing will scan artist directory root only: %s", self.artist_directory)
             # Check files directly in the artist_directory root (NOT subdirectories - those are organized by artist)
             if os.path.exists(self.artist_directory):
@@ -1233,12 +1193,12 @@ class ArtistManager:
                                     logger.error(f"Failed to move favorite file '{file}': {e}")
                                 break
                 else:
-                    print(f"   [INFO] No files found in artist directory root")
+                    print("   [INFO] No files found in artist directory root")
                     logger.info("Artist directory root scan found no files to process")
 
             # Check additional favorite directories for artist files
             # Note: These directories are at fav_directory (e.g., P:/IPL/- Fav/)
-            print(f"\n[FOLDER] Checking additional favorites subdirectories...")
+            print("\n[FOLDER] Checking additional favorites subdirectories...")
             logger.info("Artist processing will scan additional favorites subdirectories")
             fav_base_dir = self.fav_directory
             additional_fav_dirs = [

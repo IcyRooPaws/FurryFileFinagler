@@ -27,7 +27,6 @@ from fff.archive import paths as archive_paths
 
 from fff.archive.config import load_config
 from fff.archive.db import connect_to_mysql
-import mysql.connector
 from mysql.connector import Error
 
 try:

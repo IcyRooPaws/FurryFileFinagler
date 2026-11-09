@@ -179,6 +179,18 @@ and the logic can be tested.
 
 ## Part 8. Tooling
 
+**Status: phases 1–3 done** (branch `tooling/ci-lint`). Phase 4 (test gaps) is open.
+- CI (`.github/workflows/ci.yml`): ruff on Linux; pytest on Windows with Python 3.12 and 3.14,
+  installed like `setup.bat`, with no config.yaml or MySQL. That exposed a real bug: every
+  forwarded command's `--help` needed a config.yaml (fixed, with a test).
+- Ruff 0.17.3 with `E9, F, W605, E722`. Fixed on the way: 3 error handlers whose lambdas used
+  `e` after Python deletes it (the error dialog itself crashed with NameError), 17 bare excepts,
+  216 placeholder-less f-strings, 20 invalid escapes, 101 unused imports, duplicate imports, and
+  an unreachable copy of a function body in `artist_manager.py`.
+- `requirements.txt` is a pinned universal lock compiled from `pyproject.toml` with `uv`.
+- Follow-up: F841 (24 unused variables) is ignored for now; each needs a look, since some may
+  mean ignored settings or results. Then add rules (e.g. `B`, `UP`, `SIM`) one at a time.
+
 1. **CI (S).** A GitHub Actions workflow runs `pytest` on Windows and Python 3.12 for every push
    and PR. The suite needs no database and takes about 6 s.
 2. **Ruff (S).** `[tool.ruff]` in `pyproject.toml` with a small starting rule set (`E9`, `F`,

@@ -14,7 +14,6 @@ This script allows you to:
 import argparse  # fff: for main(argv)
 import sys
 import logging
-from pathlib import Path
 
 
 from fff.archive.config import load_config
@@ -99,19 +98,19 @@ def view_takedown_details(conn, takedown_id):
     print(f"Scraped: {takedown['scraped_at']}")
     print(f"Last Updated: {takedown['last_updated']}")
 
-    print(f"\nReason:")
+    print("\nReason:")
     print("-" * 80)
     print(takedown['reason'] or '(no reason available)')
     print()
 
     if takedown['instructions']:
-        print(f"\nInstructions:")
+        print("\nInstructions:")
         print("-" * 80)
         print(takedown['instructions'])
         print()
 
     if takedown['admin_notes']:
-        print(f"\nAdmin Notes:")
+        print("\nAdmin Notes:")
         print("-" * 80)
         print(takedown['admin_notes'])
         print()

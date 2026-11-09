@@ -13,7 +13,6 @@ import sys
 import logging
 import argparse
 from datetime import datetime
-from pathlib import Path
 
 from fff.archive import paths as archive_paths
 
@@ -145,7 +144,7 @@ def backfill_deletion_reasons(config, max_posts=None, force=False):
                     found_reasons += 1
                     logging.info(f"  Found reason: {deletion_reason[:100]}...")
                 else:
-                    logging.info(f"  No deletion reason found")
+                    logging.info("  No deletion reason found")
 
                 # Fetch structured takedown details
                 takedown_details = fetch_takedown_details_from_page(post_id, user_agent, auth)
@@ -228,7 +227,7 @@ def backfill_deletion_reasons(config, max_posts=None, force=False):
                 continue
 
         logging.info("=" * 80)
-        logging.info(f"Backfill complete!")
+        logging.info("Backfill complete!")
         logging.info(f"  Posts checked: {updated_count}")
         logging.info(f"  Deletion reasons found: {found_reasons}")
         logging.info(f"  Takedowns stored: {found_takedowns}")
@@ -323,7 +322,7 @@ def main(argv=None):
                 return
 
         print()
-        print(f"Starting backfill... (Rate limit: 1 request per second)")
+        print("Starting backfill... (Rate limit: 1 request per second)")
         print()
 
         # Run the backfill

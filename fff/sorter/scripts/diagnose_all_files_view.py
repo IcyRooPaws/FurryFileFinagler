@@ -78,7 +78,7 @@ def test_view():
         print("\n[TEST 3] Getting sample rows from view...")
         cursor.execute("SELECT file_name, table_name, last_artist_check, artist_matched FROM all_files LIMIT 5")
         rows = cursor.fetchall()
-        print(f"Sample data (first 5 rows):")
+        print("Sample data (first 5 rows):")
         for row in rows:
             print(f"  - {row[0][:50]:50s} | table: {row[1]:20s} | last_check: {row[2]} | matched: {row[3]}")
         
@@ -147,7 +147,7 @@ def test_view():
         print(f"  Query returned {len(results)} rows")
         
         if results:
-            print(f"  Sample results:")
+            print("  Sample results:")
             for row in results[:5]:
                 print(f"    - {row[0][:50]:50s} | table: {row[3]:20s}")
         else:
@@ -157,11 +157,11 @@ def test_view():
             print("\n[DIAGNOSIS] Testing each WHERE condition separately...")
             
             # Test path filters
-            cursor.execute(f"SELECT COUNT(*) FROM all_files WHERE file_path NOT LIKE CONCAT(%s, '%%')", [artist_dir])
+            cursor.execute("SELECT COUNT(*) FROM all_files WHERE file_path NOT LIKE CONCAT(%s, '%%')", [artist_dir])
             count1 = cursor.fetchone()[0]
             print(f"  Excluding artist dir: {count1:,} rows")
             
-            cursor.execute(f"SELECT COUNT(*) FROM all_files WHERE file_path NOT LIKE CONCAT(%s, '%%') AND file_path NOT LIKE CONCAT(%s, '%%')", [artist_dir, fav_dir])
+            cursor.execute("SELECT COUNT(*) FROM all_files WHERE file_path NOT LIKE CONCAT(%s, '%%') AND file_path NOT LIKE CONCAT(%s, '%%')", [artist_dir, fav_dir])
             count2 = cursor.fetchone()[0]
             print(f"  Excluding both artist & fav dirs: {count2:,} rows")
             

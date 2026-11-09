@@ -24,16 +24,16 @@ def search_image_fuzzysearch(image_path: Path, api_key: str, distance: int = 3) 
             )
 
         if response.status_code == 400:
-            print(f"    FuzzySearch error: Invalid image")
+            print("    FuzzySearch error: Invalid image")
             return None
         if response.status_code == 401:
-            print(f"    FuzzySearch error: Invalid or missing API key")
+            print("    FuzzySearch error: Invalid or missing API key")
             return None
         if response.status_code == 413:
-            print(f"    FuzzySearch error: Image file is too large")
+            print("    FuzzySearch error: Image file is too large")
             return None
         if response.status_code == 429:
-            print(f"    FuzzySearch error: Rate limit exhausted")
+            print("    FuzzySearch error: Rate limit exhausted")
             return None
 
         if response.status_code != 200:

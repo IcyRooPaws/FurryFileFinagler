@@ -8,7 +8,6 @@ CLI commands module for FFF.
 Contains command implementations for the unified CLI interface.
 """
 import os
-import sys
 import time
 import logging
 from pathlib import Path
@@ -225,7 +224,6 @@ class ArchiveCommand(BaseCommand):
                 logger.info("Dry-run mode enabled")
 
                 # Get files that would be archived
-                from fff.sorter.handlers.utils import ensure_directory_exists
                 from fff.sorter.handlers.archive_manager import format_size
 
                 def get_archive_path(archive_config, content_type):
@@ -331,7 +329,7 @@ class ArchiveCommand(BaseCommand):
                             total_files += len(files)
                             total_size += size
 
-                print(f"\n[CHART] Total Summary:")
+                print("\n[CHART] Total Summary:")
                 print(f"   Files: {total_files}")
                 print(f"   Total Size: {format_size(total_size)}")
                 print("\n[OK] Dry-run completed - no files were moved")
@@ -361,7 +359,7 @@ class ArchiveCommand(BaseCommand):
                     total_failed += result['failed']
                     total_size += result.get('total_size', 0)
 
-                print(f"\n[CHART] Total Summary:")
+                print("\n[CHART] Total Summary:")
                 print(f"   [OK] Files Archived: {total_archived}")
                 print(f"   [DATA] Total Size: {format_size(total_size)}")
                 print(f"   [ERROR] Files Failed: {total_failed}")
@@ -413,7 +411,7 @@ class UnarchiveCommand(BaseCommand):
         """Execute unarchive operation to restore recent files from archives."""
         import os
         import shutil
-        import datetime
+        from datetime import timedelta
         from fff.sorter.handlers import DatabaseManager
         from fff.sorter.handlers.utils import ensure_directory_exists
         from fff.sorter.handlers.archive_manager import format_size
@@ -484,8 +482,8 @@ class UnarchiveCommand(BaseCommand):
                 """Check if file is newer than specified age."""
                 try:
                     file_mtime = os.path.getmtime(file_path)
-                    file_date = datetime.datetime.fromtimestamp(file_mtime)
-                    cutoff_date = datetime.datetime.now() - datetime.timedelta(days=age_days)
+                    file_date = datetime.fromtimestamp(file_mtime)
+                    cutoff_date = datetime.now() - timedelta(days=age_days)
                     return file_date >= cutoff_date
                 except Exception as e:
                     logger.error(f"Error checking file age for {file_path}: {e}")
@@ -571,10 +569,10 @@ class UnarchiveCommand(BaseCommand):
                         logger.error(f"Failed to restore {file_path}: {e}")
                         failed_count += 1
 
-            print(f"\n[CHART] Restore Results:")
+            print("\n[CHART] Restore Results:")
             print(f"   [OK] Restored: {moved_count} files")
             print(f"   [ERROR] Failed: {failed_count} files")
-            print(f"\n[OK] Unarchive operation completed")
+            print("\n[OK] Unarchive operation completed")
 
             logger.info(f"Unarchive completed - restored {moved_count} files, {failed_count} failed")
             return 0
@@ -864,10 +862,10 @@ class MaintenanceCommand(BaseCommand):
                 
                 cursor.close()
             
-            print(f"\n✅ Database reset complete!")
+            print("\n✅ Database reset complete!")
             print(f"   • {tables_reset} tables were reset")
             print(f"   • {total_records_deleted:,} total records deleted")
-            print(f"   • All auto-increment IDs reset to 1\n")
+            print("   • All auto-increment IDs reset to 1\n")
             
             logger.info(f"Database reset: {tables_reset} tables, {total_records_deleted} records deleted")
             return True
@@ -1012,7 +1010,7 @@ class MaintenanceCommand(BaseCommand):
                                 print(f"     [WARNING]  Table {table} column {col_name} has type {columns[col_name]}, expected {col_type}")
 
                 if schema_problems == 0:
-                    print(f"     [OK] All table schemas are valid")
+                    print("     [OK] All table schemas are valid")
                 else:
                     issues_found += schema_problems
 
@@ -1226,7 +1224,7 @@ class MaintenanceCommand(BaseCommand):
                         if not missing_from_db and missing_from_fs == 0 and db_files_dict:
                             print(f"     [OK] favorites: {len(db_files_dict)} files in sync")
                         elif not db_files_dict and not fs_files_case_map:
-                            print(f"     [INFO] favorites: Empty (no files)")
+                            print("     [INFO] favorites: Empty (no files)")
 
                     except Exception as e:
                         print(f"     [ERROR] Error checking favorites: {e}")
@@ -1486,7 +1484,7 @@ class MaintenanceCommand(BaseCommand):
                                 index_problems += 1
 
                 if index_problems == 0:
-                    print(f"     [OK] All required indexes are present")
+                    print("     [OK] All required indexes are present")
                 else:
                     issues_found += index_problems
 
@@ -1533,7 +1531,7 @@ class MaintenanceCommand(BaseCommand):
                                 latest = cursor.fetchone()[0]
                                 latest_str = latest.strftime('%Y-%m-%d') if latest else 'N/A'
                                 print(f"     [STATS] {table}: {count:,} records (latest: {latest_str})")
-                            except:
+                            except Exception:
                                 print(f"     [STATS] {table}: {count:,} records")
 
                 print(f"     [CHART] Total records across all tables: {total_records:,}")
@@ -1698,7 +1696,7 @@ class MaintenanceCommand(BaseCommand):
                             # Check if favorites table exists
                             cursor.execute("SHOW TABLES LIKE 'favorites'")
                             if not cursor.fetchone():
-                                print(f"     [INFO] Table favorites does not exist - skipping")
+                                print("     [INFO] Table favorites does not exist - skipping")
                             else:
                                 # Get all database entries with their full paths
                                 cursor.execute("SELECT file_path, file_name FROM `favorites`")
@@ -1799,7 +1797,7 @@ class MaintenanceCommand(BaseCommand):
                                     print(f"     [OK] favorites: Removed {removed_count} orphaned database entries")
                                     total_fixed += removed_count
                                 else:
-                                    print(f"     [OK] favorites: No orphaned entries found")
+                                    print("     [OK] favorites: No orphaned entries found")
 
                             cursor.close()
 
@@ -2102,7 +2100,6 @@ class PostIDCommand(BaseCommand):
     @classmethod
     def _move_files_with_post_ids(cls, args, config):
         """Move files that contain post IDs in their names."""
-        import re
         import shutil
         from datetime import datetime
 
@@ -2466,11 +2463,11 @@ class SetupCommand(BaseCommand):
         for package in required_packages:
             try:
                 if package == 'mysql.connector':
-                    import mysql.connector
+                    import mysql.connector  # noqa: F401  (availability check)
                 elif package == 'yaml':
-                    import yaml
+                    import yaml  # noqa: F401  (availability check)
                 elif package == 'colorama':
-                    import colorama
+                    import colorama  # noqa: F401  (availability check)
                 print(f"  [OK] {package}")
             except ImportError:
                 print(f"  [ERROR] {package}")
@@ -2653,12 +2650,12 @@ class DuplicateManagerCommand(BaseCommand):
             # Report results
             total_files = sum(len(files) for _, files in duplicate_groups)
 
-            print(f"\n[CHART] Duplicate Scan Results:")
+            print("\n[CHART] Duplicate Scan Results:")
             print(f"   Duplicate Groups: {len(duplicate_groups)}")
             print(f"   Total Files: {total_files}")
 
             if duplicate_groups:
-                print(f"\n[SEARCH] Top 10 Duplicate Groups:")
+                print("\n[SEARCH] Top 10 Duplicate Groups:")
                 for i, (hash_val, files) in enumerate(duplicate_groups[:10]):
                     print(f"   {i+1:2d}. Hash: {hash_val[:12]}... ({len(files)} files)")
                     for file_info in files[:3]:  # Show first 3 files
@@ -2672,8 +2669,8 @@ class DuplicateManagerCommand(BaseCommand):
                 if len(duplicate_groups) > 10:
                     print(f"   ... and {len(duplicate_groups) - 10} more groups")
 
-                print(f"\n[IDEA] To manage duplicates interactively, run:")
-                print(f"   python main.py duplicates")
+                print("\n[IDEA] To manage duplicates interactively, run:")
+                print("   python main.py duplicates")
             else:
                 print("[OK] No duplicates found!")
 
@@ -3113,19 +3110,19 @@ class CleanupCommand(BaseCommand):
             if args.directories:
                 # Use directories specified on command line
                 directories_to_scan.extend(args.directories)
-                print(f"[FOLDER] Scanning user-specified directories")
+                print("[FOLDER] Scanning user-specified directories")
             else:
                 # Use source directories from config
                 if hasattr(config, 'source_directories'):
                     directories_to_scan.extend(config.source_directories)
-                    print(f"[FOLDER] Scanning source directories from config")
+                    print("[FOLDER] Scanning source directories from config")
 
                 # Optionally include destination directories
                 if args.include_destinations and hasattr(config, 'destination_directories'):
                     for dest in config.destination_directories.values():
                         if dest and dest not in directories_to_scan:
                             directories_to_scan.append(dest)
-                    print(f"[FOLDER] Including destination directories from config")
+                    print("[FOLDER] Including destination directories from config")
 
             if not directories_to_scan:
                 print("[ERROR] No directories to scan. Specify directories or check config.")
@@ -3291,7 +3288,7 @@ class TagSortConfigCommand(BaseCommand):
             except Exception:
                 tag_config_path = Path(sorter_paths.TAG_SORTING)  # fff: was configs/tag_sorting.yaml
 
-        print(f"[DISPLAY] Launching Tag Sort Configuration UI...")
+        print("[DISPLAY] Launching Tag Sort Configuration UI...")
         print(f"[FOLDER] Config file: {tag_config_path}")
 
         try:
@@ -3326,7 +3323,7 @@ class ArtistConfigCommand(BaseCommand):
 
         artist_config_path = Path(args.config) if hasattr(args, 'config') and args.config else Path(sorter_paths.SORT_ARTISTS)  # fff: was configs/artists.yaml
 
-        print(f"[DISPLAY] Launching Artist Configuration UI...")
+        print("[DISPLAY] Launching Artist Configuration UI...")
         print(f"[FOLDER] Config file: {artist_config_path}")
 
         try:

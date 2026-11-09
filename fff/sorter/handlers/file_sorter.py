@@ -3,8 +3,7 @@ Main file sorting logic that orchestrates the file processing workflow.
 """
 import time
 import logging
-from .utils import (is_video, is_image, is_gif, is_explicit, is_questionable, 
-                    is_explicit_or_adult, is_questionable_or_mature, is_sfw_or_general)
+from .utils import (is_video, is_image, is_gif, is_explicit_or_adult, is_sfw_or_general)
 
 logger = logging.getLogger(__name__)
 

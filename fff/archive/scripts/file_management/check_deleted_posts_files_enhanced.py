@@ -15,7 +15,6 @@ This improved version:
 import os
 import sys
 import logging
-from pathlib import Path
 from typing import List, Dict, Tuple, Optional
 import hashlib
 import re
@@ -23,7 +22,6 @@ import re
 from fff.archive import paths as archive_paths
 
 from fff.archive.config import load_config
-from fff.archive.logging_setup import setup_logging
 from fff.archive.db import connect_to_mysql
 
 
@@ -246,7 +244,7 @@ def find_file_enhanced(directories: List[str], file_name: str, md5_hash: str, po
 
                 debug_info.append(f"  MD5 search complete: checked {files_checked} files")
             elif md5_hash and not enable_md5_search:
-                debug_info.append(f"  MD5 search disabled (enable with enable_md5_search=True)")
+                debug_info.append("  MD5 search disabled (enable with enable_md5_search=True)")
 
         except Exception as e:
             error_msg = f"Error searching in directory {directory}: {e}"

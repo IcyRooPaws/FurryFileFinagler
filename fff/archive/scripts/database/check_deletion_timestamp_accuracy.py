@@ -13,8 +13,6 @@ This script checks:
 
 import argparse  # fff: for main(argv)
 import sys
-import logging
-from pathlib import Path
 
 
 from fff.archive.config import load_config
@@ -29,7 +27,7 @@ def check_deletion_timestamps(conn):
         cursor.execute("SELECT COUNT(*) FROM posts WHERE deleted = 1")
         total_deleted = cursor.fetchone()[0]
         print(f"\n{'='*80}")
-        print(f"DELETION TIMESTAMP ACCURACY REPORT")
+        print("DELETION TIMESTAMP ACCURACY REPORT")
         print(f"{'='*80}\n")
         print(f"Total deleted posts: {total_deleted}")
         
@@ -50,7 +48,7 @@ def check_deletion_timestamps(conn):
         # 3. Posts without deletion reasons (need scraping)
         without_reasons = total_deleted - with_reasons
         print(f"Posts WITHOUT deletion reasons: {without_reasons} ({without_reasons*100//total_deleted}%)")
-        print(f"  → These need to be backfilled with: python scripts/database/backfill_deletion_reasons.py")
+        print("  → These need to be backfilled with: python scripts/database/backfill_deletion_reasons.py")
         
         # 4. Posts where deleted_at might be from API (not accurate)
         # These are posts where deleted_at equals updated_at (strong indicator of API sourcing)
@@ -63,10 +61,10 @@ def check_deletion_timestamps(conn):
         """)
         api_timestamps = cursor.fetchone()[0]
         print(f"\n{'='*80}")
-        print(f"TIMESTAMP SOURCE ANALYSIS")
+        print("TIMESTAMP SOURCE ANALYSIS")
         print(f"{'='*80}\n")
         print(f"Posts with deleted_at = updated_at: {api_timestamps} ({api_timestamps*100//total_deleted}%)")
-        print(f"  → These likely have API timestamps (less accurate)")
+        print("  → These likely have API timestamps (less accurate)")
         
         # 5. Posts that should have accurate timestamps from HTML scraping
         cursor.execute("""
@@ -78,7 +76,7 @@ def check_deletion_timestamps(conn):
         """)
         scraped_timestamps = cursor.fetchone()[0]
         print(f"Posts with deleted_at != updated_at: {scraped_timestamps} ({scraped_timestamps*100//total_deleted if total_deleted > 0 else 0}%)")
-        print(f"  → These likely have accurate timestamps from HTML scraping")
+        print("  → These likely have accurate timestamps from HTML scraping")
         
         # 6. Posts with NULL deleted_at
         cursor.execute("""
@@ -92,7 +90,7 @@ def check_deletion_timestamps(conn):
         
         # 7. Breakdown by deletion reason status and timestamp source
         print(f"\n{'='*80}")
-        print(f"DETAILED BREAKDOWN")
+        print("DETAILED BREAKDOWN")
         print(f"{'='*80}\n")
         
         cursor.execute("""
@@ -122,23 +120,23 @@ def check_deletion_timestamps(conn):
         
         # 8. Recommendations
         print(f"\n{'='*80}")
-        print(f"RECOMMENDATIONS")
+        print("RECOMMENDATIONS")
         print(f"{'='*80}\n")
         
         if without_reasons > 0:
             print(f"1. Run backfill for {without_reasons} posts without deletion reasons:")
-            print(f"   python scripts/database/backfill_deletion_reasons.py")
+            print("   python scripts/database/backfill_deletion_reasons.py")
         
         if api_timestamps > 0:
             print(f"\n2. {api_timestamps} posts likely have inaccurate timestamps from the API.")
-            print(f"   To get accurate timestamps from HTML pages, run with --force:")
-            print(f"   python scripts/database/backfill_deletion_reasons.py --force")
-            print(f"   ")
+            print("   To get accurate timestamps from HTML pages, run with --force:")
+            print("   python scripts/database/backfill_deletion_reasons.py --force")
+            print("   ")
             print(f"   WARNING: This will re-scrape ALL {total_deleted} deleted posts!")
             print(f"   At 1 request/second, this will take approximately {total_deleted//60} minutes.")
-            print(f"   ")
-            print(f"   To test with a smaller batch first:")
-            print(f"   python scripts/database/backfill_deletion_reasons.py --force --max-posts 10")
+            print("   ")
+            print("   To test with a smaller batch first:")
+            print("   python scripts/database/backfill_deletion_reasons.py --force --max-posts 10")
         
         if api_timestamps == 0 and without_reasons == 0:
             print("✓ All deleted posts appear to have been properly backfilled!")

@@ -4,9 +4,7 @@ Script to manage posts that are in the database but not in current favorites.
 Provides options to clean up, archive, or investigate these posts.
 """
 
-import sys
 import logging
-from pathlib import Path
 
 
 from fff.archive.config import load_config

@@ -107,3 +107,4 @@ fff config test-dirs                     # where each configured folder goes
 | Unit and CLI tests | `.venv\Scripts\python -m pytest` |
 | Integration tests (test databases only) | `$env:FFF_INTEGRATION=1; .venv\Scripts\python -m pytest -m integration` |
 | GUIs open and load data | `python tools/gui_smoke.py` |
+| Lint | `.venv\Scripts\python -m ruff check fff tests tools` |

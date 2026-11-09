@@ -1,0 +1,9 @@
+# Optional: 'pip install pre-commit' then 'pre-commit install' to lint before each commit.
+# Keep rev in step with the ruff pin in pyproject.toml and .github/workflows/ci.yml.
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.17.3
+    hooks:
+      - id: ruff
+        args: [fff, tests, tools]
+        pass_filenames: false

@@ -20,7 +20,6 @@ import sys
 import os
 import logging
 import argparse
-from pathlib import Path
 
 
 from fff.archive.config import load_config
@@ -229,15 +228,15 @@ def main(argv=None):
 
         # Check for required libraries
         try:
-            import imagehash
-            from PIL import Image
+            import imagehash  # noqa: F401  (availability check)
+            from PIL import Image  # noqa: F401  (availability check)
         except ImportError as e:
             logging.error(f"Required library missing: {e}")
             logging.error("Install with: pip install Pillow imagehash")
             sys.exit(1)
 
         try:
-            from fff.hashing import archive_hasher as MediaHasher  # fff: archive hash profile
+            from fff.hashing import archive_hasher as MediaHasher  # noqa: F401  (availability check); fff: archive hash profile
         except ImportError:
             logging.error("media_hasher module is required")
             sys.exit(1)

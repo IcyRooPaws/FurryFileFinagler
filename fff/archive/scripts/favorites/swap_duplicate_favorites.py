@@ -20,7 +20,6 @@ import re
 import sys
 import time
 import requests
-from pathlib import Path
 
 from fff.archive import paths as archive_paths
 

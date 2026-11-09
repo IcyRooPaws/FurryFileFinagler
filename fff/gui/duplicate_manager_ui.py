@@ -24,11 +24,9 @@ import json
 import shutil
 import time
 from datetime import datetime
-from pathlib import Path
 from collections import defaultdict
 from typing import Dict, List, Tuple, Optional
 from PIL import Image, ImageTk, ImageSequence
-import tempfile
 import hashlib
 
 # Import project-owned sorter handlers directly.
@@ -1862,7 +1860,7 @@ class DuplicateManagerGUI:
 
             except Exception as e:
                 logger.error(f"Error during duplicate scan: {e}")
-                self.root.after(0, lambda: self.on_scan_error(str(e)))
+                self.root.after(0, lambda msg=str(e): self.on_scan_error(msg))
 
         # Disable scan button and update text
         self.scan_button.config(state='disabled', text='[TIME] Scanning...')
@@ -2388,7 +2386,7 @@ class DuplicateManagerGUI:
                     self.root.after(0, lambda: self.status_text.set(f"[OK] Scan complete: No similar files found (>={threshold}% similar)"))
                     logger.info(f"Similarity search complete: No similar files found at {threshold}% threshold")
                 else:
-                    self.root.after(0, lambda: self.status_text.set(f"[OK] Batch complete: No more groups found in this batch"))
+                    self.root.after(0, lambda: self.status_text.set("[OK] Batch complete: No more groups found in this batch"))
             else:
                 saved_pct = f" ({efficiency_gain:.0f}% faster)" if efficiency_gain > 10 else ""
                 if scan_completed:
@@ -2401,7 +2399,7 @@ class DuplicateManagerGUI:
 
         except Exception as e:
             logger.error(f"Similarity search failed: {e}", exc_info=True)
-            self.root.after(0, lambda: self.status_text.set(f"Similarity search failed: {e}"))
+            self.root.after(0, lambda msg=str(e): self.status_text.set(f"Similarity search failed: {msg}"))
             raise
 
     def execute_video_similarity_search(self) -> List[Dict]:
@@ -2417,7 +2415,7 @@ class DuplicateManagerGUI:
         status("Loading videos from database...", 2)
         conn = self.db_manager.get_db_connection()
         cursor = conn.cursor(dictionary=True)
-        cursor.execute(f"""
+        cursor.execute("""
             SELECT table_name, file_path, file_modified_at, file_size, e621_post_id
             FROM all_files
             WHERE LOWER(file_path) REGEXP '\\\\.(mp4|webm|mov|avi|mkv|m4v)$'
@@ -3319,7 +3317,7 @@ class DuplicateManagerGUI:
         try:
             final_mtime = os.stat(date_file['file_path']).st_mtime
             final_atime = os.stat(date_file['file_path']).st_atime
-        except:
+        except Exception:
             final_mtime = os.stat(base_file['file_path']).st_mtime
             final_atime = os.stat(base_file['file_path']).st_atime
 
@@ -3496,7 +3494,7 @@ class DuplicateManagerGUI:
             group.selected_to_keep = highest_priority_file
             group.files_to_move = sorted_files[1:]
             group.file_to_replace_keep = None
-            self.log_message(f"Auto-selected: Highest priority file is also largest")
+            self.log_message("Auto-selected: Highest priority file is also largest")
         else:
             # Different files - check if priority file is smaller
             priority_size = highest_priority_file.get('file_size', 0)
@@ -3521,7 +3519,7 @@ class DuplicateManagerGUI:
                 group.selected_to_keep = highest_priority_file
                 group.files_to_move = sorted_files[1:]
                 group.file_to_replace_keep = None
-                self.log_message(f"Auto-selected: Highest priority file")
+                self.log_message("Auto-selected: Highest priority file")
 
         # Refresh display
         self.display_current_group()
@@ -3575,7 +3573,7 @@ class DuplicateManagerGUI:
                 final_mtime = date_stat.st_mtime
                 final_atime = date_stat.st_atime
                 final_ctime = date_stat.st_ctime
-            except:
+            except Exception:
                 final_mtime = os.stat(base_file['file_path']).st_mtime
                 final_atime = os.stat(base_file['file_path']).st_atime
                 final_ctime = os.stat(base_file['file_path']).st_ctime
@@ -3947,7 +3945,7 @@ class DuplicateManagerGUI:
                         stat = os.stat(file_info['file_path'])
                         file_data['size_bytes'] = stat.st_size
                         file_data['modified_at'] = datetime.fromtimestamp(stat.st_mtime).isoformat()
-                    except:
+                    except Exception:
                         pass
 
                 group_data['files'].append(file_data)
@@ -3979,7 +3977,7 @@ class DuplicateManagerGUI:
                             stat = os.stat(file_info['file_path'])
                             size_mb = f"{stat.st_size / (1024 * 1024):.2f}"
                             modified = datetime.fromtimestamp(stat.st_mtime).strftime('%Y-%m-%d %H:%M:%S')
-                        except:
+                        except Exception:
                             pass
 
                     writer.writerow([
@@ -4449,7 +4447,7 @@ class DuplicateManagerGUI:
             swap_mtime = swap_stat.st_mtime
             swap_atime = swap_stat.st_atime
 
-            self.log_message(f"Swapping file locations:")
+            self.log_message("Swapping file locations:")
             self.log_message(f"  Keep: {keep_filename} ({keep_dir})")
             self.log_message(f"  Swap: {swap_filename} ({swap_dir})")
 
@@ -4481,7 +4479,7 @@ class DuplicateManagerGUI:
             # Step 4: Preserve full timestamps with their current files.
             _set_file_timestamps(keep_path, swap_atime, swap_mtime, swap_stat.st_ctime)
             _set_file_timestamps(swap_path, keep_atime, keep_mtime, keep_stat.st_ctime)
-            self.log_message(f"Preserved file timestamps")
+            self.log_message("Preserved file timestamps")
 
             # Step 5: Regenerate hashes for both files in their new locations
             self.status_text.set("Regenerating hashes...")
@@ -4542,7 +4540,7 @@ class DuplicateManagerGUI:
             self.operation_log.append(operation)
 
             self.status_text.set("Ready")
-            self.log_message(f"[OK] Successfully swapped file locations")
+            self.log_message("[OK] Successfully swapped file locations")
 
             if not self.skip_confirmations.get():
                 messagebox.showinfo("Success",
@@ -4677,7 +4675,7 @@ class DuplicateManagerGUI:
             duplicates_folder = self.config.duplicate_directory
             os.makedirs(duplicates_folder, exist_ok=True)
 
-            self.log_message(f"Custom merge starting...")
+            self.log_message("Custom merge starting...")
             self.log_message(f"  Base: {os.path.basename(base_file['file_path'])}")
             self.log_message(f"  Final: {final_filename} in {final_dir}")
 

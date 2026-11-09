@@ -2,8 +2,6 @@
 """
 Test tag sorting optimizations.
 """
-import sys
-import os
 import time
 
 import pytest
@@ -57,7 +55,7 @@ def test_optimizations():
         query_time = time.time() - start
         print(f"    Query with artist exclusion: {query_time:.3f}s")
         print(f"    Results found: {len(results)} files")
-        print(f"    ✓ Query executed successfully")
+        print("    ✓ Query executed successfully")
     except Exception as e:
         print(f"    ⚠ Query failed (might be expected): {e}")
     

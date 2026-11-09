@@ -6,11 +6,10 @@ Stores results in MySQL database. Run as 'fff fluffle search'.
 """
 
 import re
-import sys
 import json
 import time
 from pathlib import Path
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Optional
 from datetime import datetime
 
 import yaml
@@ -387,7 +386,7 @@ def store_search_results(connection: mysql.connector.connection.MySQLConnection,
             from PIL import Image
             with Image.open(image_path) as img:
                 width, height = img.size
-        except:
+        except Exception:
             pass  # PIL not available or image can't be opened
 
         # Insert or update image record
@@ -557,7 +556,7 @@ def store_search_results(connection: mysql.connector.connection.MySQLConnection,
         if len(exact_matches) > 0:
             print(f"    [OK] Stored {len(exact_matches)} exact match(es)")
         else:
-            print(f"    [i] No exact matches found")
+            print("    [i] No exact matches found")
 
         # Check if there's an e621 exact match
         e621_post_id = None
@@ -638,7 +637,7 @@ def delete_existing_links(connection: mysql.connector.connection.MySQLConnection
         print(f"Warning: Could not delete existing links for {image_filename}: {e}")
         try:
             connection.rollback()
-        except:
+        except Exception:
             pass
         return False
 
@@ -650,7 +649,6 @@ def rename_and_move_to_other_sourced(image_path: Path,
                                      preserve_structure: bool = False,
                                      backup_dir: Path = None) -> Optional[Path]:
     """Rename and move file for other platform sources."""
-    import re  # Import at function level to ensure it's always available
 
     try:
         # Create backup of current file if backup_dir is provided
@@ -953,12 +951,12 @@ def main(argv=None):  # fff: argv accepted for the CLI; no options
         reprocess_images = {img.name for img in image_files if img.name in processed_images}
 
         print(f"Found {len(image_files)} image file(s)")
-        print(f"Reprocessing mode: ENABLED")
+        print("Reprocessing mode: ENABLED")
         if reprocess_images:
             print(f"Files to reprocess: {len(reprocess_images)}")
             print(f"New files: {len(image_files) - len(reprocess_images)}\n")
         else:
-            print(f"All files are new (none previously processed)\n")
+            print("All files are new (none previously processed)\n")
     else:
         # Normal mode: skip already processed files
         remaining_images = [img for img in image_files if img.name not in processed_images]
@@ -1018,7 +1016,7 @@ def main(argv=None):  # fff: argv accepted for the CLI; no options
     print(f"Search delay: {search_delay}s between requests")
     print(f"Max results per image: {max_results}")
     print(f"Saving JSON responses: {'Yes' if save_json else 'No'}")
-    print(f"Database storage: EXACT MATCHES ONLY\n")
+    print("Database storage: EXACT MATCHES ONLY\n")
 
     # Search for each image
     exact_matches_count = 0
@@ -1041,7 +1039,7 @@ def main(argv=None):  # fff: argv accepted for the CLI; no options
 
         print(f"[{i}/{len(remaining_images)}]")
         if allow_reprocessing and image_path.name in reprocess_images:
-            print(f"  (REPROCESSING)")
+            print("  (REPROCESSING)")
 
         # Search using reverse search API
         results = search_image_fluffle(image_path, limit=max_results)
@@ -1084,19 +1082,19 @@ def main(argv=None):  # fff: argv accepted for the CLI; no options
 
                 # Process e621 match if found
                 if e621_post_id and process_single_image:
-                    print(f"    -> e621 match found, processing...")
+                    print("    -> e621 match found, processing...")
                     try:
                         if process_single_image(image_path, e621_post_id, config,
                                                favorites_cache=favorites_cache,
                                                base_search_dir=base_search_dir,
                                                preserve_structure=preserve_structure):
                             e621_processed += 1
-                            print(f"    [OK] e621 processing complete")
+                            print("    [OK] e621 processing complete")
                     except Exception as e:
                         print(f"    [ERROR] e621 processing failed: {e}")
                 # If no e621 match, but FA match found, process FA
                 elif fa_post_id and process_single_fa_image and fa_cookies:
-                    print(f"    -> FA match found (no e621), processing...")
+                    print("    -> FA match found (no e621), processing...")
                     try:
                         # Extract numeric ID from FA post ID (remove furAffinity_ or fa_ prefix)
                         numeric_fa_id = fa_post_id.replace('furAffinity_', '').replace('fa_', '')
@@ -1124,16 +1122,16 @@ def main(argv=None):  # fff: argv accepted for the CLI; no options
 
                             # FA post was deleted - move to deleted_source directory
                             if move_not_found:
-                                print(f"    [i] FA source deleted - moving to deleted_source...")
+                                print("    [i] FA source deleted - moving to deleted_source...")
                                 if move_to_not_found(file_to_move, deleted_source_dir, base_search_dir, preserve_structure, reason="deleted_source"):
-                                    print(f"    [OK] Moved to deleted_source")
+                                    print("    [OK] Moved to deleted_source")
                                 else:
-                                    print(f"    [ERROR] Failed to move to deleted_source")
+                                    print("    [ERROR] Failed to move to deleted_source")
                             else:
-                                print(f"    [i] FA source deleted - leaving file in place")
+                                print("    [i] FA source deleted - leaving file in place")
                         elif fa_result:
                             fa_processed += 1
-                            print(f"    [OK] FA processing complete")
+                            print("    [OK] FA processing complete")
                     except Exception as e:
                         print(f"    [ERROR] FA processing failed: {e}")
 
@@ -1146,7 +1144,7 @@ def main(argv=None):  # fff: argv accepted for the CLI; no options
                     fuzzy_fa_deleted_path = None
 
                     if not e621_post_id and not fa_post_id and fuzzysearch_enabled and fuzzysearch_api_key:
-                        print(f"    -> No e621/FA match from reverse search, trying FuzzySearch...")
+                        print("    -> No e621/FA match from reverse search, trying FuzzySearch...")
                         fuzzy_results = search_image_fuzzysearch(image_path, fuzzysearch_api_key, fuzzysearch_distance)
 
                         if fuzzy_results:
@@ -1166,7 +1164,7 @@ def main(argv=None):  # fff: argv accepted for the CLI; no options
                             # Process e621 first (takes precedence)
                             if e621_matches and process_single_image:
                                 for e621_id in e621_matches:
-                                    print(f"    -> FuzzySearch found e621 match, processing...")
+                                    print("    -> FuzzySearch found e621 match, processing...")
                                     try:
                                         if process_single_image(image_path, e621_id, config,
                                                                favorites_cache=favorites_cache,
@@ -1175,7 +1173,7 @@ def main(argv=None):  # fff: argv accepted for the CLI; no options
                                             e621_processed += 1
                                             fuzzysearch_processed += 1
                                             fuzzy_e621_found = True
-                                            print(f"    [OK] e621 processing complete (via FuzzySearch)")
+                                            print("    [OK] e621 processing complete (via FuzzySearch)")
                                             break  # Stop after first successful e621 match
                                     except Exception as e:
                                         print(f"    [ERROR] e621 processing failed: {e}")
@@ -1183,7 +1181,7 @@ def main(argv=None):  # fff: argv accepted for the CLI; no options
                             # Only process FA if no e621 match was found or processed
                             if not e621_matches and fa_matches and process_single_fa_image and fa_cookies:
                                 for fa_id in fa_matches:
-                                    print(f"    -> FuzzySearch found FA match, processing...")
+                                    print("    -> FuzzySearch found FA match, processing...")
                                     try:
                                         # Don't pass FuzzySearch result as fluffle_match_data - different structure without author info
                                         fa_result = process_single_fa_image(image_path, fa_id, config,
@@ -1202,13 +1200,13 @@ def main(argv=None):  # fff: argv accepted for the CLI; no options
                                             # Store deleted FA info but don't process yet - check if reverse search has other sources
                                             fuzzy_fa_deleted = True
                                             fuzzy_fa_deleted_path = file_to_move
-                                            print(f"    [i] FA source deleted - checking for alternative sources...")
+                                            print("    [i] FA source deleted - checking for alternative sources...")
                                             break  # Stop after first FA match (even if deleted)
                                         elif fa_result:
                                             fa_processed += 1
                                             fuzzysearch_processed += 1
                                             fuzzy_fa_found = True
-                                            print(f"    [OK] FA processing complete (via FuzzySearch)")
+                                            print("    [OK] FA processing complete (via FuzzySearch)")
                                             break  # Stop after first successful FA match
                                     except Exception as e:
                                         print(f"    [ERROR] FA processing failed: {e}")
@@ -1254,28 +1252,28 @@ def main(argv=None):  # fff: argv accepted for the CLI; no options
                                     # Fallback for filenames with characters that can't be displayed in console
                                     print(f"    [OK] Moved to other sourced as {destination.name.encode('ascii', 'replace').decode('ascii')}")
                             else:
-                                print(f"    [ERROR] Failed to move to other sourced")
+                                print("    [ERROR] Failed to move to other sourced")
                         elif fuzzy_fa_deleted:
                             # FuzzySearch found deleted FA but no other reverse search sources - move to deleted_source
                             if move_not_found:
-                                print(f"    [i] No alternative sources found - FA source deleted, moving to deleted_source...")
+                                print("    [i] No alternative sources found - FA source deleted, moving to deleted_source...")
                                 if move_to_not_found(fuzzy_fa_deleted_path, deleted_source_dir, base_search_dir, preserve_structure, reason="deleted_source"):
-                                    print(f"    [OK] Moved to deleted_source")
+                                    print("    [OK] Moved to deleted_source")
                                 else:
-                                    print(f"    [ERROR] Failed to move to deleted_source")
+                                    print("    [ERROR] Failed to move to deleted_source")
                             else:
-                                print(f"    [i] FA source deleted - leaving file in place")
+                                print("    [i] FA source deleted - leaving file in place")
                         elif not e621_post_id and not fa_post_id:
                             if move_not_found:
-                                print(f"    [i] No exact matches - moving to not_found...")
+                                print("    [i] No exact matches - moving to not_found...")
                                 if move_to_not_found(image_path, not_found_dir, base_search_dir, preserve_structure):
-                                    print(f"    [OK] Moved to not_found")
+                                    print("    [OK] Moved to not_found")
                                 else:
-                                    print(f"    [ERROR] Failed to move to not_found")
+                                    print("    [ERROR] Failed to move to not_found")
                             else:
-                                print(f"    [i] No exact matches - leaving file in place")
+                                print("    [i] No exact matches - leaving file in place")
         else:
-            print(f"    Failed to get results")
+            print("    Failed to get results")
 
         print()
 

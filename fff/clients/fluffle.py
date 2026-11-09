@@ -80,7 +80,7 @@ def resize_image_for_upload(image_path: Path, max_size_mb: float = 4.0, temp_dir
 
                 # Ensure dimensions are at least 1 pixel
                 if new_width < 1 or new_height < 1:
-                    print(f"    [WARNING] Image too small to resize further")
+                    print("    [WARNING] Image too small to resize further")
                     break
 
                 # Check if pixel area is within limit
@@ -176,23 +176,23 @@ def search_image_fluffle(image_path: Path, limit: int = 10) -> Optional[Dict[str
                 print(f"    Warning: Could not delete temp file: {e}")
 
         if response.status_code == 429:
-            print(f"    Error: Rate limited (429). Waiting 5 seconds...")
+            print("    Error: Rate limited (429). Waiting 5 seconds...")
             time.sleep(5)
             return None
 
         if response.status_code == 415:
-            print(f"    Error: Unsupported file type")
+            print("    Error: Unsupported file type")
             return {"error": "unsupportedFileType", "matches": []}
 
         if response.status_code == 422:
-            print(f"    Error: Corrupt file")
+            print("    Error: Corrupt file")
             return {"error": "corruptFile", "matches": []}
 
         if response.status_code == 400:
             error_text = response.text[:200]
             # Check if it's a file size error that we should have caught
             if "larger than the maximum allowed size" in response.text:
-                print(f"    Error: File still too large after resize attempt")
+                print("    Error: File still too large after resize attempt")
             else:
                 print(f"    Error: Bad request - {error_text}")
             return {"error": "badRequest", "matches": []}
@@ -205,7 +205,7 @@ def search_image_fluffle(image_path: Path, limit: int = 10) -> Optional[Dict[str
             results = response.json()
             return results
         except ValueError:
-            print(f"    Error: Invalid JSON response")
+            print("    Error: Invalid JSON response")
             return None
 
     except Exception as e:

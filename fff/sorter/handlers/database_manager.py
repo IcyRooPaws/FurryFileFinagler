@@ -876,7 +876,7 @@ class DatabaseManager:
         """Get all hashes and metadata from destination table."""
         # Skip database operations for files in duplicate directory
         if os.path.abspath(dest_dir) == os.path.abspath(self.duplicate_directory):
-            logger.debug(f"Skipping database get_dest_hashes for duplicate directory")
+            logger.debug("Skipping database get_dest_hashes for duplicate directory")
             return {}
 
         table = self.table_name_for_dest(dest_dir)
@@ -1138,7 +1138,7 @@ class DatabaseManager:
         """
         # Skip database operations for files in duplicate directory
         if os.path.abspath(dest_dir) == os.path.abspath(self.duplicate_directory):
-            logger.debug(f"Skipping duplicate check for duplicate directory")
+            logger.debug("Skipping duplicate check for duplicate directory")
             return False
 
         table = self.table_name_for_dest(dest_dir)

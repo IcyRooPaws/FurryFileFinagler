@@ -38,7 +38,6 @@ from tkinter import ttk, messagebox
 from PIL import Image, ImageTk, ImageSequence
 import requests
 from io import BytesIO
-import threading
 import yaml
 from pathlib import Path
 
@@ -49,7 +48,6 @@ from fff.archive.db import connect_to_mysql, record_ai_flagged_artists
 from fff.archive.fa_unfavorite import unfavorite_fa_sources
 from fff.archive.post_files import move_post_files
 from fff.archive.logging_setup import setup_logging
-from fff.archive.api import api_get
 from fff.gui import host as tool_host, theme
 
 # Try to import cv2 for video support
@@ -98,7 +96,7 @@ def load_keybindings(keybind_file="keybinds.yaml"):
             logging.info(f"Loaded custom keybindings from {keybind_file}")
             return keybinds
         else:
-            logging.warning(f"Invalid keybind file format, using defaults")
+            logging.warning("Invalid keybind file format, using defaults")
             return default_keybinds
 
     except Exception as e:
@@ -1144,7 +1142,7 @@ class BlacklistReviewUI:
         if HAS_PYGAME:
             try:
                 pygame.mixer.music.stop()
-            except:
+            except Exception:
                 pass
 
     def stop_video(self):
@@ -1157,7 +1155,7 @@ class BlacklistReviewUI:
             try:
                 pygame.mixer.music.stop()
                 pygame.mixer.music.unload()
-            except:
+            except Exception:
                 pass
 
         # Wait for thread to finish
@@ -1191,7 +1189,7 @@ class BlacklistReviewUI:
                     if self.video_has_audio and not self.mute_var.get() and HAS_PYGAME:
                         try:
                             pygame.mixer.music.play()
-                        except:
+                        except Exception:
                             pass
                     continue
 
@@ -1237,13 +1235,13 @@ class BlacklistReviewUI:
             # Mute
             try:
                 pygame.mixer.music.set_volume(0.0)
-            except:
+            except Exception:
                 pass
         else:
             # Unmute
             try:
                 pygame.mixer.music.set_volume(1.0)
-            except:
+            except Exception:
                 pass
 
     def quit_app(self):

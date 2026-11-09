@@ -21,7 +21,6 @@ import logging
 import tkinter as tk
 from tkinter import ttk, messagebox
 import yaml
-from pathlib import Path
 
 from fff.archive import paths as archive_paths
 
@@ -33,7 +32,6 @@ from fff.gui import host as tool_host, theme
 # Import utilities and UI from blacklist_review_ui
 from fff.gui.blacklist_review_ui import (
     BlacklistReviewUI,
-    load_keybindings,
     load_kept_posts,
     filter_kept_posts,
     filter_posts_with_accessible_images,

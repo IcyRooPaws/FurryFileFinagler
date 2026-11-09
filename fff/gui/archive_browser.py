@@ -2,9 +2,7 @@
 """Local web browser for searching and previewing archived e621 posts."""
 
 import argparse
-import mimetypes
 import os
-import sys
 from pathlib import Path
 
 from flask import Flask, abort, jsonify, render_template_string, request, send_file

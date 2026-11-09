@@ -501,7 +501,7 @@ def add_to_fa_favorites(post_id: str, cookies: http.cookiejar.CookieJar) -> bool
         )
 
         if not response:
-            print(f"\n    [DEBUG] FA view page request failed after retries")
+            print("\n    [DEBUG] FA view page request failed after retries")
             return False
 
         if response.status_code != 200:
@@ -519,7 +519,7 @@ def add_to_fa_favorites(post_id: str, cookies: http.cookiejar.CookieJar) -> bool
             # Maybe already favorited - check for unfav link
             if '/unfav/' in response.text:
                 return True  # Already favorited
-            print(f"\n    [DEBUG] Could not find fav key in FA page")
+            print("\n    [DEBUG] Could not find fav key in FA page")
             # Try to find any fav-related links for debugging
             fav_links = re.findall(r'(/(un)?fav/[^"\']+)', response.text)
             if fav_links:
@@ -543,7 +543,7 @@ def add_to_fa_favorites(post_id: str, cookies: http.cookiejar.CookieJar) -> bool
         )
 
         if not response:
-            print(f"\n    [DEBUG] FA fav request failed after retries")
+            print("\n    [DEBUG] FA fav request failed after retries")
             return None
 
         if response.status_code in FA_RETRYABLE_STATUS_CODES:
@@ -667,7 +667,7 @@ def download_fa_post(post_data: Dict[str, Any], download_dir: Path, cookies: htt
     try:
         # Check if we have a valid download URL
         if not post_data.get('download_url'):
-            print(f"\n    [ERROR] No download URL found in post data")
+            print("\n    [ERROR] No download URL found in post data")
             if post_data.get('error'):
                 print(f"    [ERROR] Reason: {post_data.get('error')}")
             return None

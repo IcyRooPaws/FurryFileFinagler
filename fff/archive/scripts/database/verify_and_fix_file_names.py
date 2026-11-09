@@ -41,7 +41,6 @@ import argparse
 import logging
 import os
 import sys
-from pathlib import Path
 
 from fff.archive import paths as archive_paths
 

@@ -41,7 +41,7 @@ def main(argv=None):  # fff: argv accepted for the CLI; no options
         print(f"\nNo mappings in {MAPPINGS_FILE}. Add some (see fa_author_mappings.example.yaml).")
         return
 
-    print(f"\nManual author mappings configured:")
+    print("\nManual author mappings configured:")
     for author_id, author_name in manual_mappings:
         print(f"  {author_name} -> {author_id}")
 
@@ -52,11 +52,11 @@ def main(argv=None):  # fff: argv accepted for the CLI; no options
     search_directory = config.get('furaffinity', {}).get('rename_search_directory',
                                                           'P:/IPL/Pictures')
 
-    print(f"\nConfiguration:")
+    print("\nConfiguration:")
     print(f"  Search directory: {search_directory}")
 
     # Ask user to confirm or override directory
-    print(f"\nPress Enter to use the above directory, or type a new path:")
+    print("\nPress Enter to use the above directory, or type a new path:")
     user_input = input().strip()
     if user_input:
         search_directory = user_input
