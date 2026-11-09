@@ -130,6 +130,89 @@ def _cmd_db_snapshot(args) -> int:
     return 0
 
 
+def _format_size(n: int) -> str:
+    for unit in ("B", "KB", "MB", "GB"):
+        if n < 1024 or unit == "GB":
+            return f"{n:.0f} {unit}" if unit == "B" else f"{n:.1f} {unit}"
+        n /= 1024
+
+
+def _cmd_db_backup(args) -> int:
+    from fff.common import backup
+    from fff.common.logging import setup_logging
+
+    if args.list:
+        found = backup.backups()
+        if not found:
+            print(f"No backups in {backup.backup_root()}")
+        for path in found:
+            info = backup.read_manifest(path)
+            size = sum(d["bytes"] for d in info["databases"].values())
+            rows = sum(sum(d["rows"].values()) for d in info["databases"].values())
+            print(f"  {path.name}  {_format_size(size):>9}  {rows:>10,} rows  ({', '.join(info['databases'])})")
+        return 0
+    log_file = setup_logging("db", "INFO", name="backup")
+    folder = backup.create(args.db or backup.MODULES, progress=lambda msg: print(f"  {msg}"))
+    info = backup.read_manifest(folder)
+    size = sum(d["bytes"] for d in info["databases"].values())
+    rows = sum(sum(d["rows"].values()) for d in info["databases"].values())
+    print(f"Backed up {rows:,} rows ({_format_size(size)}) in {info['seconds']}s to {folder}")
+    for path in backup.prune(args.keep):
+        print(f"  removed old backup {path.name}")
+    print(f"Log: {log_file}")
+    return 0
+
+
+def _cmd_db_restore(args) -> int:
+    from pathlib import Path
+
+    from fff.common import backup
+    from fff.common.logging import setup_logging
+
+    if args.backup == "latest":
+        found = backup.backups()
+        if not found:
+            print(f"No backups in {backup.backup_root()}", file=sys.stderr)
+            return 1
+        source = found[-1]
+    else:
+        source = Path(args.backup)
+        if not source.is_absolute() and not source.exists():
+            source = backup.backup_root() / args.backup
+    if not (source / "manifest.json").is_file():
+        print(f"Not a backup folder: {source}", file=sys.stderr)
+        return 1
+    target = "prod" if args.prod else "test"
+    if args.prod and fff_config.is_test(fff_config.load()):
+        print("--prod can't be combined with the test environment", file=sys.stderr)
+        return 2
+    info = backup.read_manifest(source)
+    modules = [m for m in info["databases"] if not args.db or m in args.db]
+    cfg = fff_config.load()
+    names = [fff_config.prod_database_name(cfg, m) if args.prod
+             else fff_config.TEST_PREFIX + fff_config.prod_database_name(cfg, m) for m in modules]
+    print(f"Restore {source.name} (taken {info['created']}) into: {', '.join(names)}")
+    print("Every table, view and procedure in the backup is replaced in those databases.")
+    if args.prod and not args.yes:
+        expected = "restore production"
+        if input(f"Type '{expected}' to continue: ").strip() != expected:
+            print("Cancelled.")
+            return 1
+    elif not args.yes and input("Continue? [y/N] ").strip().lower() not in ("y", "yes"):
+        print("Cancelled.")
+        return 1
+    log_file = setup_logging("db", "INFO", name="restore")
+    if args.prod:
+        print("Backing up the current production databases first...")
+        safety = backup.create(modules, progress=lambda msg: print(f"  {msg}"))
+        print(f"  saved as {safety.name} (restore it the same way to undo)")
+    restored = backup.restore(source, target, modules, progress=lambda msg: print(f"  {msg}"))
+    for module, counts in restored.items():
+        print(f"{module}: {len(counts)} tables, {sum(counts.values()):,} rows (matches the backup)")
+    print(f"Log: {log_file}")
+    return 0
+
+
 def _cmd_db_rewrite_test_paths(args) -> int:
     from fff.common import test_db_paths
     from fff.common.logging import setup_logging
@@ -249,6 +332,29 @@ def build_parser() -> argparse.ArgumentParser:
                     "production names, so snapshots diff cleanly. Read-only on the server.")
     p.add_argument("--out", help="Folder to write to (default: sql/schema)")
     p.set_defaults(func=_cmd_db_snapshot)
+    p = db_sub.add_parser(
+        "backup",
+        help="Back up the databases (gzipped SQL, one consistent snapshot) and remove old backups",
+        description="Writes every table, view and procedure of the three databases to "
+                    "backup.directory/<date>_<env>/ (default data/backups), read inside one consistent "
+                    "snapshot so a sync running at the same time can't make it inconsistent. Then keeps "
+                    "the newest backup.keep backups. Read-only on the server; no mysqldump needed.")
+    p.add_argument("--db", nargs="+", choices=fff_config.MODULES, help="Only these modules (default: all three)")
+    p.add_argument("--keep", type=int, help="Backups to keep (default: backup.keep, 7)")
+    p.add_argument("--list", action="store_true", help="List the backups instead of making one")
+    p.set_defaults(func=_cmd_db_backup)
+    p = db_sub.add_parser(
+        "restore",
+        help="Restore a backup into the test_* databases (or production with --prod)",
+        description="Replaces every table, view and procedure in the backup, then checks each table's "
+                    "row count against the backup. Restores into test_* unless --prod is given; a "
+                    "production restore asks you to type a confirmation and first backs up the "
+                    "current production databases, so it can be undone.")
+    p.add_argument("backup", help="Backup folder (path or name under the backup directory), or 'latest'")
+    p.add_argument("--db", nargs="+", choices=fff_config.MODULES, help="Only these modules (default: all in the backup)")
+    p.add_argument("--prod", action="store_true", help="Restore into the production databases")
+    p.add_argument("--yes", action="store_true", help="Don't ask for confirmation")
+    p.set_defaults(func=_cmd_db_restore)
 
     # e621 / fa / gui / web / legacy commands
     from fff.cli import archive_cmds

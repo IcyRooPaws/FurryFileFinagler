@@ -27,6 +27,14 @@ class FakeRunner:
 
 
 @pytest.fixture(autouse=True)
+def no_backup_stage(monkeypatch):
+    """Most tests are about the pipeline stages; the backup stage has its own tests below."""
+    from fff.common import backup
+
+    monkeypatch.setattr(backup, "settings", lambda: backup.DEFAULTS | {"in_daily": False})
+
+
+@pytest.fixture(autouse=True)
 def log_dir(tmp_path, monkeypatch):
     monkeypatch.setattr(paths, "LOG_DIR", tmp_path / "logs")
     monkeypatch.setattr(paths, "LOCK_DIR", tmp_path / "locks")
@@ -115,3 +123,16 @@ def test_each_stage_is_a_real_command(argv, capsys):
         code = exc.code
     assert code == 0
     assert "usage:" in capsys.readouterr().out
+
+
+def test_backup_runs_first_when_enabled(monkeypatch):
+    from fff.common import backup
+
+    monkeypatch.setattr(backup, "settings", lambda: backup.DEFAULTS)
+    run = FakeRunner()
+    assert daily.run(parse("daily", "--skip-sort", "--skip-fa-sync", "--skip-fluffle", "--skip-ai"), runner=run) == 0
+    assert run.stages() == [["db", "backup"], ["e621", "sync"]]
+    run = FakeRunner()
+    assert daily.run(parse("daily", "--skip-backup", "--skip-sort", "--skip-fa-sync", "--skip-fluffle",
+                           "--skip-ai"), runner=run) == 0
+    assert run.stages() == [["e621", "sync"]]

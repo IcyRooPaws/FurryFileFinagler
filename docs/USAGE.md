@@ -76,6 +76,26 @@ Use each command's `--help` to see its options. For example:
 | `fff sort ...` | Moves files between the library folders and archives. Writes `image_sorting_hashes`. |
 | `fff gui blacklist-review` | Auto-removes posts with critical or AI tags and unfavorites them on e621, before the window opens. Their files move to the unfavorited folder (critical tags) or `archive.ai_cleanup` (AI tags). |
 | `fff e621 files orphaned --execute` | Moves library files of posts that are no longer in the database or your favorites to the unfavorited folder. |
+| `fff db restore <backup> --prod` | Replaces the production databases with a backup, after you type a confirmation. Backs up the current state first. |
+
+## Backups
+
+`fff db backup` writes all three databases to `backup.directory` (default `data/backups`), one
+folder per backup with a gzipped SQL file per database and a `manifest.json` of row counts and
+checksums. It reads them inside one consistent snapshot, so a sync running at the same time can't
+make the backup inconsistent, and it needs no `mysqldump`. The newest `backup.keep` backups are
+kept. `fff daily` runs it first unless `backup.in_daily` is false or `--skip-backup` is given, and
+`fff doctor` warns when the newest backup is older than `backup.max_age_days`.
+
+```powershell
+fff db backup                     # back up now
+fff db backup --list              # list backups
+fff db restore latest             # restore the newest backup into the test_* databases
+fff db restore <folder> --prod    # restore into production (asks to confirm; backs up first)
+```
+
+A restore replaces every table, view and procedure in the backup, then checks each table's row
+count against the manifest. It is slower than the backup (about as long as inserting every row).
 
 ## Test environment
 

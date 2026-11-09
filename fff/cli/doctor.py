@@ -96,6 +96,18 @@ def check_schema() -> list[str]:
         return [f"{FAIL}: could not check the schema: {exc}"]
 
 
+def check_backups() -> tuple[bool, str]:
+    """(ok, message) for the newest database backup (fff.common.backup)."""
+    from fff.common import backup
+
+    root, max_age = backup.backup_root(), float(backup.settings()["max_age_days"])
+    age = backup.newest_age_days(root)
+    if age is None:
+        return False, f"{MISSING} no backups in {root} (run 'fff db backup')"
+    when = f"newest is {age:.1f} days old, {len(backup.backups(root))} kept in {root}"
+    return (True, f"{OK:<8} {when}") if age <= max_age else (False, f"{MISSING} {when} (over {max_age:g} days)")
+
+
 def check_modules() -> list[tuple[str, str]]:
     results = []
     for name in REQUIRED_MODULES:
@@ -144,6 +156,11 @@ def run(args) -> int:
         if not schema_problems:
             print(f"  {OK:<8} schema: every table FFF uses exists; all_files covers every hash table")
         problems += sum(1 for line in schema_problems if not line.startswith("run "))
+
+    print("\n== Database backups")
+    ok, message = check_backups()
+    print(f"  {message}")
+    problems += not ok
 
     print(f"\n{problems} problem(s) found." if problems else "\nAll checks passed.")
     return 1 if problems else 0

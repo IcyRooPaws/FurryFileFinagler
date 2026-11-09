@@ -1,5 +1,6 @@
 """``fff daily``: run the standard archive, search, and library-maintenance sequence.
 
+0. ``fff db backup``         back up the databases first (``backup.in_daily``, ``--skip-backup``)
 1. ``fff fluffle search``     find image sources and process matches
 2. ``fff sort workflow``      sort and organize downloaded files
 3. ``fff e621 sync``          sync favorites and downloads (``--skip-ai``: step 4 does that)
@@ -27,6 +28,7 @@ from fff.common.single_instance import AlreadyRunning, single_instance
 
 # (skip key, fff command, label).
 STAGES = [
+    ("backup", ["db", "backup"], "Database backup"),
     ("fluffle", ["fluffle", "search"], "Reverse-image source search"),
     ("sort", ["sort", "workflow"], "Library workflow (1st)"),
     ("e621", ["e621", "sync"], "e621 favorites sync"),
@@ -37,6 +39,8 @@ STAGES = [
 
 
 def add_arguments(p) -> None:
+    p.add_argument("--skip-backup", action="store_true",
+                   help="Don't run 'fff db backup' first (also off when backup.in_daily is false)")
     p.add_argument("--skip-e621", action="store_true", help="Don't run 'fff e621 sync'")
     p.add_argument("--skip-ai", action="store_true",
                    help="Don't run 'fff e621 ai process' (the e621 sync then does the AI processing itself)")
@@ -52,8 +56,12 @@ def add_arguments(p) -> None:
 
 def plan(args) -> list[tuple[str, list[str], str]]:
     stages = []
+    from fff.common import backup
+
     for key, argv, label in STAGES:
         if getattr(args, f"skip_{key}"):
+            continue
+        if key == "backup" and not backup.settings()["in_daily"]:
             continue
         argv = list(argv)
         if key == "e621" and args.skip_favorites:

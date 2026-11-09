@@ -269,6 +269,18 @@ Depends on: `file_operations` (exists).
 
 ## Part 13. Database backups
 
+**Status: done** (branch `feature/db-backup`). Built in Python (no `mysqldump`; it isn't
+installed and the server is on another machine): `fff/common/backup.py`.
+- `fff db backup` dumps all three databases from one consistent snapshot to gzipped SQL plus a
+  manifest (row counts, checksums), keeps the newest `backup.keep`. Test environment: 2.7 M rows,
+  51 MB, 20 s. It is the first stage of `fff daily` (`backup.in_daily`, `--skip-backup`), and
+  `fff doctor` warns when the newest backup is older than `backup.max_age_days`.
+- `fff db restore` restores into `test_*` by default; `--prod` needs a typed confirmation and
+  backs up production first. It checks row counts against the manifest. A full restore took
+  10 minutes (row-by-row inserts over the network); `LOAD DATA` could speed it up if needed.
+- Proven by a byte-exact round trip (CHECKSUM TABLE) of awkward values in an integration test,
+  and of the whole test environment.
+
 1. **`fff db backup` (S).** Runs `mysqldump` for the three databases into a configured folder
    and keeps the last N copies.
 2. **Daily stage (S).** An optional first stage of `fff daily`, plus a `fff doctor` warning when

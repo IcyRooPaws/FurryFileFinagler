@@ -18,6 +18,13 @@ databases:
   sorter: image_sorting_hashes
 e621:
   user_agent: YourAppName/1.0 (by your_e621_username)
+backup:
+  # 'fff db backup' (also the first stage of 'fff daily' when in_daily is true). Empty
+  # directory: data/backups. 'fff doctor' warns when the newest backup is older than max_age_days.
+  directory: data/backups
+  keep: 7
+  max_age_days: 2
+  in_daily: true
 http:
   # Shared HTTP client (fff/clients/http.py). Retries cover connection errors, timeouts,
   # 429 and 5xx (honouring Retry-After). Other services (fuzzysearch, fluffle, e621_files)
