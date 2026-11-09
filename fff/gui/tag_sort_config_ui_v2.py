@@ -3862,6 +3862,7 @@ class TagSortConfigApp:
         dialog = tk.Toplevel(self.root)
         dialog.title(f'Excluded Rules — {_rule_display_name(master)}')
         dialog.configure(bg=BG_PANEL)
+        theme.dark_title_bar(dialog)
         dialog.transient(self.root)
         dialog.grab_set()
         dialog.minsize(420, 360)

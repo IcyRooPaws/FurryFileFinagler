@@ -7,7 +7,9 @@ uses the tokens below (``PALETTE[...]``, ``font()``, ``mono()``) instead of lite
 """
 from __future__ import annotations
 
-PALETTE = {
+import os
+
+LIGHT_PALETTE = {
     "page": "#F1F6F6",          # window background
     "surface": "#FFFFFF",       # cards, lists, text fields
     "surface_alt": "#E8F0F1",   # headers, inactive tabs, toolbar strips
@@ -40,6 +42,43 @@ PALETTE = {
     "media_text": "#FFFFFF",
 }
 
+DARK_PALETTE = {
+    "page": "#12191C",
+    "surface": "#1A2428",
+    "surface_alt": "#222E33",
+    "hover": "#2A393F",
+    "selected": "#1D4A50",
+    "line": "#2C3A3F",
+    "line_strong": "#3E5157",
+    "ink": "#E2ECED",
+    "muted": "#94A8AD",
+    "faint": "#61757A",
+    "accent": "#0E8D9A",        # white text sits on this, and it reads as text on "page"
+    "accent_hover": "#0B7581",
+    "accent_soft": "#173A3F",
+    "sidebar": "#0B1114",
+    "sidebar_text": "#DCE8E9",
+    "sidebar_hint": "#8EA7AB",
+    "ok": "#43C483",
+    "ok_soft": "#16332A",
+    "warning": "#E2A54E",
+    "warning_soft": "#3A2C16",
+    "error": "#E5534B",
+    "error_soft": "#3D1E1C",
+    "info": "#79A3F7",
+    "info_soft": "#1C2A4A",
+    "violet": "#AE92F6",
+    "violet_soft": "#2D2346",
+    "orange": "#F0904F",
+    "orange_soft": "#3A2618",
+    "media": "#0A0F11",
+    "media_text": "#FFFFFF",
+}
+
+# Dark by default; FFF_THEME=light brings back the light look.
+IS_DARK = os.environ.get("FFF_THEME", "dark").strip().lower() != "light"
+PALETTE = dict(DARK_PALETTE if IS_DARK else LIGHT_PALETTE)
+
 # Resolved by apply() to fonts that exist on this machine.
 UI_FONT = "Segoe UI"
 UI_FONT_BOLD = "Segoe UI Semibold"
@@ -67,12 +106,32 @@ def _pick_fonts(root) -> None:
                      tkfont.nametofont("TkFixedFont", root).actual("family"))
 
 
+def dark_title_bar(window) -> None:
+    """Ask Windows 10/11 to draw ``window``'s title bar dark. Best effort; no-op elsewhere."""
+    if not IS_DARK or os.name != "nt":
+        return
+    try:
+        import ctypes
+
+        window.update_idletasks()
+        hwnd = ctypes.windll.user32.GetParent(window.winfo_id()) or window.winfo_id()
+        value = ctypes.c_int(1)
+        # DWMWA_USE_IMMERSIVE_DARK_MODE is 20 on current builds, 19 on early Windows 10 ones.
+        for attribute in (20, 19):
+            if ctypes.windll.dwmapi.DwmSetWindowAttribute(
+                    hwnd, attribute, ctypes.byref(value), ctypes.sizeof(value)) == 0:
+                break
+    except Exception:
+        pass
+
+
 def apply(root) -> None:
     """Theme ``root`` and everything created under it. Safe to call more than once."""
     import tkinter as tk
     from tkinter import font as tkfont, ttk
 
     _pick_fonts(root)
+    dark_title_bar(root)
     p = PALETTE
     for name, size in (("TkDefaultFont", 10), ("TkTextFont", 10), ("TkMenuFont", 10),
                        ("TkHeadingFont", 10), ("TkCaptionFont", 10), ("TkSmallCaptionFont", 9),
@@ -105,7 +164,22 @@ def apply(root) -> None:
             ("*Menu.background", p["surface"]), ("*Menu.foreground", p["ink"]),
             ("*Menu.activeBackground", p["accent"]), ("*Menu.activeForeground", "#FFFFFF"),
             ("*TCombobox*Listbox.background", p["surface"]),
-            ("*TCombobox*Listbox.selectBackground", p["accent"])):
+            ("*TCombobox*Listbox.foreground", p["ink"]),
+            ("*TCombobox*Listbox.selectBackground", p["accent"]),
+            ("*TCombobox*Listbox.selectForeground", "#FFFFFF"),
+            ("*Entry.selectBackground", p["selected"]), ("*Entry.selectForeground", p["ink"]),
+            ("*Entry.insertBackground", p["ink"]),
+            ("*Label.background", p["page"]), ("*Label.foreground", p["ink"]),
+            ("*Button.background", p["surface"]), ("*Button.foreground", p["ink"]),
+            ("*Button.activeBackground", p["hover"]), ("*Button.activeForeground", p["ink"]),
+            ("*Checkbutton.background", p["page"]), ("*Checkbutton.foreground", p["ink"]),
+            ("*Checkbutton.selectColor", p["surface"]),
+            ("*Checkbutton.activeBackground", p["page"]),
+            ("*Checkbutton.activeForeground", p["ink"]),
+            ("*Radiobutton.background", p["page"]), ("*Radiobutton.foreground", p["ink"]),
+            ("*Radiobutton.selectColor", p["surface"]),
+            ("*Radiobutton.activeBackground", p["page"]),
+            ("*Radiobutton.activeForeground", p["ink"])):
         root.option_add(pattern, value)
 
     style = ttk.Style(root)

@@ -12,6 +12,9 @@ Two types of blacklists:
 1. blacklist.txt - Posts for manual review (shown in UI)
 2. critical_blacklist.txt - Posts automatically deleted without review
 
+blacklist_ignore.txt - blacklist tags that don't count as hits in the review (a post still
+shows if another blacklisted tag matches).
+
 Kept posts tracking:
 - Posts marked as "Keep" are saved to kept_posts.txt
 - These posts won't appear in future reviews
@@ -116,7 +119,8 @@ class BlacklistReviewUI:
         window_title="Blacklist Review UI",
         context_label_text="Blacklisted Tags:",
         context_label_color=theme.PALETTE["error"],
-        kept_file="kept_posts.txt"
+        kept_file="kept_posts.txt",
+        tag_actions=False
     ):
         self.master = master
         self.posts = posts
@@ -126,6 +130,8 @@ class BlacklistReviewUI:
         self.deleted_count = 0
         self.kept_count = 0
         self.kept_file = kept_file
+        self.tag_actions = tag_actions
+        self.busy = False  # a tag action's rescan is running (ignore keep/delete/previous)
 
         # Load keybindings (use provided or default)
         self.keybinds = keybinds if keybinds else {
@@ -220,6 +226,24 @@ class BlacklistReviewUI:
         self.tags_text = tk.Text(self.info_panel, height=15, width=35, wrap="word", font=theme.font(10),
                                  padx=6, pady=4)
         self.tags_text.pack(fill="both", expand=True, pady=(0, 10))
+
+        # Tag actions (blacklist review only): change a list file, then rescan
+        if self.tag_actions:
+            tag_frame = ttk.Frame(self.info_panel)
+            tag_frame.pack(fill="x", pady=(0, 10))
+            ttk.Label(tag_frame, text="Tag:", font=theme.font(10)).grid(row=0, column=0, sticky="w")
+            self.tag_choice = ttk.Combobox(tag_frame, state="readonly", width=28)
+            self.tag_choice.grid(row=0, column=1, sticky="ew", padx=(5, 0))
+            tag_frame.grid_columnconfigure(1, weight=1)
+            self.unblacklist_button = ttk.Button(
+                tag_frame, text="Remove from blacklist & rescan", command=self.remove_tag_from_blacklist)
+            self.unblacklist_button.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(6, 0))
+            self.critical_button = ttk.Button(
+                tag_frame, text="Move to critical blacklist & rescan", command=self.move_tag_to_critical)
+            self.critical_button.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(4, 0))
+            self.ignore_button = ttk.Button(
+                tag_frame, text="Ignore this tag & rescan", command=self.ignore_tag)
+            self.ignore_button.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(4, 0))
 
         # E621 link
         self.link_label = ttk.Label(self.info_panel, text="", font=theme.font(9), foreground=theme.PALETTE["accent"], cursor="hand2")
@@ -396,6 +420,15 @@ class BlacklistReviewUI:
         if tags_display is None:
             tags_display = ''
         self.tags_text.insert(1.0, tags_display)
+
+        if self.tag_actions:
+            choices = [t.strip() for t in (post.get('blacklisted_tags') or '').split(',') if t.strip()]
+            self.tag_choice.config(values=choices)
+            self.tag_choice.set(choices[0] if choices else '')
+            state = "normal" if choices else "disabled"
+            self.unblacklist_button.config(state=state)
+            self.critical_button.config(state=state)
+            self.ignore_button.config(state=state)
 
         # Update e621 link
         self.link_label.config(text=f"View on e621: https://e621.net/posts/{post['id']}")
@@ -761,6 +794,8 @@ class BlacklistReviewUI:
 
     def keep_post(self):
         """Keep the post and move to next."""
+        if self.busy or self.current_index >= len(self.posts):
+            return
         post_id = self.posts[self.current_index]['id']
         self.kept_count += 1
         logging.info(f"Kept post {post_id}")
@@ -781,6 +816,8 @@ class BlacklistReviewUI:
 
     def previous_post(self):
         """Go back to the previous post."""
+        if self.busy:
+            return
         if not self.navigation_history:
             logging.info("No previous posts to go back to")
             messagebox.showinfo("No Previous Post", "You are at the beginning of the review.")
@@ -805,6 +842,8 @@ class BlacklistReviewUI:
 
     def delete_post(self):
         """Delete file and unfavorite from e621."""
+        if self.busy or self.current_index >= len(self.posts):
+            return
         post = self.posts[self.current_index]
         post_id = post['id']
 
@@ -899,6 +938,126 @@ class BlacklistReviewUI:
         finally:
             cursor.close()
 
+    def _selected_tag(self):
+        if self.busy or self.current_index >= len(self.posts):
+            return None
+        tag = self.tag_choice.get().strip()
+        return tag or None
+
+    def remove_tag_from_blacklist(self):
+        """Take the selected tag off blacklist.txt, then rescan the review list."""
+        tag = self._selected_tag()
+        if not tag:
+            return
+        if not messagebox.askyesno(
+                "Remove From Blacklist",
+                f"Remove '{tag}' from the blacklist and rescan?\n\n"
+                f"Posts flagged only by this tag will drop out of the review.",
+                parent=self.master):
+            return
+        try:
+            removed = remove_tag_from_list_file(archive_paths.BLACKLIST, tag)
+        except OSError as e:
+            messagebox.showerror("Error", f"Could not update the blacklist: {e}", parent=self.master)
+            return
+        if not removed:
+            logging.warning("Tag %r was not found in %s", tag, archive_paths.BLACKLIST)
+        logging.info("Removed tag %r from the blacklist", tag)
+        self._rescan(f"Removed '{tag}' from the blacklist. Rescanning…", lambda: 0)
+
+    def ignore_tag(self):
+        """Add the selected tag to blacklist_ignore.txt, then rescan the review list."""
+        tag = self._selected_tag()
+        if not tag:
+            return
+        if not messagebox.askyesno(
+                "Ignore Tag",
+                f"Ignore '{tag}' in the blacklist review?\n\n"
+                f"Posts flagged only by this tag stop coming up. Posts that also have another "
+                f"blacklisted tag still come up. blacklist.txt is left as it is.\n\n"
+                f"Undo by removing the tag from config/lists/blacklist_ignore.txt.",
+                parent=self.master):
+            return
+        try:
+            add_tag_to_list_file(archive_paths.BLACKLIST_IGNORE, tag)
+        except OSError as e:
+            messagebox.showerror("Error", f"Could not update the ignore list: {e}", parent=self.master)
+            return
+        logging.info("Added tag %r to the blacklist ignore list", tag)
+        self._rescan(f"Ignoring posts tagged '{tag}'. Rescanning…", lambda: 0)
+
+    def move_tag_to_critical(self):
+        """Move the selected tag to critical_blacklist.txt, auto-delete its posts, then rescan."""
+        tag = self._selected_tag()
+        if not tag:
+            return
+        try:
+            matching = len(fetch_blacklisted_posts(self.conn, [tag]))
+        except Exception as e:
+            messagebox.showerror("Error", f"Could not count posts tagged '{tag}': {e}", parent=self.master)
+            return
+        if not messagebox.askyesno(
+                "Move To Critical Blacklist",
+                f"Move '{tag}' to the critical blacklist and rescan?\n\n"
+                f"{matching} post(s) in the archive carry this tag (including any you kept). "
+                f"Each will be deleted now, without review:\n"
+                f"- File sent to the recycle bin\n"
+                f"- Removed from e621 favorites (and its FA source unfavorited)\n"
+                f"- Removed from the local database\n\n"
+                f"Future reviews will auto-delete this tag too.",
+                icon="warning", parent=self.master):
+            return
+        try:
+            add_tag_to_list_file(archive_paths.CRITICAL_BLACKLIST, tag)
+            remove_tag_from_list_file(archive_paths.BLACKLIST, tag)
+        except OSError as e:
+            messagebox.showerror("Error", f"Could not update the blacklist files: {e}", parent=self.master)
+            return
+        logging.info("Moved tag %r to the critical blacklist", tag)
+        conn, e621_config = self.conn, self.e621_config
+        self._rescan(f"Moved '{tag}' to the critical blacklist. Deleting its posts and rescanning…",
+                     lambda: auto_delete_critical_posts(conn, e621_config, [tag]))
+
+    def _rescan(self, status, before):
+        """Run ``before()`` (returns a deleted count) then re-collect the review posts, off the Tk thread."""
+        self.stop_video()
+        self.busy = True
+        for button in (self.prev_button, self.keep_button, self.delete_button,
+                       self.unblacklist_button, self.critical_button, self.ignore_button):
+            button.config(state="disabled")
+        self.progress_label.config(text=status)
+        conn, kept_file = self.conn, self.kept_file
+
+        def work():
+            deleted = before()
+            return deleted, collect_review_posts(conn, kept_file)
+
+        def done(result):
+            deleted, posts = result
+            self.busy = False
+            self.deleted_count += deleted
+            self.posts = posts
+            self.current_index = 0  # everything left is unreviewed (kept posts are filtered out)
+            self.navigation_history = []
+            self.keep_button.config(state="normal")
+            self.delete_button.config(state="normal")
+            logging.info("Rescan complete: %d post(s) to review, %d deleted", len(posts), deleted)
+            if self.skip_videos_var.get():
+                self.skip_to_next_non_video()
+            else:
+                self.load_post()
+
+        def failed(exc):
+            self.busy = False
+            logging.error("Rescan failed: %s", exc)
+            messagebox.showerror("Rescan Failed", f"The list files were updated, but the rescan failed:\n\n{exc}",
+                                 parent=self.master)
+            self.keep_button.config(state="normal")
+            self.delete_button.config(state="normal")
+            self.load_post()
+
+        tool_host.run_in_background(self.master, work, done, failed)
+
     def show_completion(self):
         """Show completion message."""
         self.canvas.delete("all")
@@ -918,6 +1077,13 @@ class BlacklistReviewUI:
 
         self.keep_button.config(state="disabled")
         self.delete_button.config(state="disabled")
+        self.progress_label.config(text=f"{len(self.posts)} post(s) reviewed")
+        if self.tag_actions:
+            self.tag_choice.config(values=[])
+            self.tag_choice.set('')
+            self.unblacklist_button.config(state="disabled")
+            self.critical_button.config(state="disabled")
+            self.ignore_button.config(state="disabled")
 
     def check_video_has_audio(self, video_path):
         """Check if video file has audio track."""
@@ -1276,6 +1442,79 @@ def load_blacklist_tags(blacklist_file="blacklist.txt"):
         return None
 
 
+def _read_list_lines(path):
+    path = Path(path)
+    if not path.exists():
+        return []
+    return path.read_text(encoding='utf-8').splitlines()
+
+
+def remove_tag_from_list_file(path, tag):
+    """Remove ``tag`` from a tag list file (one per line, or comma-separated); keeps comments.
+
+    Returns True if the tag was found.
+    """
+    lines = _read_list_lines(path)
+    found = False
+    out = []
+    for line in lines:
+        stripped = line.strip()
+        if not stripped or stripped.startswith('#'):
+            out.append(line)
+            continue
+        if ',' in stripped:
+            tags = [t.strip() for t in stripped.split(',') if t.strip()]
+            kept = [t for t in tags if t != tag]
+            if len(kept) != len(tags):
+                found = True
+                if kept:
+                    out.append(', '.join(kept))
+                continue
+            out.append(line)
+        elif stripped == tag:
+            found = True
+        else:
+            out.append(line)
+    if found:
+        Path(path).write_text('\n'.join(out) + ('\n' if out else ''), encoding='utf-8')
+    return found
+
+
+def add_tag_to_list_file(path, tag):
+    """Append ``tag`` to a tag list file unless it is already listed. Returns True if added."""
+    path = Path(path)
+    lines = _read_list_lines(path)
+    for line in lines:
+        stripped = line.strip()
+        if stripped and not stripped.startswith('#'):
+            if tag in (t.strip() for t in stripped.split(',')):
+                return False
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text('\n'.join(lines + [tag]) + '\n', encoding='utf-8')
+    return True
+
+
+def collect_review_posts(conn, kept_file):
+    """Posts carrying blacklist.txt tags that have an image and weren't kept (no UI calls)."""
+    blacklist_tags = load_blacklist_tags(str(archive_paths.BLACKLIST)) if archive_paths.BLACKLIST.exists() else []
+    if not blacklist_tags:
+        logging.info("Blacklist is empty - nothing to review")
+        return []
+    # Ignored tags don't count as hits; a post still shows if another blacklisted tag matches
+    ignore_tags = set((load_blacklist_tags(str(archive_paths.BLACKLIST_IGNORE))
+                       if archive_paths.BLACKLIST_IGNORE.exists() else None) or [])
+    blacklist_tags = [t for t in blacklist_tags if t not in ignore_tags]
+    if not blacklist_tags:
+        logging.info("Every blacklist tag is ignored - nothing to review")
+        return []
+    logging.info(f"Fetching posts with {len(blacklist_tags)} blacklisted tags "
+                 f"({len(ignore_tags)} tag(s) ignored via blacklist_ignore.txt)...")
+    posts = fetch_blacklisted_posts(conn, blacklist_tags)
+    logging.info(f"Found {len(posts)} posts with blacklisted tags")
+    posts = filter_posts_with_accessible_images(posts)
+    return filter_kept_posts(posts, load_kept_posts(kept_file))
+
+
 def auto_delete_critical_posts(conn, e621_config, critical_tags):
     """Automatically delete posts with critical blacklist tags."""
     logging.info(f"Processing critical blacklist tags: {critical_tags}")
@@ -1548,14 +1787,9 @@ def prepare_review() -> dict:
             logging.error("No blacklist tags loaded")
             raise ReviewSetupError("No blacklist tags found in config/blacklist.txt")
 
-        logging.info(f"Fetching posts with {len(blacklist_tags)} blacklisted tags...")
-        posts = fetch_blacklisted_posts(conn, blacklist_tags)
-        logging.info(f"Found {len(posts)} posts with blacklisted tags")
-
-        # Filter out posts without accessible images, then previously kept posts
-        posts = filter_posts_with_accessible_images(posts)
+        # Posts with blacklisted tags, minus ignored-tag posts, image-less posts and kept posts
+        posts = collect_review_posts(conn, str(archive_paths.KEPT_POSTS))
         kept_posts = load_kept_posts(str(archive_paths.KEPT_POSTS))
-        posts = filter_kept_posts(posts, kept_posts)
     except BaseException:
         conn.close()
         raise
@@ -1596,7 +1830,7 @@ def build(host):
                                     actions=(("Close", lambda: tool_host.close(host)),))
             return
         BlacklistReviewUI(host, posts, conn, prepared["e621_config"], prepared["keybinds"],
-                          kept_file=str(archive_paths.KEPT_POSTS))
+                          kept_file=str(archive_paths.KEPT_POSTS), tag_actions=True)
         if prepared["auto_deleted"] > 0:
             messagebox.showinfo(
                 "Critical Blacklist Processed",

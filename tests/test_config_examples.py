@@ -20,7 +20,8 @@ def _real_config_files():
 
 
 EXPECTED = ["config.yaml", "secrets.yaml", "tag_sorting.yaml", "sort_artists.yaml", "review_artists.yaml",
-            "lists/blacklist.txt", "lists/critical_blacklist.txt", "lists/ai_tags.txt"]
+            "lists/blacklist.txt", "lists/critical_blacklist.txt", "lists/blacklist_ignore.txt",
+            "lists/ai_tags.txt"]
 
 
 @pytest.mark.parametrize("name", EXPECTED)

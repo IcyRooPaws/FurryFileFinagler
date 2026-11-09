@@ -1,0 +1,3 @@
+# Blacklist tags listed here do not count in the blacklist review. A post still comes up
+# if it has another blacklisted tag. blacklist.txt itself is left unchanged. One tag per line.
+example_tag

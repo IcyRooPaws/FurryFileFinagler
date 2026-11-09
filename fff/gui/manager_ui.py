@@ -234,10 +234,12 @@ class ManagerApp:
         # Workflow pages share one view: the cards of the selected page above the Activity log.
         self.workflow_view = ttk.Frame(self.body)
         self.cards_holder = ttk.Frame(self.workflow_view)
-        self.cards_holder.pack(fill="both", expand=True)
+        self.cards_holder.pack(fill="x")
+        # The Activity log takes all the height the cards don't need.
         activity = ttk.LabelFrame(self.workflow_view, text="Activity", padding=(10, 8))
-        activity.pack(fill="x", pady=(12, 0))
+        activity.pack(fill="both", expand=True, pady=(12, 0))
         activity.columnconfigure(0, weight=1)
+        activity.rowconfigure(0, weight=1)
         self.output = tk.Text(activity, height=9, wrap="word", state="disabled", font="TkFixedFont",
                               padx=6, pady=6)
         self.output.grid(row=0, column=0, sticky="nsew")

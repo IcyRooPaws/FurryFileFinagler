@@ -13,6 +13,8 @@ from fff.common import config as fff_config
 AI_TAGS = paths.LISTS_DIR / "ai_tags.txt"
 BLACKLIST = paths.LISTS_DIR / "blacklist.txt"
 CRITICAL_BLACKLIST = paths.LISTS_DIR / "critical_blacklist.txt"
+# Blacklist tags that do not count as hits in the review (other blacklisted tags still do)
+BLACKLIST_IGNORE = paths.LISTS_DIR / "blacklist_ignore.txt"
 REVIEW_ARTISTS = paths.CONFIG_DIR / "review_artists.yaml"
 KEYBINDS = paths.CONFIG_DIR / "keybinds.yaml"
 

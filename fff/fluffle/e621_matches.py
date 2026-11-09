@@ -28,6 +28,8 @@ from fff.clients.e621 import (  # noqa: F401  (re-exported for callers of the or
     generate_filename,
     download_post,
     check_blacklisted_tags,
+    is_deleted_without_file,
+    keep_local_file_as_post,
 )
 from fff.common import config as fff_config
 from fff.common.logging import logged_command
@@ -233,6 +235,26 @@ def process_single_image(image_path: Path, post_id: str, config: Dict[str, Any],
             else:
                 print("[ERROR]")
                 return False
+
+    # Deleted on e621: there's nothing to download, so our copy becomes the post's file
+    if is_deleted_without_file(post_data):
+        original_path = Path(str(image_path))
+        print(f"    [i] Post deleted on e621 - keeping the local file under its e621 name...", end=" ", flush=True)
+        kept_path = keep_local_file_as_post(post_data, image_path, download_dir, login, api_key, user_agent,
+                                            base_search_dir, preserve_structure,
+                                            move=lambda src, dest: ops.move(src, dest, "e621_deleted_post_kept_local"))
+        if not kept_path:
+            print("[ERROR]")
+            return False
+        print(f"[OK] -> {kept_path.name}")
+        if replace_with_source:
+            print(f"    Copying renamed file back to original location...", end=" ", flush=True)
+            try:
+                ops.copy(kept_path, original_path, "replace_with_source")
+                print("[OK]")
+            except Exception as e:
+                print(f"[ERROR] ({e})")
+        return True
 
     time.sleep(request_delay)
 
@@ -498,6 +520,21 @@ def main(argv=None):  # fff: argv accepted for the CLI; no options
                     print("[ERROR]")
                 print()
                 continue
+
+        # Deleted on e621: there's nothing to download, so our copy becomes the post's file
+        if is_deleted_without_file(post_data):
+            print(f"  [i] Post deleted on e621 - keeping the local file under its e621 name...", end=" ", flush=True)
+            kept_path = keep_local_file_as_post(post_data, image_path, download_dir, login, api_key, user_agent,
+                                                base_search_dir, preserve_structure,
+                                                move=lambda src, dest: ops.move(src, dest, "e621_deleted_post_kept_local"))
+            if kept_path:
+                print(f"[OK] -> {kept_path.name}")
+                processed += 1
+                moved += 1
+            else:
+                print("[ERROR] Failed")
+            print()
+            continue
 
         time.sleep(request_delay)
 

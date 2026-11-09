@@ -76,7 +76,7 @@ The real files are gitignored; only the examples are committed.
 | `config/config.yaml` | `config/config.example.yaml` (`fff config make-example --force` refreshes it) |
 | `config/secrets.yaml` | `config/secrets.example.yaml` |
 | `config/tag_sorting.yaml`, `sort_artists.yaml`, `review_artists.yaml`, `fa_author_mappings.yaml` | `config/*.example.yaml` |
-| `config/lists/blacklist.txt`, `critical_blacklist.txt`, `ai_tags.txt` | `config/lists/*.example.txt` |
+| `config/lists/blacklist.txt`, `critical_blacklist.txt`, `blacklist_ignore.txt`, `ai_tags.txt` | `config/lists/*.example.txt` |
 
 The setup UI starts from the committed examples. It stores credentials separately in the gitignored `config/secrets.yaml`; only example files are committed.
 

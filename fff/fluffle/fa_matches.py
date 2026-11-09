@@ -27,7 +27,9 @@ from fff.clients.furaffinity import (  # noqa: F401  (re-exported for callers of
     _fa_get_with_retry,
     get_firefox_cookies,
     get_fa_post_data,
+    blocked_fa_tags,
     add_to_fa_favorites,
+    remove_from_fa_favorites,
     check_if_fa_favorited,
     download_fa_post,
 )
@@ -64,6 +66,41 @@ def move_to_not_found(image_path: Path, not_found_dir: Path,
     """Move image to not_found directory (logged)."""
     return ops.move_to_directory(image_path, not_found_dir, base_search_dir, preserve_structure,
                                  reason="fa_not_found", error_label="Error moving file")
+
+
+def fa_blacklisted_directory(config: Dict[str, Any]) -> Path:
+    """Where FA posts with blocked tags go: furaffinity.blacklisted_directory, else the
+    e621 one (the shared "blacklisted" folder)."""
+    return Path(config.get('furaffinity', {}).get('blacklisted_directory')
+                or config.get('e621', {}).get('blacklisted_directory', './blacklisted'))
+
+
+def move_if_fa_blocklisted(image_path: Path, post_data: Optional[Dict[str, Any]], blacklisted_dir: Path,
+                           base_search_dir: Path = None, preserve_structure: bool = False,
+                           indent: str = "    ", cookies=None) -> Optional[bool]:
+    """If the FA post has tags on the account's FA Tag Blocking list, log them, remove it from
+    FA favorites (when ``cookies`` are given and it is faved) and move the image to
+    ``blacklisted_dir``. None when nothing is blocked, else whether the move worked."""
+    if not post_data or post_data.get('not_found'):
+        return None
+    blocked = blocked_fa_tags(post_data)
+    if not blocked:
+        return None
+    post_id = post_data.get('post_id')
+    print(f"{indent}[WARNING] FA post {post_id} has tags on your FA blocklist: "
+          f"{', '.join(blocked)}")
+    if cookies is not None and post_id:
+        # No-op (True) when it isn't favorited; a failure doesn't stop the move
+        print(f"{indent}Removing from FA favorites (if favorited)...", end=" ", flush=True)
+        try:
+            print("[OK]" if remove_from_fa_favorites(str(post_id), cookies) else "[ERROR]")
+        except Exception as e:
+            print(f"[ERROR] ({e})")
+    print(f"{indent}Moving to blacklisted directory...", end=" ", flush=True)
+    moved = ops.move_to_directory(image_path, blacklisted_dir, base_search_dir, preserve_structure,
+                                  reason="fa_blacklisted", error_label="Error moving file to blacklisted")
+    print("[OK]" if moved else "[ERROR]")
+    return moved
 
 
 def is_named_fa_download(image_path: Path, numeric_id: str) -> bool:
@@ -201,6 +238,23 @@ def process_single_fa_image(image_path: Path, post_id: str, config: Dict[str, An
     # Extract numeric post ID
     numeric_id = post_id.replace('furAffinity_', '').replace('fa_', '')
 
+    # Get post data first: its tags decide whether the post is blocked before it is favorited
+    print(f"    Fetching FA post data...", end=" ", flush=True)
+    post_data = get_fa_post_data(numeric_id, cookies)
+
+    if not post_data:
+        print("[ERROR] Failed to fetch post data")
+        return False
+    print("[OK]")
+
+    # Tags on the account's FA Tag Blocking list -> blacklisted, no favorite or download
+    blocked = move_if_fa_blocklisted(image_path, post_data, fa_blacklisted_directory(config),
+                                     base_search_dir, preserve_structure, cookies=cookies)
+    if blocked is not None:
+        return blocked
+
+    time.sleep(request_delay)
+
     # Check if favorited
     print(f"    Checking FA favorite status...", end=" ", flush=True)
     is_fav = check_if_fa_favorited(numeric_id, cookies)
@@ -233,17 +287,9 @@ def process_single_fa_image(image_path: Path, post_id: str, config: Dict[str, An
         return move_named_fa_download(image_path, download_dir, source_found_dir, base_search_dir,
                                       preserve_structure)
 
-    # Get post data
-    print(f"    Fetching FA post data...", end=" ", flush=True)
-    post_data = get_fa_post_data(numeric_id, cookies)
-
-    if not post_data:
-        print("[ERROR] Failed to fetch post data")
-        return False
-
     # Check if post was not found or deleted
     if post_data.get('not_found'):
-        print(f"[WARN] Post deleted/not found")
+        print(f"    [WARN] Post deleted/not found")
 
         author_name = 'unknown'
         rating = 'Adult'  # Default to Adult for safety
@@ -361,10 +407,9 @@ def process_single_fa_image(image_path: Path, post_id: str, config: Dict[str, An
 
     # Check if post has an error (like no download link found)
     if post_data.get('error'):
-        print(f"[ERROR] {post_data.get('error')}")
+        print(f"    [ERROR] FA post data: {post_data.get('error')}")
         return False
 
-    print("[OK]")
     time.sleep(request_delay)
 
     # Download post
@@ -456,7 +501,8 @@ def main(argv=None):  # fff: argv accepted for the CLI; no options
     download_dir = Path(fa_config.get('download_directory', './fa_downloads'))
     source_found_dir = Path(fa_config.get('source_found_directory', './source_found'))
     not_found_dir = Path(search_config.get('not_found_directory', './not_found'))
-    
+    blacklisted_dir = fa_blacklisted_directory(config)
+
     # Support both old (image_directory) and new (image_directories) config formats
     image_directories = search_config.get('image_directories')
     if image_directories is None:
@@ -553,6 +599,7 @@ def main(argv=None):  # fff: argv accepted for the CLI; no options
     downloaded = 0
     moved_to_source = 0
     moved_to_not_found = 0
+    moved_to_blacklisted = 0
 
     for i, (img_id, img_data) in enumerate(remaining_images.items(), 1):
         print(f"[{i}/{len(remaining_images)}] {img_data['filename']}")
@@ -568,6 +615,27 @@ def main(argv=None):  # fff: argv accepted for the CLI; no options
 
         print(f"  Post ID: {numeric_id}")
         print(f"  Author: {best_match['author_name']}")
+
+        # Get post data first: its tags decide whether the post is blocked before it is favorited
+        print(f"  Fetching post data...", end=" ", flush=True)
+        post_data = get_fa_post_data(numeric_id, cookies)
+
+        if not post_data:
+            print("[ERROR] Failed")
+            continue
+        print("[OK]")
+
+        # Tags on the account's FA Tag Blocking list -> blacklisted, no favorite or download
+        blocked = move_if_fa_blocklisted(image_path, post_data, blacklisted_dir, base_search_dir,
+                                         preserve_structure, indent="  ", cookies=cookies)
+        if blocked is not None:
+            if blocked:
+                moved_to_blacklisted += 1
+                processed += 1
+            print()
+            continue
+
+        time.sleep(request_delay)
 
         # Check if favorited
         print(f"  Checking favorites...", end=" ", flush=True)
@@ -613,21 +681,13 @@ def main(argv=None):  # fff: argv accepted for the CLI; no options
             print()
             continue
 
-        # Get post data
-        print(f"  Fetching post data...", end=" ", flush=True)
-        post_data = get_fa_post_data(numeric_id, cookies)
-
-        if not post_data:
-            print("[ERROR] Failed")
-            continue
-
         # Check if post not found in FA database
         if post_data.get('not_found'):
             reason = post_data.get('reason', 'not_in_database')
             if reason == 'account_disabled':
-                print("[ERROR] Account disabled")
+                print("  [ERROR] Account disabled")
             else:
-                print("[ERROR] Post not found in FA database")
+                print("  [ERROR] Post not found in FA database")
 
             # Move to not_found folder (using configured directory)
             print(f"  Moving to not_found...", end=" ", flush=True)
@@ -641,7 +701,6 @@ def main(argv=None):  # fff: argv accepted for the CLI; no options
             print()
             continue
 
-        print("[OK]")
         time.sleep(request_delay)
 
         # Download post
@@ -708,6 +767,7 @@ def main(argv=None):  # fff: argv accepted for the CLI; no options
     print(f"  Posts downloaded: {downloaded}")
     print(f"  Originals moved to source_found: {moved_to_source}")
     print(f"  Files moved to not_found: {moved_to_not_found}")
+    print(f"  Files moved to blacklisted (FA blocked tags): {moved_to_blacklisted}")
     print()
 
 

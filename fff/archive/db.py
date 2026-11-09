@@ -1716,11 +1716,34 @@ def link_post_tag(conn, post_id, tag_id, commit: bool = True):
         conn.commit()
     cursor.close()
 
+def _has_tag_list(post) -> bool:
+    """True when the post carries a real e621 tag dict (mode=extended).
+
+    Stale cached responses can carry a flat list (mode=basic) or nothing; pruning links
+    against those would wipe a post's artists/tags, so pruning only runs when this is True.
+    """
+    tags_dict = post.get("tags")
+    return isinstance(tags_dict, dict) and any(tags_dict.values())
+
+
+def _prune_post_links(cursor, table, column, post_id, current_ids):
+    """Delete ``table`` links for ``post_id`` whose ``column`` isn't in ``current_ids``."""
+    if current_ids:
+        placeholders = ','.join(['%s'] * len(current_ids))
+        cursor.execute(
+            f"DELETE FROM {table} WHERE post_id = %s AND {column} NOT IN ({placeholders})",
+            (post_id, *current_ids)
+        )
+    else:
+        cursor.execute(f"DELETE FROM {table} WHERE post_id = %s", (post_id,))
+
+
 def process_artists_and_tags(conn, post, commit: bool = True):
     post_id = post.get("id")
     tags_dict = post.get("tags", {})
     # v2 mode=basic returns tags as a flat list; mode=extended (which we request) returns a dict.
     # Guard against flat lists to avoid crashing on stale cached responses.
+    prune = _has_tag_list(post)
     if not isinstance(tags_dict, dict):
         tags_dict = {}
     current_artist_ids = []
@@ -1730,21 +1753,7 @@ def process_artists_and_tags(conn, post, commit: bool = True):
             current_artist_ids.append(artist_id)
             link_post_artist(conn, post_id, artist_id, commit=False)
 
-    # posts_artists is otherwise insert-only, so links to artists e621 has since
-    # removed/renamed off this post would linger forever and get_post_artists()
-    # (used by check_and_update_file_artist_names) would keep computing filenames
-    # from stale attribution. Prune anything not in the current tag list.
-    prune_cursor = conn.cursor()
-    if current_artist_ids:
-        placeholders = ','.join(['%s'] * len(current_artist_ids))
-        prune_cursor.execute(
-            f"DELETE FROM posts_artists WHERE post_id = %s AND artist_id NOT IN ({placeholders})",
-            (post_id, *current_artist_ids)
-        )
-    else:
-        prune_cursor.execute("DELETE FROM posts_artists WHERE post_id = %s", (post_id,))
-    prune_cursor.close()
-
+    current_tag_ids = []
     for category, tag_list in tags_dict.items():
         if category == "artist":
             continue
@@ -1752,7 +1761,18 @@ def process_artists_and_tags(conn, post, commit: bool = True):
         for tag in tag_list:
             tag_id = insert_tag(conn, tag, tag_type, commit=False)
             if tag_id:
+                current_tag_ids.append(tag_id)
                 link_post_tag(conn, post_id, tag_id, commit=False)
+
+    # posts_artists/posts_tags are otherwise insert-only, so artists and tags e621 has
+    # since removed off this post would linger forever (stale filenames from
+    # get_post_artists(), stale blacklist/tag-sort matches). Prune anything not in the
+    # current tag list - but only when we actually have one.
+    if prune:
+        prune_cursor = conn.cursor()
+        _prune_post_links(prune_cursor, "posts_artists", "artist_id", post_id, current_artist_ids)
+        _prune_post_links(prune_cursor, "posts_tags", "tag_id", post_id, current_tag_ids)
+        prune_cursor.close()
     if commit:
         conn.commit()
 
@@ -1834,34 +1854,87 @@ def process_artists_and_tags_bulk(conn, posts_data, commit: bool = True):
     if post_tag_links:
         cursor.executemany("INSERT IGNORE INTO posts_tags (post_id, tag_id) VALUES (%s, %s)", post_tag_links)
 
-    # posts_artists is otherwise insert-only, so links to artists e621 has since
-    # removed/renamed off a post would linger forever and get_post_artists() (used by
-    # check_and_update_file_artist_names) would keep computing filenames from stale
-    # attribution. Prune anything not in each post's current tag list.
+    # posts_artists/posts_tags are otherwise insert-only, so artists and tags e621 has
+    # since removed off a post would linger forever (stale filenames from
+    # get_post_artists(), stale blacklist/tag-sort matches). Prune anything not in each
+    # post's current tag list - only for posts that came with a real tag list.
     current_artists_by_post = {}
     for post_id, artist_id in post_artist_links:
         current_artists_by_post.setdefault(post_id, set()).add(artist_id)
+    current_tags_by_post = {}
+    for post_id, tag_id in post_tag_links:
+        current_tags_by_post.setdefault(post_id, set()).add(tag_id)
 
-    batch_post_ids = [post.get("id") for post in posts_data]
+    batch_post_ids = [post.get("id") for post in posts_data if _has_tag_list(post)]
     if batch_post_ids:
         placeholders = ','.join(['%s'] * len(batch_post_ids))
-        cursor.execute(
-            f"SELECT post_id, artist_id FROM posts_artists WHERE post_id IN ({placeholders})",
-            tuple(batch_post_ids)
-        )
-        stale_links = [
-            (post_id, artist_id) for post_id, artist_id in cursor.fetchall()
-            if artist_id not in current_artists_by_post.get(post_id, set())
-        ]
-        if stale_links:
-            cursor.executemany(
-                "DELETE FROM posts_artists WHERE post_id = %s AND artist_id = %s",
-                stale_links
+        for table, column, current in (("posts_artists", "artist_id", current_artists_by_post),
+                                       ("posts_tags", "tag_id", current_tags_by_post)):
+            cursor.execute(
+                f"SELECT post_id, {column} FROM {table} WHERE post_id IN ({placeholders})",
+                tuple(batch_post_ids)
             )
+            stale_links = [
+                (post_id, link_id) for post_id, link_id in cursor.fetchall()
+                if link_id not in current.get(post_id, set())
+            ]
+            if stale_links:
+                cursor.executemany(
+                    f"DELETE FROM {table} WHERE post_id = %s AND {column} = %s",
+                    stale_links
+                )
+                logging.info("Removed %d stale %s link(s)", len(stale_links), table)
 
     if commit:
         conn.commit()
     cursor.close()
+
+
+def sync_changed_post_tags(conn, posts_data, batch_size: int = 500) -> int:
+    """Re-link artists/tags for posts whose e621 tags differ from the database.
+
+    For posts the sync otherwise skips (file already downloaded): compares each post's
+    e621 tag list with its stored links and runs process_artists_and_tags_bulk (which adds
+    new links and prunes removed ones) only on the posts that changed. Returns that count.
+    """
+    posts = [p for p in posts_data if p.get("id") and _has_tag_list(p)]
+    changed_total = 0
+    for i in range(0, len(posts), batch_size):
+        batch = posts[i:i + batch_size]
+        ids = tuple(p["id"] for p in batch)
+        placeholders = ','.join(['%s'] * len(ids))
+        stored_tags, stored_artists = {}, {}
+        cursor = conn.cursor()
+        try:
+            cursor.execute(
+                f"SELECT pt.post_id, t.name FROM posts_tags pt JOIN tags t ON t.tag_id = pt.tag_id "
+                f"WHERE pt.post_id IN ({placeholders})", ids)
+            for post_id, name in cursor.fetchall():
+                stored_tags.setdefault(post_id, set()).add(name)
+            cursor.execute(
+                f"SELECT pa.post_id, a.name FROM posts_artists pa JOIN artists a ON a.artist_id = pa.artist_id "
+                f"WHERE pa.post_id IN ({placeholders})", ids)
+            for post_id, name in cursor.fetchall():
+                stored_artists.setdefault(post_id, set()).add(name)
+        finally:
+            cursor.close()
+
+        changed = []
+        for post in batch:
+            tags_dict = post["tags"]
+            artists = set(tags_dict.get("artist", []))
+            tags = {t for category, names in tags_dict.items() if category != "artist" for t in names}
+            if tags != stored_tags.get(post["id"], set()) or artists != stored_artists.get(post["id"], set()):
+                changed.append(post)
+        if changed:
+            process_artists_and_tags_bulk(conn, changed, commit=False)
+            conn.commit()
+            changed_total += len(changed)
+    if changed_total:
+        logging.info("Updated tags for %d already-downloaded post(s) whose e621 tags changed", changed_total)
+    else:
+        logging.info("No tag changes for already-downloaded posts")
+    return changed_total
 
 def insert_post_sources(conn, post, commit: bool = True):
     """Insert sources for a post. Ensures no duplicates via PK constraint.

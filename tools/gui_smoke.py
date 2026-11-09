@@ -163,7 +163,7 @@ def child(name, shot_dir):
 
         conn, posts = _sample_posts()
         result["posts"] = len(posts)
-        kwargs = {} if name == "blacklist-review" else {
+        kwargs = {"tag_actions": True} if name == "blacklist-review" else {
             "window_title": "Artist Review UI", "context_label_text": "Artist:", "context_label_color": "blue"}
         app = BlacklistReviewUI(host, posts, conn, load_config()["e621"], kept_file=str(tmp / "kept.txt"), **kwargs)
     elif name == "post-id-review":

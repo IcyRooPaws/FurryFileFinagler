@@ -241,6 +241,35 @@ def get_firefox_cookies() -> Optional[http.cookiejar.CookieJar]:
         return None
 
 
+def parse_fa_tags(html: str) -> tuple:
+    """``(tags, blocklist)`` from a FA submission page, both lowercase lists.
+
+    ``tags`` are the submission's own tags: the ``data-tags`` of ``#submissionImg`` (keywords
+    plus FA's ``u_``/``c_``/``t_``/``s_`` uploader, category, theme and species tags), or the
+    keyword links when that image is missing (e.g. stories and music). ``blocklist`` is the
+    logged-in account's Tag Blocking list (``data-tag-blocklist`` on ``<body>``). The related
+    submission thumbnails on the page carry their own ``data-tags`` and are ignored."""
+    tags: list = []
+    img = re.search(r'<img\b[^>]*\bid="submissionImg"[^>]*>', html)
+    if img:
+        data_tags = re.search(r'\bdata-tags="([^"]*)"', img.group(0))
+        if data_tags:
+            tags = data_tags.group(1).split()
+    if not tags:
+        tags = re.findall(r'href="/search/@keywords ([^"]+)"', html)
+    blocklist_match = re.search(r'\bdata-tag-blocklist="([^"]*)"', html)
+    blocklist = blocklist_match.group(1).split() if blocklist_match else []
+    tags = list(dict.fromkeys(t.strip().lower() for t in tags if t.strip()))
+    blocklist = list(dict.fromkeys(t.strip().lower() for t in blocklist if t.strip()))
+    return tags, blocklist
+
+
+def blocked_fa_tags(post_data: Dict[str, Any]) -> list:
+    """The submission's tags that are on the account's FA Tag Blocking list (empty if none)."""
+    blocklist = set(post_data.get('tag_blocklist') or [])
+    return [tag for tag in post_data.get('tags') or [] if tag in blocklist]
+
+
 def get_fa_post_data(post_id: str, cookies: http.cookiejar.CookieJar) -> Optional[Dict[str, Any]]:
     """Get FurAffinity post data by scraping the page."""
     try:
@@ -284,6 +313,8 @@ def get_fa_post_data(post_id: str, cookies: http.cookiejar.CookieJar) -> Optiona
         if "Access has been disabled to the account and contents of user" in html:
             return {'not_found': True, 'post_id': post_id, 'reason': 'access_disabled'}
 
+        tags, tag_blocklist = parse_fa_tags(html)
+
         # Extract download link - check multiple CDN domains and patterns
         download_match = re.search(r'<a[^>]+href="(//d\.furaffinity\.net/art/[^"]+)"[^>]*>Download</a>', html, re.IGNORECASE)
         if not download_match:
@@ -320,6 +351,8 @@ def get_fa_post_data(post_id: str, cookies: http.cookiejar.CookieJar) -> Optiona
                 'title': f'FA Post {post_id}',
                 'rating': 'Unknown',
                 'extension': '.jpg',
+                'tags': tags,
+                'tag_blocklist': tag_blocklist,
                 'error': 'no_download_link'
             }
 
@@ -434,7 +467,9 @@ def get_fa_post_data(post_id: str, cookies: http.cookiejar.CookieJar) -> Optiona
             'artist': artist if artist else 'unknown',
             'title': title if title else f'FA Post {post_id}',
             'rating': rating if rating else 'Unknown',
-            'extension': ext if ext else '.jpg'
+            'extension': ext if ext else '.jpg',
+            'tags': tags,
+            'tag_blocklist': tag_blocklist,
         }
 
         return result

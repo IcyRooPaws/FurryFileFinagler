@@ -6,7 +6,7 @@ import argparse
 from send2trash import send2trash
 from fff.archive.config import load_config
 from fff.archive.logging_setup import setup_logging
-from fff.archive.db import connect_to_mysql, create_tables_if_not_exists, get_existing_posts_info, insert_or_update_post, process_artists_and_tags, backfill_missing_file_names, normalize_ratings, backfill_missing_file_types, insert_post_sources, backfill_missing_sources, get_deleted_posts_count, insert_or_update_posts_bulk, process_artists_and_tags_bulk, insert_post_sources_bulk, backfill_media_hashes, backfill_missing_file_paths, verify_and_repair_file_paths, backfill_timestamps_from_api, check_and_update_file_artist_names, insert_post_relationships_bulk, insert_post_relationships, process_pools_bulk, process_pools, upsert_pools_metadata_bulk, get_pools_missing_metadata, archive_unfavorited_posts
+from fff.archive.db import connect_to_mysql, create_tables_if_not_exists, get_existing_posts_info, insert_or_update_post, process_artists_and_tags, backfill_missing_file_names, normalize_ratings, backfill_missing_file_types, insert_post_sources, backfill_missing_sources, get_deleted_posts_count, insert_or_update_posts_bulk, process_artists_and_tags_bulk, sync_changed_post_tags, insert_post_sources_bulk, backfill_media_hashes, backfill_missing_file_paths, verify_and_repair_file_paths, backfill_timestamps_from_api, check_and_update_file_artist_names, insert_post_relationships_bulk, insert_post_relationships, process_pools_bulk, process_pools, upsert_pools_metadata_bulk, get_pools_missing_metadata, archive_unfavorited_posts
 from fff.archive.api import fetch_favorites, cleanup_temp_responses, load_recent_favorites_from_temp, check_and_cleanup_stale_responses, fetch_pool_metadata
 from fff.archive.scripts.database.backfill_deletion_reasons import backfill_deletion_reasons
 from fff.archive.ai_processing import run_ai_processing
@@ -295,7 +295,7 @@ def main(argv=None):
     # Process all favorites (including deleted posts with status:any)
     # This will update metadata, deletion status, etc. for all posts
     posts_to_process = []
-    skipped_files_exist = 0
+    skipped_posts = []  # file already on disk: only their tags are refreshed (below)
 
     for post in favorite_posts:
         post_id = post.get("id")
@@ -305,11 +305,10 @@ def main(argv=None):
                 # When downloading files, check if file already exists
                 stored_path = existing_posts[post_id]
                 if stored_path and os.path.exists(stored_path) and not post_is_deleted:
-                    skipped_files_exist += 1
+                    skipped_posts.append(post)
                     continue
-            # Always process existing posts to update metadata (tags, deletion status, etc.)
-            # regardless of download setting
         posts_to_process.append(post)
+    skipped_files_exist = len(skipped_posts)
 
     logging.info("Skipped %s posts with existing files", skipped_files_exist)
 
@@ -372,6 +371,16 @@ def main(argv=None):
             conn.commit()
             total_processed += len(batch)
             logging.info("Completed fallback processing for batch (%s/%s total)", total_processed, len(posts_to_process))
+
+    # Posts skipped above still need e621 tag changes (added and removed tags/artists);
+    # only the ones whose tags differ from the database are rewritten.
+    if skipped_posts:
+        try:
+            logging.info("Checking %s already-downloaded posts for tag changes...", len(skipped_posts))
+            sync_changed_post_tags(conn, skipped_posts)
+        except Exception as e:
+            conn.rollback()
+            logging.error("Tag refresh for already-downloaded posts failed: %s", e)
 
     # Note: Deletion status is now handled automatically during post processing
     # since we include deleted posts in favorites with status:any parameter

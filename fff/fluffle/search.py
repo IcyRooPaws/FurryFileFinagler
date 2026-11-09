@@ -18,8 +18,10 @@ import mysql.connector
 from mysql.connector import Error
 
 from fff.clients.fluffle import resize_image_for_upload, search_image_fluffle  # noqa: F401
+from fff.clients.furaffinity import FA_DEBUG_DIR
 from fff.clients.fuzzysearch import search_image_fuzzysearch
 from fff.common import config as fff_config
+from fff.common import paths
 from fff.common.logging import logged_command
 from fff.common.single_instance import exclusive_command
 from fff.common.naming import sanitize_filename_component
@@ -827,8 +829,10 @@ def rename_and_move_to_other_sourced(image_path: Path,
         return None
 
 
-def cleanup_old_responses(responses_dir: str, max_age_days: int = 5) -> None:
-    """Delete response JSON files older than max_age_days from the responses directory."""
+def cleanup_old_responses(responses_dir: str, max_age_days: float = 5, pattern: str = '*.json') -> None:
+    """Delete files matching ``pattern`` older than max_age_days from the responses directory."""
+    if not responses_dir:
+        return
     responses_path = Path(responses_dir)
     if not responses_path.exists():
         return
@@ -836,7 +840,7 @@ def cleanup_old_responses(responses_dir: str, max_age_days: int = 5) -> None:
     cutoff = datetime.now().timestamp() - (max_age_days * 86400)
     deleted_count = 0
 
-    for json_file in responses_path.glob('*.json'):
+    for json_file in responses_path.glob(pattern):
         try:
             if json_file.stat().st_mtime < cutoff:
                 json_file.unlink()
@@ -845,7 +849,7 @@ def cleanup_old_responses(responses_dir: str, max_age_days: int = 5) -> None:
             print(f"    [WARNING] Could not delete old response file {json_file.name}: {e}")
 
     if deleted_count > 0:
-        print(f"Cleaned up {deleted_count} response file(s) older than {max_age_days} days.")
+        print(f"Cleaned up {deleted_count} file(s) older than {max_age_days} days from {responses_path}.")
 
 
 @logged_command("fluffle", "search", "fff.fluffle.search")
@@ -1304,9 +1308,13 @@ def main(argv=None):  # fff: argv accepted for the CLI; no options
         print(f"JSON responses saved to: {responses_dir}")
     print("=" * 80)
 
-    # Clean up response files older than 5 days
+    # Auto-clear caches. Reverse-search responses are kept 5 days. Cached e621 post JSON is
+    # only reused for 15 minutes (fff.clients.e621), so a day is plenty; without this it
+    # piled up forever. FA debug pages (failed FA fetches) are kept two weeks.
     if save_json:
         cleanup_old_responses(responses_dir)
+    cleanup_old_responses(e621_config.get('responses_directory'), max_age_days=1)
+    cleanup_old_responses(str(paths.for_env(FA_DEBUG_DIR)), max_age_days=14, pattern='fa_debug_*.html')
 
 
 if __name__ == "__main__":

@@ -455,6 +455,64 @@ def generate_filename(post_data: Dict[str, Any], login: str = None, api_key: str
     return filename
 
 
+def _post_output_path(filename: str, output_dir: Path, original_image_path: Path = None,
+                      base_search_dir: Path = None, preserve_structure: bool = False) -> Path:
+    """Where a post's file goes: output_dir/filename, or mirroring the source subfolder."""
+    if preserve_structure and original_image_path and base_search_dir:
+        try:
+            # Calculate relative path from base directory
+            relative_path = original_image_path.parent.relative_to(base_search_dir)
+            output_path = output_dir / relative_path / filename
+            # Create parent directories if needed
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            print(f"\n    [DEBUG] Preserving structure: {relative_path}")
+            print(f"    [DEBUG] Output path: {output_path}")
+            print(f"    [DEBUG] Directory created: {output_path.parent}")
+            return output_path
+        except ValueError as e:
+            # original_image_path is not relative to base_search_dir, use flat structure
+            output_dir.mkdir(exist_ok=True)
+            output_path = output_dir / filename
+            print(f"\n    [DEBUG] Not relative, using flat structure (error: {e})")
+            print(f"    [DEBUG] Output path: {output_path}")
+            return output_path
+    # Flat structure (original behavior)
+    output_dir.mkdir(exist_ok=True)
+    output_path = output_dir / filename
+    print(f"\n    [DEBUG] Flat structure (preserve={preserve_structure}, orig={original_image_path is not None}, base={base_search_dir is not None})")
+    print(f"    [DEBUG] Output path: {output_path}")
+    return output_path
+
+
+def is_deleted_without_file(post_data: Dict[str, Any]) -> bool:
+    """True when e621 deleted the post, so it no longer hands out the file URL."""
+    post = post_data.get('post', {})
+    return bool(post.get('flags', {}).get('deleted')) and not post.get('file', {}).get('url')
+
+
+def keep_local_file_as_post(post_data: Dict[str, Any], image_path: Path, output_dir: Path, login: str,
+                            api_key: str, user_agent: str, base_search_dir: Path = None,
+                            preserve_structure: bool = False, move=None) -> Optional[Path]:
+    """For a post deleted on e621: give the local file the name the download would have had
+    (artist-rating-postid) and move it to where the download would have gone.
+
+    The local file's own extension is kept, since its format is what's on disk. ``move(src,
+    dest)`` does the move (the caller's logged move); returns the new path, or None.
+    """
+    try:
+        filename = generate_filename(post_data, login, api_key, user_agent)
+        filename = Path(filename).stem + image_path.suffix.lower()
+        output_path = _post_output_path(filename, output_dir, image_path, base_search_dir, preserve_structure)
+        if output_path.exists():
+            print(f"    Error: {output_path.name} already exists in the destination; leaving the file where it is")
+            return None
+        move(image_path, output_path)
+        return output_path
+    except Exception as e:
+        print(f"    Error keeping local file for deleted post: {e}")
+        return None
+
+
 def download_post(post_data: Dict[str, Any], output_dir: Path, login: str, api_key: str, user_agent: str,
                   original_image_path: Path = None, base_search_dir: Path = None,
                   preserve_structure: bool = False) -> Optional[Path]:
@@ -482,30 +540,8 @@ def download_post(post_data: Dict[str, Any], output_dir: Path, login: str, api_k
 
         # Generate proper filename with artist name resolution
         filename = generate_filename(post_data, login, api_key, user_agent)
-
-        # Determine output path (with or without subdirectory structure)
-        if preserve_structure and original_image_path and base_search_dir:
-            try:
-                # Calculate relative path from base directory
-                relative_path = original_image_path.parent.relative_to(base_search_dir)
-                output_path = output_dir / relative_path / filename
-                # Create parent directories if needed
-                output_path.parent.mkdir(parents=True, exist_ok=True)
-                print(f"\n    [DEBUG] Preserving structure: {relative_path}")
-                print(f"    [DEBUG] Output path: {output_path}")
-                print(f"    [DEBUG] Directory created: {output_path.parent}")
-            except ValueError as e:
-                # original_image_path is not relative to base_search_dir, use flat structure
-                output_dir.mkdir(exist_ok=True)
-                output_path = output_dir / filename
-                print(f"\n    [DEBUG] Not relative, using flat structure (error: {e})")
-                print(f"    [DEBUG] Output path: {output_path}")
-        else:
-            # Flat structure (original behavior)
-            output_dir.mkdir(exist_ok=True)
-            output_path = output_dir / filename
-            print(f"\n    [DEBUG] Flat structure (preserve={preserve_structure}, orig={original_image_path is not None}, base={base_search_dir is not None})")
-            print(f"    [DEBUG] Output path: {output_path}")
+        output_path = _post_output_path(filename, output_dir, original_image_path, base_search_dir,
+                                        preserve_structure)
 
         # Download file
         headers = {"User-Agent": user_agent}
