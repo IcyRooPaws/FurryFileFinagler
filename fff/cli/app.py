@@ -271,7 +271,9 @@ def main(argv: list[str] | None = None) -> int:
         parser.print_help()
         return 0
     fff_config.set_environment(args.env)
-    if getattr(args, "needs_config", True):
+    # A forwarded command parses its own --help; printing help needs no config.yaml.
+    wants_help = forward_path is not None and any(a in ("-h", "--help") for a in args.rest)
+    if getattr(args, "needs_config", True) and not wants_help:
         try:
             cfg = fff_config.load(args.config) if args.config else fff_config.load()
             if fff_config.is_test(cfg):

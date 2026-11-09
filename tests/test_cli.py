@@ -63,3 +63,21 @@ def test_every_sorter_and_hash_subcommand_has_help(argv, capsys):
 
     assert main(argv + ["--help"]) == 0
     assert "usage:" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("argv", [["e621", "sync"], ["sort", "workflow"], ["hash", "info"]])
+def test_forwarded_help_works_without_config(argv, monkeypatch, capsys):
+    """A fresh checkout (or CI) has no config.yaml; --help must still work."""
+    from fff.cli.app import main
+    from fff.common import config as fff_config
+
+    def missing(*a, **k):
+        raise fff_config.ConfigError("config.yaml not found")
+
+    monkeypatch.setattr(fff_config, "load", missing)
+    try:
+        code = main(argv + ["--help"])
+    except SystemExit as exc:
+        code = exc.code
+    assert code == 0
+    assert "usage:" in capsys.readouterr().out
