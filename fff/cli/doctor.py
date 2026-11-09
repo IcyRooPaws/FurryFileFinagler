@@ -86,20 +86,14 @@ def check_databases(cfg: dict) -> list[tuple[str, str, str]]:
     return results
 
 
-def check_all_files_view(cfg: dict) -> str:
-    """The sorter's all_files view is required by the archive, DeletedSorter and the duplicate GUI."""
-    from fff.common import db
+def check_schema() -> list[str]:
+    """Missing tables, and hash tables the all_files view doesn't cover (fff.common.schema)."""
+    from fff.common import schema
 
     try:
-        conn = db.connect("sorter", cfg, pooled=False, connection_timeout=10)
-        cur = conn.cursor()
-        cur.execute("SELECT COUNT(*) FROM information_schema.views WHERE table_schema = DATABASE() "
-                    "AND table_name = 'all_files'")
-        (count,) = cur.fetchone()
-        conn.close()
-        return OK if count else f"{MISSING} (create it from sql/all_files_view.sql)"
+        return schema.check()
     except Exception as exc:
-        return f"{FAIL}: {exc}"
+        return [f"{FAIL}: could not check the schema: {exc}"]
 
 
 def check_modules() -> list[tuple[str, str]]:
@@ -144,9 +138,12 @@ def run(args) -> int:
         for module, name, status in check_databases(cfg):
             print(f"  {module:<8} {name:<22} {status}")
             problems += not status.startswith(OK)
-        view = check_all_files_view(cfg)
-        print(f"  all_files view: {view}")
-        problems += view != OK
+        schema_problems = check_schema()
+        for line in schema_problems:
+            print(f"  {line}")
+        if not schema_problems:
+            print(f"  {OK:<8} schema: every table FFF uses exists; all_files covers every hash table")
+        problems += sum(1 for line in schema_problems if not line.startswith("run "))
 
     print(f"\n{problems} problem(s) found." if problems else "\nAll checks passed.")
     return 1 if problems else 0

@@ -60,6 +60,20 @@ fluffle modules each define their own `connect_database()` / `init_database()`.
 
 ## Part 2. Schema defined in code
 
+**Status: phases 1–3 done** (branch `feature/schema-in-code`); phase 4 (versioned migrations)
+is open. The survey above overstated the gap: every table had a CREATE in code, but scattered and
+created lazily (some only when a GUI opened). What was really missing:
+- `fff db init` builds a fresh install from the code: an integration test runs it on empty
+  databases and gets the same 51 tables and columns as the existing ones. `fff doctor` reports
+  missing tables and hash tables that `all_files` doesn't cover.
+- `all_files` was a hand-kept SQL file and had drifted: it left out `manual_sort_gifs` and
+  `possible_missing_files`, so files there were invisible to everything that searches it. Those
+  two tables also never got the artist-check columns (a hard-coded table list). The view is now
+  generated from the tables that exist and refreshed whenever the sorter starts or creates a table.
+- `fff db snapshot` writes the live schema to `sql/schema/` for review and recovery; the report
+  views and stored procedures FFF doesn't use exist only there and on the server.
+- The Duplicates tool's table definitions moved out of the GUI into `fff/common/schema.py`.
+
 **Goal:** an empty MySQL server can be turned into a working FFF install from the repo alone.
 
 **Today:** 27 of 49 tables have a `CREATE TABLE` in code. The per-folder hash tables,

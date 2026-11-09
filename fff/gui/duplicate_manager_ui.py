@@ -30,6 +30,7 @@ from PIL import Image, ImageTk, ImageSequence
 import hashlib
 
 # Import project-owned sorter handlers directly.
+from fff.common import schema
 from fff.gui import theme
 from fff.sorter.handlers import DatabaseManager
 from fff.sorter.handlers.utils import Config
@@ -996,25 +997,7 @@ class DuplicateManagerGUI:
             conn = self.db_manager.get_db_connection()
             cursor = conn.cursor()
 
-            create_table_query = f"""
-            CREATE TABLE IF NOT EXISTS `{_sorter_db()}`.`similarity_checkpoint` (
-                `id` INT AUTO_INCREMENT PRIMARY KEY,
-                `session_id` VARCHAR(64) NOT NULL,
-                `last_index` INT NOT NULL,
-                `threshold` INT NOT NULL,
-                `total_files` INT NOT NULL,
-                `similar_pairs` LONGTEXT NOT NULL,
-                `processed_files` LONGTEXT NOT NULL,
-                `comparisons_made` BIGINT NOT NULL DEFAULT 0,
-                `comparisons_skipped` BIGINT NOT NULL DEFAULT 0,
-                `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                INDEX `idx_session` (`session_id`),
-                INDEX `idx_updated` (`updated_at`)
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-            """
-
-            cursor.execute(create_table_query)
+            schema.ensure_duplicate_tool_table(conn, _sorter_db(), 'similarity_checkpoint')
             conn.commit()
             cursor.close()
             conn.close()
@@ -1027,18 +1010,7 @@ class DuplicateManagerGUI:
         try:
             conn = self.db_manager.get_db_connection()
             cursor = conn.cursor()
-            create_table_query = f"""
-            CREATE TABLE IF NOT EXISTS `{_sorter_db()}`.`non_duplicate_groups` (
-                `id` INT AUTO_INCREMENT PRIMARY KEY,
-                `hash_column` VARCHAR(128) NOT NULL,
-                `group_signature` CHAR(64) NOT NULL,
-                `file_count` INT NOT NULL,
-                `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE KEY `uq_non_duplicate_group` (`hash_column`, `group_signature`),
-                INDEX `idx_non_duplicate_hash_column` (`hash_column`)
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-            """
-            cursor.execute(create_table_query)
+            schema.ensure_duplicate_tool_table(conn, _sorter_db(), 'non_duplicate_groups')
             conn.commit()
             cursor.close()
             conn.close()
@@ -1244,22 +1216,7 @@ class DuplicateManagerGUI:
             conn = self.db_manager.get_db_connection()
             cursor = conn.cursor()
 
-            create_table_query = f"""
-            CREATE TABLE IF NOT EXISTS `{_sorter_db()}`.`duplicate_sessions` (
-                `id` INT AUTO_INCREMENT PRIMARY KEY,
-                `session_name` VARCHAR(255) NOT NULL UNIQUE,
-                `duplicate_groups` LONGTEXT NOT NULL,
-                `current_index` INT NOT NULL DEFAULT 0,
-                `hash_type` VARCHAR(50) NOT NULL,
-                `threshold` INT NOT NULL,
-                `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                INDEX `idx_name` (`session_name`),
-                INDEX `idx_updated` (`updated_at`)
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-            """
-
-            cursor.execute(create_table_query)
+            schema.ensure_duplicate_tool_table(conn, _sorter_db(), 'duplicate_sessions')
             conn.commit()
             cursor.close()
             conn.close()

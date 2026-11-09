@@ -52,6 +52,7 @@ python -m venv .venv
 .venv\Scripts\python -m pip install -r requirements.txt
 .venv\Scripts\python -m pip install -e . --no-deps
 fff setup                   # configure settings and credentials
+fff db init                 # create the databases and every table (safe to re-run)
 fff doctor                  # check dependencies, folders, and databases
 fff daily --dry-run         # preview the daily stages
 ```

@@ -13,6 +13,8 @@ Global options: `fff [--config PATH] [--env prod|test] <command>`.
 | `fff db copy-schema` | Create/refresh the test_* databases as empty copies of production's structure |
 | `fff db copy-data` | Replace the test_* databases with a full copy of production (schema + rows) |
 | `fff db rewrite-test-paths` | Point file paths stored in the test_* databases at the test tree (E:/Testing/...) |
+| `fff db init` | Create the databases and every table FFF uses, and refresh the all_files view |
+| `fff db snapshot` | Write the live schema to sql/schema/*.sql (reference; includes report views and procedures) |
 | `fff setup` | Open the guided configuration and first-run checks |
 | `fff consent` | Agree to (or revoke) FFF reading your FurAffinity browser cookies |
 | `fff doctor` | Check databases, folders and dependencies |

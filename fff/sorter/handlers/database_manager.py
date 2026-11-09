@@ -8,7 +8,7 @@ import time
 import logging
 import threading
 
-from fff.common import db
+from fff.common import db, schema
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +43,20 @@ class DatabaseManager:
 
         # Migrate existing tables to add artist check columns
         self._ensure_artist_check_columns()
+
+        # Keep all_files over every hash table (cheap when nothing changed)
+        self._refresh_all_files_view()
+
+    def _refresh_all_files_view(self):
+        conn = None
+        try:
+            conn = self.get_db_connection()
+            schema.refresh_all_files_view(conn, self.database)
+        except Exception as e:
+            logger.warning(f"Could not refresh the all_files view: {e}")
+        finally:
+            if conn is not None:
+                conn.close()
 
     POOL_SIZE = 25  # one connection per worker thread, with headroom
 
@@ -216,9 +230,10 @@ class DatabaseManager:
         """Add artist check columns to all existing destination tables."""
         tables = self.get_all_table_names(include_archives=True)
 
-        # Also include favorites, archived_favorites, and manual_sort tables (not in destination_directories)
-        additional_tables = ['favorites', 'archived_favorites', 'manual_sort_images', 'manual_sort_videos']
-        tables.extend(additional_tables)
+        # Also the hash tables outside destination_directories. This list was hard-coded and missed
+        # manual_sort_gifs and possible_missing_files, which therefore never got these columns and
+        # could not be part of all_files.
+        tables.extend(t for t in ['archived_favorites', *schema.SORTER_SPECIAL_TABLES] if t not in tables)
 
         for table_name in tables:
             for attempt in range(3):
@@ -278,6 +293,7 @@ class DatabaseManager:
         table = dest_key
         for attempt in range(5):
             conn = None
+            created = False
             try:
                 conn = self.get_db_connection()
                 cursor = conn.cursor()
@@ -355,6 +371,7 @@ class DatabaseManager:
                         logger.info(f"Successfully migrated {table} to new schema")
                 else:
                     # Create new table with correct schema from the start
+                    created = True
                     cursor.execute(f"""
                         CREATE TABLE IF NOT EXISTS `{table}` (
                             id INT AUTO_INCREMENT,
@@ -393,6 +410,13 @@ class DatabaseManager:
 
                 conn.commit()
                 cursor.close()
+                if created:
+                    # A new hash table must be part of all_files, or files in it are invisible to
+                    # everything that searches all_files (it used to be a hand-kept SQL file).
+                    try:
+                        schema.refresh_all_files_view(conn, self.database)
+                    except Exception as e:
+                        logger.warning(f"Created {table} but could not refresh all_files: {e}")
                 return
             except Error as e:
                 if "lock" in str(e).lower() and attempt < 4:

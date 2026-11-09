@@ -619,7 +619,7 @@ class ArtistManager:
                     logger.info("Falling back to filesystem scanning for artist detection")
                     print("\n[WARNING] DB scan found 0 candidates - falling back to filesystem scan")
                     print("[INFO] To avoid this, either:")
-                    print("        1. Create the all_files view: mysql < 'sql views/all_files_view.sql'")
+                    print("        1. Create the all_files view: fff db init")
                     print("        2. Set force_filesystem_scan: true in artist_processing config")
                     return self._check_favorites_in_destinations_filesystem(debug_mode, scan_all_fav_subdirs, skip_archives)
                 return result

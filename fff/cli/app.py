@@ -108,6 +108,28 @@ def _cmd_db_copy_data(args) -> int:
     return 0 if ok else 1
 
 
+def _cmd_db_init(args) -> int:
+    from fff.common import schema
+    from fff.common.logging import setup_logging
+
+    log_file = setup_logging("db", "INFO", name="init")
+    created = schema.init(progress=lambda msg: print(f"  {msg}"))
+    for module, tables in created.items():
+        print(f"{module}: created {len(tables)} table(s)" + (f": {', '.join(tables)}" if tables else ""))
+    problems = schema.check()
+    print("\n".join(problems) if problems else "Schema complete.")
+    print(f"Log: {log_file}")
+    return 1 if problems else 0
+
+
+def _cmd_db_snapshot(args) -> int:
+    from fff.common import schema
+
+    for path in schema.snapshot(args.out):
+        print(f"wrote {path}")
+    return 0
+
+
 def _cmd_db_rewrite_test_paths(args) -> int:
     from fff.common import test_db_paths
     from fff.common.logging import setup_logging
@@ -211,6 +233,22 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--db", nargs="+", choices=fff_config.MODULES, help="Only these modules (default: all three)")
     p.add_argument("--dry-run", action="store_true", help="Count without changing anything")
     p.set_defaults(func=_cmd_db_rewrite_test_paths)
+    p = db_sub.add_parser(
+        "init",
+        help="Create the databases and every table FFF uses, and refresh the all_files view",
+        description="Builds a fresh install from the code: creates the three databases and all tables "
+                    "that are missing (never drops or alters anything), then regenerates all_files "
+                    "over every hash table. Safe to re-run. Uses the active environment "
+                    "('fff --env test db init' builds the test_* databases).")
+    p.set_defaults(func=_cmd_db_init)
+    p = db_sub.add_parser(
+        "snapshot",
+        help="Write the live schema to sql/schema/*.sql (reference; includes report views and procedures)",
+        description="Writes each database's tables, views, procedures and functions to "
+                    "sql/schema/<name>.sql, without AUTO_INCREMENT counters or DEFINER clauses and with "
+                    "production names, so snapshots diff cleanly. Read-only on the server.")
+    p.add_argument("--out", help="Folder to write to (default: sql/schema)")
+    p.set_defaults(func=_cmd_db_snapshot)
 
     # e621 / fa / gui / web / legacy commands
     from fff.cli import archive_cmds

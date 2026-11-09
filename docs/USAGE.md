@@ -15,6 +15,7 @@ python -m venv .venv
 .venv\Scripts\python -m pip install -r requirements.txt
 .venv\Scripts\python -m pip install -e . --no-deps
 fff setup               # guided configuration and first-run checks
+fff db init             # create the three databases and every table FFF uses
 fff doctor              # packages, configured folders, all three databases
 ```
 
