@@ -36,7 +36,7 @@ import threading
 import tkinter as tk
 from tkinter import ttk, messagebox
 from PIL import Image, ImageTk, ImageSequence
-import requests
+from fff.clients import http
 from io import BytesIO
 import yaml
 from pathlib import Path
@@ -620,7 +620,7 @@ class BlacklistReviewUI:
                 )
                 return
 
-            response = requests.get(url, timeout=10)
+            response = http.get("e621_files", url, timeout=10)  # image preview
             response.raise_for_status()
 
             # Check content type first
@@ -904,7 +904,7 @@ class BlacklistReviewUI:
         url = f"https://e621.net/favorites/{post_id}.json"
         auth = (self.e621_config.get("login"), self.e621_config.get("api_key"))
 
-        response = requests.delete(url, auth=auth, headers={
+        response = http.delete("e621", url, auth=auth, headers={
             "User-Agent": self.e621_config.get("user_agent", "e621 archive/1.0")
         })
 
@@ -1543,7 +1543,7 @@ def auto_delete_critical_posts(conn, e621_config, critical_tags):
                 url = f"https://e621.net/favorites/{post_id}.json"
                 auth = (e621_config.get("login"), e621_config.get("api_key"))
 
-                response = requests.delete(url, auth=auth, headers={
+                response = http.delete("e621", url, auth=auth, headers={
                     "User-Agent": e621_config.get("user_agent", "e621 archive/1.0")
                 })
 
@@ -1670,7 +1670,7 @@ def auto_delete_ai_tagged_posts(conn, e621_config, ai_tags):
             try:
                 url = f"https://e621.net/favorites/{post_id}.json"
                 auth = (e621_config.get("login"), e621_config.get("api_key"))
-                response = requests.delete(url, auth=auth, headers={
+                response = http.delete("e621", url, auth=auth, headers={
                     "User-Agent": e621_config.get("user_agent", "e621 archive/1.0")
                 })
                 if response.status_code in [200, 204, 404, 422]:
@@ -1683,7 +1683,7 @@ def auto_delete_ai_tagged_posts(conn, e621_config, ai_tags):
             # Downvote on e621
             try:
                 vote_url = f"https://e621.net/posts/{post_id}/votes.json"
-                response = requests.post(vote_url, auth=auth, headers={
+                response = http.post("e621", vote_url, auth=auth, headers={
                     "User-Agent": e621_config.get("user_agent", "e621 archive/1.0")
                 }, data={"score": -1, "no_unvote": "false"})
                 if response.status_code in [200, 201]:

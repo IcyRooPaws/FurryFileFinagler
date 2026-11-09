@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # fff: logs go to logs/archive/; exports go to db_export.directory (data/db_exports) instead of ./db_exports.
-# fff: fixed: download_file passed timeout= to api_get, which doesn't accept it, so every download failed.
+# fff: downloads go through fff.clients.http (e621 rate limit and retries).
 """
 E621 Database Export Downloader and Processor
 
@@ -20,6 +20,7 @@ import logging
 import gzip
 import csv
 import requests
+from fff.clients import http
 from datetime import datetime
 from pathlib import Path
 
@@ -29,10 +30,6 @@ from fff.archive.config import load_config
 from fff.archive.db import connect_to_mysql
 from mysql.connector import Error
 
-try:
-    from fff.archive.download import api_get
-except Exception:
-    api_get = None
 
 
 def setup_logging():
@@ -84,10 +81,7 @@ def download_file(url, local_path, timeout=300):
     logging.info(f"Downloading {url} to {local_path}")
 
     try:
-        if api_get:
-            response = api_get(url, stream=True)  # fff: api_get has no timeout parameter (was a TypeError)
-        else:
-            response = requests.get(url, stream=True, timeout=timeout)
+        response = http.get("e621", url, stream=True, timeout=timeout)
         response.raise_for_status()
 
         total_size = int(response.headers.get('content-length', 0))

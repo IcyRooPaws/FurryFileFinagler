@@ -31,10 +31,11 @@ def calls(monkeypatch):
     ({"id": 1, "files": {}}, None),            # the ?v2=true format: no is_favorited at all
 ])
 def test_is_favorited(monkeypatch, calls, body, expected):
-    def get(url, **kw):
+    def get(service, url, **kw):
+        assert service == "e621"
         calls.append(url)
         return Resp(body)
 
-    monkeypatch.setattr(fmp.requests, "get", get)
+    monkeypatch.setattr(fmp.http, "get", get)
     assert fmp.check_if_favorited(1, {}) is expected
     assert "v2=true" not in calls[0]

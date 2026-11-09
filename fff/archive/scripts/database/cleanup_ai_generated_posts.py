@@ -25,13 +25,13 @@ import time
 from datetime import datetime
 
 from fff.archive import paths as archive_paths
+from fff.clients import http
 
 from fff.archive.config import load_config
 from fff.archive.db import connect_to_mysql, create_tables_if_not_exists
 from fff.archive.fa_unfavorite import unfavorite_fa_sources
 from fff.archive.scripts.favorites.remove_ai_tagged_posts import log_ai_artists
 from fff.archive.post_files import trash_post_files
-import requests
 
 def setup_logging():
     """Setup logging."""
@@ -234,7 +234,7 @@ def unfavorite_on_e621(post_id, e621_config):
     user_agent = e621_config.get("user_agent", "e621 archive/1.0")
 
     try:
-        response = requests.delete(url, auth=auth, headers={"User-Agent": user_agent})
+        response = http.delete("e621", url, auth=auth, headers={"User-Agent": user_agent})
 
         # Accept both 200 (OK) and 204 (No Content) as success
         if response.status_code in [200, 204]:

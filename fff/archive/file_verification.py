@@ -2,17 +2,12 @@
 # fff: it only runs when e621.verify_sources is true.
 import os
 import logging
-import requests
+from fff.clients import http
 import time
 import concurrent.futures
 from datetime import datetime
 from requests.exceptions import ConnectionError, Timeout
 from urllib3.exceptions import ProtocolError
-
-try:
-    from fff.archive.download import api_get
-except Exception:
-    api_get = None
 
 def verify_and_update_files(conn, download_config, e621_config):
     if not e621_config.get("verify_sources", True):
@@ -61,10 +56,7 @@ def process_orphan_file(conn, filepath, e621_config):
     
     while retry_count < max_retries:
         try:
-            if api_get:
-                response = api_get(post_url, auth=auth, timeout=30)
-            else:
-                response = requests.get(post_url, headers=headers, auth=auth, timeout=30)
+            response = http.get("e621", post_url, headers=headers, auth=auth, timeout=30)
             response.raise_for_status()
             data = response.json()
             post = data if "id" in data else data.get("post", {})

@@ -20,8 +20,6 @@ from mysql.connector import Error
 
 from fff.clients.furaffinity import (  # noqa: F401  (re-exported for callers of the original module)
     FA_RETRYABLE_STATUS_CODES,
-    FA_MAX_RETRIES,
-    FA_RETRY_BASE_DELAY,
     FASubmissionNotFoundError,
     _fa_get_with_retry,
     get_firefox_cookies,

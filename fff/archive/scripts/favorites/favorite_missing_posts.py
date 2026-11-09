@@ -20,6 +20,7 @@ import logging
 import argparse
 import time
 import requests
+from fff.clients import http
 
 from fff.archive import paths as archive_paths
 
@@ -77,7 +78,7 @@ def check_if_favorited(post_id, e621_config):
         # Rate limit: 1 second between API calls
         time.sleep(1)
 
-        response = requests.get(url, headers=headers, auth=auth, timeout=30)
+        response = http.get("e621", url, headers=headers, auth=auth, timeout=30)
 
         if response.status_code == 404:
             logging.warning(f"Post {post_id} does not exist (404)")
@@ -124,7 +125,7 @@ def favorite_post(post_id, e621_config):
         # Rate limit: 1 second between API calls
         time.sleep(1)
 
-        response = requests.post(url, headers=headers, auth=auth, data=data, timeout=30)
+        response = http.post("e621", url, headers=headers, auth=auth, data=data, timeout=30)
 
         if response.status_code in [200, 201]:
             logging.info(f"Successfully favorited post {post_id}")

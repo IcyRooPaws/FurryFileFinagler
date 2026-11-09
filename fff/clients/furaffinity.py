@@ -5,12 +5,13 @@ import re
 import shutil
 import sqlite3
 import sys
-import time
 from pathlib import Path
 from typing import Any, Dict, Optional
 from urllib.parse import urlparse
 
 import requests
+
+from fff.clients import http as fff_http  # not 'http': that is the stdlib http.cookiejar here
 
 from fff.common import paths
 from fff.common.naming import generate_fa_filename
@@ -19,11 +20,7 @@ FA_DEBUG_DIR = paths.CACHE_DIR / "fa_debug"
 
 FA_RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
 
-
-FA_MAX_RETRIES = 4
-
-
-FA_RETRY_BASE_DELAY = 2.0
+# Retry count and backoff for FA requests: fff.clients.http.DEFAULTS["furaffinity"] / config http.furaffinity.
 
 
 class FASubmissionNotFoundError(Exception):
@@ -32,7 +29,7 @@ class FASubmissionNotFoundError(Exception):
 
 
 def _fa_get_with_retry(
-    session: requests.Session,
+    session: fff_http.Session,
     url: str,
     headers: Dict[str, str],
     *,
@@ -42,48 +39,14 @@ def _fa_get_with_retry(
     stream: bool = False,
 ) -> Optional[requests.Response]:
     """Perform a GET request with retries for transient FA/CDN failures."""
-    for attempt in range(1, FA_MAX_RETRIES + 1):
-        try:
-            response = session.get(
-                url,
-                headers=headers,
-                timeout=timeout,
-                allow_redirects=allow_redirects,
-                stream=stream,
-            )
-        except requests.RequestException as e:
-            if attempt == FA_MAX_RETRIES:
-                print(f"\n    [DEBUG] {context} request failed after {FA_MAX_RETRIES} attempts: {e}")
-                return None
-
-            delay = FA_RETRY_BASE_DELAY * (2 ** (attempt - 1))
-            print(
-                f"\n    [WARN] {context} request error ({type(e).__name__}). "
-                f"Retrying in {delay:.1f}s ({attempt}/{FA_MAX_RETRIES})"
-            )
-            time.sleep(delay)
-            continue
-
-        if response.status_code in FA_RETRYABLE_STATUS_CODES:
-            if attempt == FA_MAX_RETRIES:
-                return response
-
-            retry_after = response.headers.get('Retry-After')
-            if retry_after and retry_after.isdigit():
-                delay = max(float(retry_after), FA_RETRY_BASE_DELAY)
-            else:
-                delay = FA_RETRY_BASE_DELAY * (2 ** (attempt - 1))
-
-            print(
-                f"\n    [WARN] {context} returned status {response.status_code}. "
-                f"Retrying in {delay:.1f}s ({attempt}/{FA_MAX_RETRIES})"
-            )
-            time.sleep(delay)
-            continue
-
-        return response
-
-    return None
+    # Retries (connection errors, timeouts, 429/5xx with Retry-After) happen in the session's
+    # adapter (fff.clients.http, settings "furaffinity"); after the last one the final response
+    # is returned, so callers still see a 5xx/429 if FA stays down.
+    try:
+        return session.get(url, headers=headers, timeout=timeout, allow_redirects=allow_redirects, stream=stream)
+    except requests.RequestException as e:
+        print(f"\n    [DEBUG] {context} request failed after retries: {e}")
+        return None
 
 
 # Firefox-based browsers share Firefox's profile layout and cookies.sqlite format.
@@ -276,7 +239,7 @@ def get_fa_post_data(post_id: str, cookies: http.cookiejar.CookieJar) -> Optiona
         url = f"https://www.furaffinity.net/view/{post_id}/"
         headers = _fa_headers()
 
-        session = requests.Session()
+        session = fff_http.new_session("furaffinity")
         session.cookies = cookies
 
         response = _fa_get_with_retry(
@@ -488,7 +451,7 @@ def add_to_fa_favorites(post_id: str, cookies: http.cookiejar.CookieJar) -> bool
         view_url = f"https://www.furaffinity.net/view/{post_id}/"
         headers = _fa_headers()
 
-        session = requests.Session()
+        session = fff_http.new_session("furaffinity")
         session.cookies = cookies
 
         # Get the page to find the fav key
@@ -568,7 +531,7 @@ def remove_from_fa_favorites(post_id: str, cookies: http.cookiejar.CookieJar) ->
         view_url = f"https://www.furaffinity.net/view/{post_id}/"
         headers = _fa_headers()
 
-        session = requests.Session()
+        session = fff_http.new_session("furaffinity")
         session.cookies = cookies
 
         # Get the page to find the unfav key
@@ -620,7 +583,7 @@ def check_if_fa_favorited(post_id: str, cookies: http.cookiejar.CookieJar) -> bo
         url = f"https://www.furaffinity.net/view/{post_id}/"
         headers = _fa_headers()
 
-        session = requests.Session()
+        session = fff_http.new_session("furaffinity")
         session.cookies = cookies
 
         response = _fa_get_with_retry(
@@ -707,7 +670,7 @@ def download_fa_post(post_data: Dict[str, Any], download_dir: Path, cookies: htt
             'Referer': f'https://www.furaffinity.net/view/{post_data["post_id"]}/'
         }
 
-        session = requests.Session()
+        session = fff_http.new_session("furaffinity")
         session.cookies = cookies
 
         response = _fa_get_with_retry(

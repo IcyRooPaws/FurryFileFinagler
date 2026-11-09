@@ -4,7 +4,7 @@ import time
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
-import requests
+from fff.clients import http
 from PIL import Image
 
 def resize_image_for_upload(image_path: Path, max_size_mb: float = 4.0, temp_dir: Path = None,
@@ -166,7 +166,7 @@ def search_image_fluffle(image_path: Path, limit: int = 10) -> Optional[Dict[str
             headers = {"accept": "application/json"}
 
             print(f"  Searching: {image_path.name}")
-            response = requests.post(url, data=payload, files=files, headers=headers, timeout=30)
+            response = http.post("fluffle", url, data=payload, files=files, headers=headers, timeout=30)
 
         # Clean up temp file if created
         if is_temp and temp_file and temp_file.exists():

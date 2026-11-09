@@ -18,6 +18,7 @@ import time
 from pathlib import Path
 
 import requests
+from fff.clients import http
 
 from fff.archive import paths as archive_paths
 
@@ -66,7 +67,7 @@ def fetch_post_by_md5(md5_hash: str, e621_config):
 
     try:
         time.sleep(e621_config.get("rate_limit_sleep", 1))
-        response = requests.get(url, headers=headers, auth=auth, params=params, timeout=30)
+        response = http.get("e621", url, headers=headers, auth=auth, params=params, timeout=30)
         response.raise_for_status()
         data = response.json()
         posts = data if isinstance(data, list) else data.get("posts", [])

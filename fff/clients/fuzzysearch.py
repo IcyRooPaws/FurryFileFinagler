@@ -2,7 +2,7 @@
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-import requests
+from fff.clients import http
 
 def search_image_fuzzysearch(image_path: Path, api_key: str, distance: int = 3) -> Optional[List[Dict[str, Any]]]:
     """Search for images using FuzzySearch API."""
@@ -15,7 +15,8 @@ def search_image_fuzzysearch(image_path: Path, api_key: str, distance: int = 3) 
 
         with open(image_path, "rb") as f:
             files = {"image": (image_path.name, f)}
-            response = requests.post(
+            response = http.post(
+                "fuzzysearch",
                 f"{api_base}/v1/image",
                 headers=headers,
                 files=files,

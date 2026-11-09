@@ -18,6 +18,16 @@ databases:
   sorter: image_sorting_hashes
 e621:
   user_agent: YourAppName/1.0 (by your_e621_username)
+http:
+  # Shared HTTP client (fff/clients/http.py). Retries cover connection errors, timeouts,
+  # 429 and 5xx (honouring Retry-After). Other services (fuzzysearch, fluffle, e621_files)
+  # use the defaults in fff.clients.http.DEFAULTS unless listed here.
+  e621:
+    min_request_interval: 1.0
+    max_retries: 5
+  furaffinity:
+    min_request_interval: 0.0
+    max_retries: 4
 fluffle:
   search:
     image_directories:

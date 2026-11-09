@@ -20,6 +20,7 @@ import re
 import sys
 import time
 import requests
+from fff.clients import http
 
 from fff.archive import paths as archive_paths
 
@@ -75,7 +76,7 @@ def unfavorite_post(post_id: int, e621_config) -> bool:
         # Rate limit: 1 second between API calls
         time.sleep(1)
 
-        response = requests.delete(url, headers=headers, auth=auth, timeout=30)
+        response = http.delete("e621", url, headers=headers, auth=auth, timeout=30)
 
         if response.status_code in (200, 204):
             logging.info("Unfavorited post %s", post_id)

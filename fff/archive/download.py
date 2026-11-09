@@ -3,12 +3,12 @@
 import os
 import re
 import time
-import requests
 import logging
-from requests.exceptions import Timeout, ConnectionError
+from requests.exceptions import ConnectionError
 from urllib3.exceptions import ProtocolError
 
 from fff.archive.db import strip_flag_tokens
+from fff.clients.e621 import api_get  # noqa: F401  (re-exported: fff.archive modules import it from here)
 from fff.archive.config import normalize_file_path
 from fff.common.naming import windows_safe_filename
 
@@ -18,35 +18,6 @@ try:
     HAS_MEDIA_HASHER = True
 except ImportError:
     HAS_MEDIA_HASHER = False
-
-API_CALL_LIMIT = 5000
-api_call_count = 0
-last_request_time = 0
-
-def api_get(url, params=None, headers=None, auth=None, stream=False):
-    global api_call_count, API_CALL_LIMIT, last_request_time
-
-    # Rate limiting: ensure at least 1 second between requests
-    current_time = time.time()
-    time_since_last_request = current_time - last_request_time
-    if time_since_last_request < 1.0:
-        sleep_time = 1.0 - time_since_last_request
-        logging.debug(f"Rate limiting: sleeping for {sleep_time:.2f} seconds")
-        time.sleep(sleep_time)
-
-    while True:
-        try:
-            last_request_time = time.time()  # Update timestamp before making request
-            response = requests.get(url, params=params, headers=headers, auth=auth, stream=stream, timeout=30)
-            api_call_count += 1
-            if api_call_count % API_CALL_LIMIT == 0:
-                logging.info("Reached 5000 API calls. Sleeping for 60 seconds...")
-                time.sleep(60)
-            return response
-        except Timeout as e:
-            logging.error("Timeout occurred for URL %s: %s", url, e)
-            logging.info("Sleeping for 60 seconds before retrying...")
-            time.sleep(60)
 
 def ensure_download_folder(folder):
     if not os.path.exists(folder):

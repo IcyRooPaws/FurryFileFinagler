@@ -21,7 +21,7 @@ import argparse
 import logging
 
 
-import requests
+from fff.clients import http
 
 from fff.archive import paths as archive_paths
 
@@ -165,7 +165,7 @@ def process_posts(conn, e621_config, posts, dry_run=False):
             try:
                 url = f"https://e621.net/favorites/{post_id}.json"
                 auth = (e621_config.get("login"), e621_config.get("api_key"))
-                response = requests.delete(url, auth=auth, headers={
+                response = http.delete("e621", url, auth=auth, headers={
                     "User-Agent": e621_config.get("user_agent", "e621 archive/1.0")
                 }, timeout=15)
                 if response.status_code in [200, 204, 404, 422]:
@@ -179,7 +179,7 @@ def process_posts(conn, e621_config, posts, dry_run=False):
             # 3. Downvote on e621
             try:
                 vote_url = f"https://e621.net/posts/{post_id}/votes.json"
-                response = requests.post(vote_url, auth=auth, headers={
+                response = http.post("e621", vote_url, auth=auth, headers={
                     "User-Agent": e621_config.get("user_agent", "e621 archive/1.0")
                 }, data={"score": -1, "no_unvote": "false"}, timeout=15)
                 if response.status_code in [200, 201]:

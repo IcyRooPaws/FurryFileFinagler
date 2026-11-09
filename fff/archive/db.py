@@ -8,6 +8,7 @@ from datetime import datetime
 
 # Import path normalization utility
 from fff.archive.config import normalize_file_path
+from fff.clients import http
 from fff.common import db as fff_db
 from fff.common.naming import clean_artist_names, windows_safe_filename
 
@@ -3035,7 +3036,7 @@ def fetch_deletion_reason_from_page(post_id, user_agent, auth=None):
 
     try:
         headers = {"User-Agent": user_agent}
-        response = requests.get(url, headers=headers, auth=auth, timeout=30)
+        response = http.get("e621", url, headers=headers, auth=auth, timeout=30)
 
         if response.status_code != 200:
             logging.debug(f"Failed to fetch page for post {post_id}: HTTP {response.status_code}")
@@ -3154,7 +3155,7 @@ def fetch_takedown_details_from_page(post_id, user_agent, auth=None):
 
     try:
         headers = {"User-Agent": user_agent}
-        response = requests.get(url, headers=headers, auth=auth, timeout=30)
+        response = http.get("e621", url, headers=headers, auth=auth, timeout=30)
 
         if response.status_code != 200:
             logging.debug(f"Failed to fetch page for post {post_id}: HTTP {response.status_code}")
@@ -3557,10 +3558,8 @@ def backfill_deletion_status(conn, e621_config, batch_limit: int | None = None):
     # Lazy import to avoid circular dependencies
     try:
         from fff.archive.api import get_auth
-        from fff.archive.download import api_get
     except Exception:
         get_auth = None
-        api_get = None
 
     user_agent = e621_config.get("user_agent", "MyE621FavoritesDownloader/1.0")
     auth = get_auth(e621_config) if callable(get_auth) else (e621_config.get("login"), e621_config.get("api_key"))
@@ -3595,10 +3594,7 @@ def backfill_deletion_status(conn, e621_config, batch_limit: int | None = None):
     for idx, post_id in enumerate(post_ids, start=1):
         url = f"https://e621.net/posts/{post_id}.json"
         try:
-            if api_get:
-                resp = api_get(url, auth=auth, timeout=30)
-            else:
-                resp = requests.get(url, headers={"User-Agent": user_agent}, auth=auth, timeout=30)
+            resp = http.get("e621", url, headers={"User-Agent": user_agent}, auth=auth, timeout=30)
             resp.raise_for_status()
             data = _parse_single_post(resp.json())
 
@@ -3859,13 +3855,10 @@ def backfill_conditional_dnp(conn, e621_config, batch_limit: int | None = None):
     For each post (optionally limited), fetch remote JSON. If 'conditional_dnp' is in the remote artist tag list
     but missing from local artist links or file_name, link it and regenerate file_name including all artists.
     """
-    import requests
     try:
         from fff.archive.api import get_auth
-        from fff.archive.download import api_get
     except Exception:
         get_auth = None
-        api_get = None
     user_agent = e621_config.get("user_agent", "MyE621FavoritesDownloader/1.0")
     auth = get_auth(e621_config) if callable(get_auth) else (e621_config.get("login"), e621_config.get("api_key"))
     rate_sleep = e621_config.get("rate_limit_sleep", 1)
@@ -3889,10 +3882,7 @@ def backfill_conditional_dnp(conn, e621_config, batch_limit: int | None = None):
     for pid, current_name in targets:
         url = f"https://e621.net/posts/{pid}.json"
         try:
-            if api_get:
-                resp = api_get(url, auth=auth, timeout=30)
-            else:
-                resp = requests.get(url, headers={"User-Agent": user_agent}, auth=auth, timeout=30)
+            resp = http.get("e621", url, headers={"User-Agent": user_agent}, auth=auth, timeout=30)
             resp.raise_for_status()
             post = _parse_single_post(resp.json())
             if not post:
@@ -3960,13 +3950,7 @@ def check_old_favs_deletion_status(conn, e621_config, batch_limit: int | None = 
     Makes API requests to e621 to check the deleted flag in post data.
     Updates the deleted and deleted_at fields accordingly.
     """
-    import requests
     from datetime import datetime
-    try:
-        from fff.archive.download import api_get
-    except Exception:
-        api_get = None
-
     # Get auth and user agent
     try:
         from fff.archive.api import get_auth
@@ -4004,10 +3988,7 @@ def check_old_favs_deletion_status(conn, e621_config, batch_limit: int | None = 
         url = f"https://e621.net/posts/{post_id}.json"
         try:
             # Use GET request to get post data and check deleted flag
-            if api_get:
-                resp = api_get(url, auth=auth, timeout=30)
-            else:
-                resp = requests.get(url, headers={"User-Agent": user_agent}, auth=auth, timeout=30)
+            resp = http.get("e621", url, headers={"User-Agent": user_agent}, auth=auth, timeout=30)
 
             cursor = conn.cursor()
             current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")

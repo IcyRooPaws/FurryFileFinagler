@@ -81,6 +81,19 @@ live server. Schema changes are ad-hoc `ALTER TABLE` checks, for example in
 
 ## Part 3. Shared HTTP client
 
+**Status: done** (branch `refactor/http-client`). Every request goes through
+`fff/clients/http.py`; `tests/test_http.py` enforces it and tests retries against a real local
+server. Settings live in config.yaml's `http:` block; defaults keep the old spacing (1 s and a
+60 s pause every 5000 calls for e621, none for the rest).
+- A POST is retried only on 429 or a refused connection, never after a 5xx: a repeated e621
+  vote would undo itself. Search POSTs (FuzzySearch, Fluffle) are retried normally.
+- `api_get` used to retry a timeout forever (hanging the nightly run) and returned 429/5xx as-is;
+  it now retries with backoff and gives up after 5 attempts. The favorites fetch then fails
+  the sync instead of continuing with a partial list.
+- Fixed on the way: three e621 backfills called `api_get(..., timeout=30)`, which it didn't
+  accept (TypeError on every post); `archive/download.py` had its own copy of `api_get`; about
+  25 direct requests calls had no rate limit at all.
+
 **Goal:** every e621, FurAffinity and FuzzySearch request has the same retries, rate limiting,
 timeout and User-Agent.
 

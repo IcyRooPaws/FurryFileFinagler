@@ -20,7 +20,7 @@ import argparse
 import logging
 import time
 
-import requests
+from fff.clients import http
 
 from fff.archive import paths as archive_paths
 
@@ -126,7 +126,8 @@ def process_posts(conn, e621_config, posts, dry_run=False):
 
             # 2. Unfavorite on e621
             try:
-                response = requests.delete(
+                response = http.delete(
+                    "e621",
                     f"https://e621.net/favorites/{post_id}.json",
                     auth=auth, headers=headers, timeout=15
                 )
@@ -140,7 +141,8 @@ def process_posts(conn, e621_config, posts, dry_run=False):
 
             # 3. Downvote on e621
             try:
-                response = requests.post(
+                response = http.post(
+                    "e621",
                     f"https://e621.net/posts/{post_id}/votes.json",
                     auth=auth, headers=headers,
                     data={"score": -1, "no_unvote": "false"}, timeout=15

@@ -2,21 +2,20 @@
 
 Two request styles are kept exactly as they were, because callers depend on their
 error behavior:
-    * ``api_get``: global 1 s spacing, 60 s pause every 5000 calls, retries forever on timeout.
-    * Search helpers (``get_post_data``, ``add_to_favorites`` ...): plain requests
-    calls that print and return None/False on failure.
+    * ``api_get``: returns the response, raises once retries run out.
+    * Search helpers (``get_post_data``, ``add_to_favorites`` ...): print and return
+    None/False on failure.
+Both go through fff.clients.http (shared rate limit and retries).
 v1/v2 response helpers normalize the supported API response shapes.
 """
 import json
-import logging
 import re
 import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-import requests
-from requests.exceptions import Timeout
+from fff.clients import http
 
 # --- e621 archive/modules/db.py: v1/v2 response helpers -----------------
 
@@ -68,39 +67,11 @@ def get_auth(e621_config):
     return None
 
 
-API_CALL_LIMIT = 5000
-
-
-api_call_count = 0
-
-
-last_request_time = 0
-
-
-def api_get(url, params=None, headers=None, auth=None, stream=False):
-    global api_call_count, API_CALL_LIMIT, last_request_time
-
-    # Rate limiting: ensure at least 1 second between requests
-    current_time = time.time()
-    time_since_last_request = current_time - last_request_time
-    if time_since_last_request < 1.0:
-        sleep_time = 1.0 - time_since_last_request
-        logging.debug(f"Rate limiting: sleeping for {sleep_time:.2f} seconds")
-        time.sleep(sleep_time)
-
-    while True:
-        try:
-            last_request_time = time.time()  # Update timestamp before making request
-            response = requests.get(url, params=params, headers=headers, auth=auth, stream=stream, timeout=30)
-            api_call_count += 1
-            if api_call_count % API_CALL_LIMIT == 0:
-                logging.info("Reached 5000 API calls. Sleeping for 60 seconds...")
-                time.sleep(60)
-            return response
-        except Timeout as e:
-            logging.error("Timeout occurred for URL %s: %s", url, e)
-            logging.info("Sleeping for 60 seconds before retrying...")
-            time.sleep(60)
+def api_get(url, params=None, headers=None, auth=None, stream=False, timeout=30):
+    """GET through the shared e621 session (fff.clients.http): 1 s spacing, a pause every
+    5000 calls, and capped retries for timeouts, connection errors, 429 and 5xx. Raises the
+    requests exception once retries run out (it used to retry a timeout forever)."""
+    return http.get("e621", url, params=params, headers=headers, auth=auth, stream=stream, timeout=timeout)
 
 
 # --- reverse-image source search/scripts/process_e621_matches.py ------------------
@@ -127,7 +98,7 @@ def get_all_favorites(login: str, api_key: str, user_agent: str) -> set:
                 "limit": 320  # Max allowed by e621
             }
 
-            response = requests.get(url, headers=headers, auth=auth, params=params, timeout=30)
+            response = http.get("e621", url, headers=headers, auth=auth, params=params, timeout=30)
 
             if response.status_code != 200:
                 print(f"[ERROR] Status {response.status_code}")
@@ -184,7 +155,7 @@ def check_if_favorited(post_id: str, login: str, api_key: str, user_agent: str,
         headers = {"User-Agent": user_agent}
         auth = (login, api_key)
 
-        response = requests.get(url, headers=headers, auth=auth, timeout=10)
+        response = http.get("e621", url, headers=headers, auth=auth, timeout=10)
 
         if response.status_code == 200:
             data = response.json()
@@ -219,7 +190,7 @@ def add_to_favorites(post_id: str, login: str, api_key: str, user_agent: str,
             "post_id": numeric_id
         }
 
-        response = requests.post(url, headers=headers, auth=auth, json=data, timeout=10)
+        response = http.post("e621", url, headers=headers, auth=auth, json=data, timeout=10)
 
         if response.status_code in [200, 201, 204]:
             # Update cache if provided
@@ -251,7 +222,7 @@ def remove_from_favorites(post_id: str, login: str, api_key: str, user_agent: st
         headers = {"User-Agent": user_agent}
         auth = (login, api_key)
 
-        response = requests.delete(url, headers=headers, auth=auth, timeout=10)
+        response = http.delete("e621", url, headers=headers, auth=auth, timeout=10)
 
         if response.status_code in [200, 201, 204]:
             # Update cache if provided
@@ -281,7 +252,7 @@ def get_artist_main_name(artist_tag: str, login: str, api_key: str, user_agent: 
             "limit": 1
         }
 
-        response = requests.get(url, headers=headers, auth=auth, params=params, timeout=10)
+        response = http.get("e621", url, headers=headers, auth=auth, params=params, timeout=10)
 
         if response.status_code == 200:
             data = response.json()
@@ -367,7 +338,7 @@ def get_post_data(post_id: str, login: str, api_key: str, user_agent: str,
         headers = {"User-Agent": user_agent}
         auth = (login, api_key)
 
-        response = requests.get(url, headers=headers, auth=auth, timeout=10)
+        response = http.get("e621", url, headers=headers, auth=auth, timeout=10)
 
         if response.status_code == 200:
             data = response.json()
@@ -545,7 +516,7 @@ def download_post(post_data: Dict[str, Any], output_dir: Path, login: str, api_k
 
         # Download file
         headers = {"User-Agent": user_agent}
-        response = requests.get(file_url, headers=headers, timeout=30, stream=True)
+        response = http.get("e621_files", file_url, headers=headers, timeout=30, stream=True)
         response.raise_for_status()  # Raise an exception for bad status codes
 
         if response.status_code == 200:
