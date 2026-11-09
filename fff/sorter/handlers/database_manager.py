@@ -3,11 +3,12 @@
 Database operations for file hash caching using MySQL.
 """
 import os
-import mysql.connector
-from mysql.connector import Error, pooling
+from mysql.connector import Error
 import time
 import logging
 import threading
+
+from fff.common import db
 
 logger = logging.getLogger(__name__)
 
@@ -43,29 +44,28 @@ class DatabaseManager:
         # Migrate existing tables to add artist check columns
         self._ensure_artist_check_columns()
 
+    POOL_SIZE = 25  # one connection per worker thread, with headroom
+
+    def _server_settings(self):
+        return {'host': self.host, 'port': self.port, 'user': self.user, 'password': self.password}
+
+    def _connection_settings(self):
+        """Connection options for the pool and the direct-connection fallback."""
+        return db.server_overrides(self._server_settings()) | {
+            'autocommit': True,
+            'connection_timeout': 30,
+            'sql_mode': '',
+            'charset': 'utf8mb4',
+            'use_unicode': True,
+            'buffered': True,
+        }
+
     def _init_connection_pool(self):
         """Initialize the connection pool for better thread management."""
         try:
-            pool_config = {
-                'pool_name': 'fff_sorter_pool',
-                'pool_size': 25,  # Increased pool size for multiple threads
-                'pool_reset_session': True,
-                'host': self.host,
-                'port': self.port,
-                'user': self.user,
-                'password': self.password,
-                'database': self.database,
-                'autocommit': True,
-                'connection_timeout': 30,
-                'sql_mode': '',
-                'charset': 'utf8mb4',
-                'use_unicode': True,
-                'buffered': True
-            }
-
-            # Create the connection pool
-            self._pool = mysql.connector.pooling.MySQLConnectionPool(**pool_config)
-            logger.info(f"Database connection pool initialized with {pool_config['pool_size']} connections")
+            # Shared with every DatabaseManager in this process that uses the same settings.
+            self._pool = db.get_pool(self.database, pool_size=self.POOL_SIZE, **self._connection_settings())
+            logger.info(f"Database connection pool initialized with {self.POOL_SIZE} connections")
 
         except Error as e:
             logger.error(f"Failed to initialize connection pool: {e}")
@@ -74,13 +74,7 @@ class DatabaseManager:
     def _ensure_database_exists(self):
         """Ensure the MySQL database exists before connecting to it."""
         try:
-            conn = mysql.connector.connect(
-                host=self.host,
-                port=self.port,
-                user=self.user,
-                password=self.password,
-                autocommit=True
-            )
+            conn = db.connect_server(settings=self._server_settings(), autocommit=True)
             cursor = conn.cursor()
             cursor.execute(f"CREATE DATABASE IF NOT EXISTS `{self.database}`")
             cursor.close()
@@ -101,20 +95,7 @@ class DatabaseManager:
                         return conn
                 else:
                     # Fallback to direct connection if pool failed
-                    conn = mysql.connector.connect(
-                        host=self.host,
-                        port=self.port,
-                        user=self.user,
-                        password=self.password,
-                        database=self.database,
-                        autocommit=True,
-                        connection_timeout=30,
-                        sql_mode='',
-                        charset='utf8mb4',
-                        use_unicode=True,
-                        buffered=True
-                    )
-                    return conn
+                    return db.connect_database(self.database, pooled=False, **self._connection_settings())
 
             except Error as e:
                 error_msg = str(e).lower()

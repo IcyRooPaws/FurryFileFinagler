@@ -22,6 +22,7 @@ from fff.clients.furaffinity import (
     add_to_fa_favorites
 )
 from fff.common import config as fff_config
+from fff.common import db
 
 
 def load_config(config_path: str = None) -> Dict[str, Any]:
@@ -39,21 +40,6 @@ def load_config(config_path: str = None) -> Dict[str, Any]:
         print(f"Error: Failed to parse configuration file: {e}")
         sys.exit(1)
 
-
-def connect_database(db_config: Dict[str, Any]) -> mysql.connector.connection.MySQLConnection:
-    """Connect to MySQL database."""
-    try:
-        connection = mysql.connector.connect(
-            host=db_config.get('host', 'localhost'),
-            user=db_config.get('user'),
-            password=db_config.get('password'),
-            database=db_config.get('database')
-        )
-        if connection.is_connected():
-            return connection
-    except Error as e:
-        print(f"Error connecting to database: {e}")
-        return None
 
 
 def get_images_with_both_platforms(connection: mysql.connector.connection.MySQLConnection) -> List[Dict[str, Any]]:
@@ -110,7 +96,7 @@ def main(argv=None):  # fff: argv accepted for the CLI; no options
 
     # Connect to database
     print("Connecting to database...")
-    connection = connect_database(db_config)
+    connection = db.try_connect_with(db_config)
     if not connection:
         print("Failed to connect to database. Exiting.")
         return

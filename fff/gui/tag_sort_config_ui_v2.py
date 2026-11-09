@@ -249,16 +249,13 @@ def fetch_pool_names(pool_ids: list, db_config: dict) -> dict:
     the error, but never partially fails silently — either it returns whatever
     rows matched, or it raises.
     """
-    import mysql.connector
+    from fff.common import db as fff_db
 
     ids = [int(p) for p in pool_ids if str(p).strip()]
     if not ids:
         return {}
-    conn = mysql.connector.connect(
-        host=db_config.get('host') or 'localhost',
-        port=int(db_config.get('port') or 3306),
-        user=db_config.get('user'),
-        password=db_config.get('password'),
+    conn = fff_db.connect_with(
+        db_config,
         database=db_config.get('database') or sorter_paths.db_names()['archive'],
         charset='utf8mb4', use_unicode=True,
     )

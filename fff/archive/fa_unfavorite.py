@@ -16,6 +16,7 @@ import mysql.connector
 
 from fff.clients.furaffinity import FASubmissionNotFoundError, get_firefox_cookies, remove_from_fa_favorites
 from fff.common import config as fff_config
+from fff.common import db
 
 FA_SUBMISSION_RE = re.compile(r'furaffinity\.net/(?:view|full)/(\d+)', re.IGNORECASE)
 FA_REQUEST_DELAY = 2.0  # FA is strict about rate limiting
@@ -104,12 +105,7 @@ def _mark_unfavorited(fa_ids):
         return
     db_config = fff_config.legacy_view("fluffle").get('database', {})
     try:
-        conn = mysql.connector.connect(
-            host=db_config.get('host', 'localhost'),
-            user=db_config.get('user'),
-            password=db_config.get('password'),
-            database=db_config.get('database'),
-        )
+        conn = db.connect_with(db_config)
     except mysql.connector.Error as e:
         logging.warning("Could not update external_fa_sources: %s", e)
         return

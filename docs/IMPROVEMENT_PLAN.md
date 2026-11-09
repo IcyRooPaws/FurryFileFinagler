@@ -25,6 +25,18 @@ and 2 here are its phases 1 and 2, without the SQLite-specific work.
 
 ## Part 1. One database connection layer
 
+**Status: done** (branch `refactor/db-connection-layer`). Only `fff/common/db.py` opens
+connections or pools; `tests/test_db_layer.py` enforces it. New helpers: `connect_with`
+(module settings dicts, whose host/port/user/password may override `database:`),
+`try_connect_with` (print and return None), `connect_server` (no schema) and `get_pool`.
+Also fixed on the way:
+- `archive/db.py: connect_to_mysql` and `connect_to_image_sorting_hashes_db` built a new
+  pool (5 and 3 connections) on every call; they now open one connection.
+- The shared pool cache ignored connection options, so callers asking for different options
+  could share a pool. The cache key now includes every option and the pool size.
+- The fluffle helpers, `connect_to_mysql` and `fa_unfavorite` never passed `port`.
+- `DatabaseManager` instances now share one 25-connection pool instead of one each.
+
 **Goal:** every connection goes through `fff.common.db`, so the test-environment redirect
 (`redirect_database`) always applies and a second backend can be added in one place.
 

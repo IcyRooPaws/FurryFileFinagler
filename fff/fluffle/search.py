@@ -21,6 +21,7 @@ from fff.clients.fluffle import resize_image_for_upload, search_image_fluffle  #
 from fff.clients.furaffinity import FA_DEBUG_DIR
 from fff.clients.fuzzysearch import search_image_fuzzysearch
 from fff.common import config as fff_config
+from fff.common import db
 from fff.common import paths
 from fff.common.logging import logged_command
 from fff.common.single_instance import exclusive_command
@@ -167,12 +168,7 @@ def get_image_files(directory: str, extensions: List[str], recursive: bool = Fal
 def init_database(db_config: Dict[str, Any]) -> Optional[mysql.connector.connection.MySQLConnection]:
     """Initialize database connection and create tables if they don't exist."""
     try:
-        connection = mysql.connector.connect(
-            host=db_config.get('host', 'localhost'),
-            user=db_config.get('user'),
-            password=db_config.get('password'),
-            database=db_config.get('database')
-        )
+        connection = db.connect_with(db_config)
 
         if connection.is_connected():
             cursor = connection.cursor()

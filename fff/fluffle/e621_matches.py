@@ -12,7 +12,7 @@ Run as 'fff fluffle process-e621'.
 import sys
 import time
 from pathlib import Path
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 
 import yaml
 import mysql.connector
@@ -32,6 +32,7 @@ from fff.clients.e621 import (  # noqa: F401  (re-exported for callers of the or
     keep_local_file_as_post,
 )
 from fff.common import config as fff_config
+from fff.common import db
 from fff.common.logging import logged_command
 from fff.common.timestamps import copy_file_times as _copy_file_times
 from fff.fluffle import ops
@@ -64,20 +65,6 @@ def move_to_source_found(image_path: Path, source_found_dir: Path,
     return ops.move_to_directory(image_path, source_found_dir, base_search_dir, preserve_structure,
                                  reason="e621_source_found", error_label="Error moving file")
 
-
-def connect_database(db_config: Dict[str, Any]) -> Optional[mysql.connector.connection.MySQLConnection]:
-    """Connect to the database."""
-    try:
-        connection = mysql.connector.connect(
-            host=db_config.get('host', 'localhost'),
-            user=db_config.get('user'),
-            password=db_config.get('password'),
-            database=db_config.get('database')
-        )
-        return connection
-    except Error as e:
-        print(f"Error connecting to database: {e}")
-        return None
 
 
 def get_images_with_e621_matches(connection: mysql.connector.connection.MySQLConnection) -> List[Dict[str, Any]]:
@@ -382,7 +369,7 @@ def main(argv=None):  # fff: argv accepted for the CLI; no options
 
     # Connect to database
     print("\nConnecting to database...")
-    connection = connect_database(db_config)
+    connection = db.try_connect_with(db_config)
     if not connection:
         print("Failed to connect to database. Exiting.")
         return

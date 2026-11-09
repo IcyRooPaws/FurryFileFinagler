@@ -11,8 +11,9 @@ import shutil
 import logging
 import yaml
 from typing import List, Dict, Set, Optional, Tuple
-import mysql.connector
 from mysql.connector import Error
+
+from fff.common import db
 
 # Import database logging functions
 try:
@@ -252,15 +253,7 @@ class TagSorter:
     def connect_to_e621_db(self):
         """Connect to e621 database."""
         try:
-            conn = mysql.connector.connect(
-                host=self.e621_config['host'],
-                port=self.e621_config['port'],
-                user=self.e621_config['user'],
-                password=self.e621_config['password'],
-                database=self.e621_config['database'],
-                charset='utf8mb4',
-                use_unicode=True
-            )
+            conn = db.connect_with(self.e621_config, charset='utf8mb4', use_unicode=True)
             logger.info(f"Connected to {self.e621_config['database']} at {self.e621_config['host']}")
             return conn
         except Error as e:

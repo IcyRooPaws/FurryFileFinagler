@@ -3,12 +3,12 @@
 import logging
 import os
 import time
-from mysql.connector.pooling import MySQLConnectionPool
 from mysql.connector import Error
 from datetime import datetime
 
 # Import path normalization utility
 from fff.archive.config import normalize_file_path
+from fff.common import db as fff_db
 from fff.common.naming import clean_artist_names, windows_safe_filename
 
 
@@ -132,16 +132,9 @@ def resolve_existing_file_path(file_path: str | None) -> str | None:
 
 
 def connect_to_mysql(mysql_config):
+    # One connection per call. (This used to build a new 5-connection pool on every call.)
     try:
-        pool = MySQLConnectionPool(
-            pool_name="mypool",
-            pool_size=5,
-            host=mysql_config["host"],
-            user=mysql_config["user"],
-            password=mysql_config["password"],
-            database=mysql_config["database"]
-        )
-        return pool.get_connection()
+        return fff_db.connect_with(mysql_config)
     except Error as e:
         logging.error("Error connecting to MySQL: %s", e)
         return None
@@ -196,22 +189,12 @@ def connect_to_image_sorting_hashes_db(mysql_config):
     and reuses top-level mysql host/user/password.
     """
     try:
-        ihd = (mysql_config or {}).get("image_hash_db", {})
+        mysql_config = mysql_config or {}
+        ihd = mysql_config.get("image_hash_db") or {}
         db_name = ihd.get("database") or _sorter_db_name()  # fff: prod or test_ name
-
-        host = ihd.get("host", mysql_config.get("host"))
-        user = ihd.get("user", mysql_config.get("user"))
-        password = ihd.get("password", mysql_config.get("password"))
-
-        pool = MySQLConnectionPool(
-            pool_name="imagepool",
-            pool_size=3,
-            host=host,
-            user=user,
-            password=password,
-            database=db_name,
-        )
-        return pool.get_connection()
+        # image_hash_db's host/port/user/password override the top-level mysql ones.
+        settings = fff_db.server_overrides(mysql_config) | fff_db.server_overrides(ihd)
+        return fff_db.connect_with(settings, database=db_name)
     except Error as e:
         logging.debug("image hash database not available: %s", e)
         return None

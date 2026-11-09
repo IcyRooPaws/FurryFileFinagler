@@ -14,10 +14,10 @@ and are copied verbatim below. fff changes:
 import logging
 import re
 
-import mysql.connector
 from mysql.connector import Error
 
 from fff.common import config as fff_config
+from fff.common import db
 
 
 class UnsafeTargetError(RuntimeError):
@@ -304,10 +304,8 @@ def copy_database_schema(cfg, original_db, test_db, dry_run=False, references=No
     logging.info(f"Copying schema: {original_db} -> {test_db}")
     logging.info(f"{'='*60}\n")
 
-    params = fff_config.db_params(cfg, original_db)
-    params.pop("database")
     try:
-        conn = mysql.connector.connect(**params)
+        conn = db.connect_server(cfg)
     except Error as e:
         logging.error(f"Error connecting to MySQL: {e}")
         return False
@@ -355,9 +353,7 @@ def copy_database_data(cfg, original_db, test_db, dry_run=False, references=None
     if not copy_database_schema(cfg, original_db, test_db, dry_run, references=references):
         return None
 
-    params = fff_config.db_params(cfg, original_db)
-    params.pop("database")
-    conn = mysql.connector.connect(**params)
+    conn = db.connect_server(cfg)
     results = {}
     try:
         cur = conn.cursor()

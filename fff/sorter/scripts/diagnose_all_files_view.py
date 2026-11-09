@@ -5,11 +5,11 @@
 """
 Test script to diagnose why all_files view query returns 0 results.
 """
-import mysql.connector
 from mysql.connector import Error
 import os
 import sys
 
+from fff.common import db
 from fff.sorter.config import Config
 
 def test_view():
@@ -27,7 +27,7 @@ def test_view():
         print("TESTING all_files VIEW")
         print("=" * 80)
         
-        conn = mysql.connector.connect(**config)
+        conn = db.connect_with(config)
         cursor = conn.cursor()
         
         # Test 1: Check if view exists

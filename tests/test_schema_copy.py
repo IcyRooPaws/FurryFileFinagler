@@ -44,13 +44,13 @@ def test_test_targets_allowed_and_pairs():
 
 
 def test_copy_refuses_before_connecting(monkeypatch):
-    monkeypatch.setattr(schema_copy.mysql.connector, "connect", lambda **k: pytest.fail("connected"))
+    monkeypatch.setattr(schema_copy.db, "connect_server", lambda *a, **k: pytest.fail("connected"))
     with pytest.raises(schema_copy.UnsafeTargetError):
         schema_copy.copy_database_schema(CFG, "e621_posts_db", "e621_posts_db")
 
 
 def test_copy_data_refuses_unsafe_target_before_connecting(monkeypatch):
-    monkeypatch.setattr(schema_copy.mysql.connector, "connect", lambda **k: pytest.fail("connected"))
+    monkeypatch.setattr(schema_copy.db, "connect_server", lambda *a, **k: pytest.fail("connected"))
     for target in ("e621_posts_db", "image_sorting_hashes", "backup_e621"):
         with pytest.raises(schema_copy.UnsafeTargetError):
             schema_copy.copy_database_data(CFG, "e621_posts_db", target)

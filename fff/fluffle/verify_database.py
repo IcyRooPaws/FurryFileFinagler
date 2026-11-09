@@ -5,9 +5,8 @@ Quick script to verify data in the new platform-specific tables.
 """
 
 import yaml  # noqa: F401
-import mysql.connector
-
 from fff.common import config as fff_config
+from fff.common import db
 from mysql.connector import Error
 
 
@@ -22,13 +21,8 @@ def verify_database(argv=None):  # fff: argv accepted for the CLI
     db_config = config.get('database', {})
     
     try:
-        connection = mysql.connector.connect(
-            host=db_config.get('host', 'localhost'),
-            user=db_config.get('user'),
-            password=db_config.get('password'),
-            database=db_config.get('database')
-        )
-        
+        connection = db.connect_with(db_config)
+
         if connection.is_connected():
             cursor = connection.cursor(dictionary=True)
             

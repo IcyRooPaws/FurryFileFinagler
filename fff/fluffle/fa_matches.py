@@ -34,6 +34,7 @@ from fff.clients.furaffinity import (  # noqa: F401  (re-exported for callers of
     download_fa_post,
 )
 from fff.common import config as fff_config
+from fff.common import db
 from fff.common.logging import logged_command
 from fff.common.naming import generate_fa_filename  # noqa: F401
 from fff.common.timestamps import copy_file_times as _copy_file_times
@@ -135,20 +136,6 @@ def move_named_fa_download(image_path: Path, download_dir: Path, source_found_di
     print("[OK]" if moved else "[ERROR]")
     return moved
 
-
-def connect_database(db_config: Dict[str, Any]) -> Optional[mysql.connector.connection.MySQLConnection]:
-    """Connect to the database."""
-    try:
-        connection = mysql.connector.connect(
-            host=db_config.get('host', 'localhost'),
-            user=db_config.get('user'),
-            password=db_config.get('password'),
-            database=db_config.get('database')
-        )
-        return connection
-    except Error as e:
-        print(f"Error connecting to database: {e}")
-        return None
 
 
 def check_has_e621_match(image_id: int, connection: mysql.connector.connection.MySQLConnection) -> bool:
@@ -535,7 +522,7 @@ def main(argv=None):  # fff: argv accepted for the CLI; no options
 
     # Connect to database
     print("Connecting to database...")
-    connection = connect_database(db_config)
+    connection = db.try_connect_with(db_config)
     if not connection:
         print("Failed to connect to database. Exiting.")
         return

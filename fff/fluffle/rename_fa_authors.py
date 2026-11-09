@@ -10,13 +10,14 @@ import os
 import sys
 import re
 from pathlib import Path
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Tuple
 from datetime import datetime
 import yaml
 import mysql.connector
 from mysql.connector import Error
 
 from fff.common import config as fff_config
+from fff.common import db
 from fff.fluffle import ops
 
 
@@ -35,20 +36,6 @@ def load_config(config_path: str = None) -> Dict:
         print(f"Error: Failed to parse configuration file: {e}")
         sys.exit(1)
 
-
-def connect_database(db_config: Dict) -> Optional[mysql.connector.connection.MySQLConnection]:
-    """Connect to MySQL database."""
-    try:
-        connection = mysql.connector.connect(
-            host=db_config['host'],
-            user=db_config['user'],
-            password=db_config['password'],
-            database=db_config['database']
-        )
-        return connection
-    except Error as e:
-        print(f"Error connecting to database: {e}")
-        return None
 
 
 def get_author_mappings(connection: mysql.connector.connection.MySQLConnection) -> List[Tuple[str, str]]:
@@ -233,7 +220,7 @@ def main(argv=None):  # fff: argv accepted for the CLI; no options
 
     # Connect to database
     print("\nConnecting to database...")
-    connection = connect_database(config['database'])
+    connection = db.try_connect_with(config['database'])
     if not connection:
         print("Failed to connect to database. Exiting.")
         sys.exit(1)

@@ -9,13 +9,13 @@ doesn't match the correct filename in the database, then renames them.
 import os
 import sys
 import yaml
-import mysql.connector
 from mysql.connector import Error
 import logging
 from pathlib import Path
 from datetime import datetime
 
 from fff.common import config as fff_config
+from fff.common import db
 from fff.sorter import paths as sorter_paths
 
 # Fix Windows console encoding for Unicode characters
@@ -68,12 +68,10 @@ def get_db_connection(config):
         'user': mysql_config.get('user'),
         'password': mysql_config.get('password'),
         'database': sorter_paths.db_names()['archive'],  # fff: the e621 posts database (prod or test_)
-        'charset': 'utf8mb4',
-        'use_unicode': True
     }
 
     try:
-        conn = mysql.connector.connect(**conn_config)
+        conn = db.connect_with(conn_config, charset='utf8mb4', use_unicode=True)
         logger.info(f"Connected to {conn_config['database']} at {conn_config['host']}")  # fff: actual schema
         return conn
     except Error as e:

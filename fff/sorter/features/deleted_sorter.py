@@ -10,9 +10,9 @@ import os
 import shutil
 from typing import Dict, List, Tuple
 
-import mysql.connector
 from mysql.connector import Error
 
+from fff.common import db
 from fff.sorter import paths as sorter_paths
 
 logger = logging.getLogger(__name__)
@@ -34,11 +34,8 @@ class DeletedSorter:
 
     def _connect(self):
         """Create a MySQL connection to the e621 database host."""
-        return mysql.connector.connect(
-            host=self.e621_config.get("host"),
-            port=self.e621_config.get("port", 3306),
-            user=self.e621_config.get("user"),
-            password=self.e621_config.get("password"),
+        return db.connect_with(
+            self.e621_config,
             database=self.e621_config.get("database") or sorter_paths.db_names()["archive"],
             autocommit=True,
             connection_timeout=30,

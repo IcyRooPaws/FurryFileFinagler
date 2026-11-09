@@ -26,6 +26,7 @@ from fff.clients.furaffinity import (
     FASubmissionNotFoundError
 )
 from fff.common import config as fff_config
+from fff.common import db
 from fff.common.logging import logged_command
 
 MAX_CHECK_ATTEMPTS = 10  # a source that keeps failing stops being retried after this many runs
@@ -68,21 +69,6 @@ def load_config(config_path: str = None) -> Dict[str, Any]:
         print(f"Error: Failed to parse configuration file: {e}")
         sys.exit(1)
 
-
-def connect_database(db_config: Dict[str, Any], database_name: str = None) -> Optional[mysql.connector.connection.MySQLConnection]:
-    """Connect to MySQL database."""
-    try:
-        connection = mysql.connector.connect(
-            host=db_config.get('host', 'localhost'),
-            user=db_config.get('user'),
-            password=db_config.get('password'),
-            database=database_name or db_config.get('database')
-        )
-        if connection.is_connected():
-            return connection
-    except Error as e:
-        print(f"Error connecting to database '{database_name}': {e}")
-        return None
 
 
 def create_table_if_not_exists(connection: mysql.connector.connection.MySQLConnection) -> bool:
@@ -316,7 +302,7 @@ def main():
 
     # Connect to local database (fluffle_search)
     print("Connecting to local database (fluffle_search)...")
-    local_conn = connect_database(db_config)
+    local_conn = db.try_connect_with(db_config)
     if not local_conn:
         print("Failed to connect to local database. Exiting.")
         return
@@ -334,7 +320,8 @@ def main():
 
     # Connect to external database (e621_posts_db)
     print("Connecting to external database (e621_posts_db)...")
-    external_conn = connect_database(db_config, fff_config.database_names(fff_config.load())['archive'])
+    external_conn = db.try_connect_with(
+        db_config, database=fff_config.database_names(fff_config.load())['archive'])
     if not external_conn:
         print("Failed to connect to external database. Exiting.")
         local_conn.close()

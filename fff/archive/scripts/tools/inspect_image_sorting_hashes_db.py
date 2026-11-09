@@ -13,7 +13,7 @@ from pathlib import Path
 from fff.archive import paths as archive_paths
 
 from fff.archive.config import load_config
-import mysql.connector
+from fff.common import db
 from mysql.connector import Error
 
 # Set up logging
@@ -22,13 +22,8 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 def connect_to_image_sorting_hashes_db(mysql_config):
     """Connect to the image_sorting_hashes database."""
     try:
-        conn = mysql.connector.connect(
-            host=mysql_config["host"],
-            user=mysql_config["user"],
-            password=mysql_config["password"],
-            database=archive_paths.db_names()["sorter"]  # fff: prod or test_ sorter schema
-        )
-        return conn
+        # fff: prod or test_ sorter schema
+        return db.connect_with(mysql_config, database=archive_paths.db_names()["sorter"])
     except Error as e:
         logging.error(f"Error connecting to image_sorting_hashes database: {e}")
         return None
