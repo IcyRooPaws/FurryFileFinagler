@@ -78,3 +78,60 @@ def test_media_combines_with_other_filters(db):
     where, values = post_filters({"rating": "safe", "media": "gif", "deleted": "0"})
     assert where.count(" AND ") >= 2 and values[0] == "safe" and values[-1] == 0
     assert matching_ids(db, {"rating": "safe", "media": "gif", "deleted": "0"}) == [2, 5]
+
+
+# --- opening files locally ---------------------------------------------------
+
+from fff.gui import archive_browser  # noqa: E402
+
+
+@pytest.fixture
+def opened(monkeypatch):
+    calls = []
+    monkeypatch.setattr(archive_browser, "post_file_path", lambda pid: r"P:\a\x-safe-1.png" if pid == 1 else None)
+    monkeypatch.setattr(archive_browser, "launch", lambda path, reveal=False: calls.append((path, reveal)))
+    return calls
+
+
+def post_open(post_id, json=None, remote="127.0.0.1", **kwargs):
+    client = archive_browser.app.test_client()
+    return client.post(f"/api/open/{post_id}", json=json, environ_base={"REMOTE_ADDR": remote}, **kwargs)
+
+
+@pytest.mark.parametrize("action, reveal", [("open", False), ("reveal", True)])
+def test_open_launches_the_post_file(opened, action, reveal):
+    assert post_open(1, {"action": action}).status_code == 200
+    assert opened == [(r"P:\a\x-safe-1.png", reveal)]
+
+
+def test_open_missing_file_is_404(opened):
+    assert post_open(2, {"action": "open"}).status_code == 404
+    assert opened == []
+
+
+@pytest.mark.parametrize("kwargs, status", [
+    ({"json": {"action": "delete"}}, 400),
+    ({"data": "action=open", "content_type": "application/x-www-form-urlencoded"}, 400),
+    ({"json": {"action": "open"}, "remote": "192.168.1.20"}, 403),
+])
+def test_open_rejects_bad_or_remote_requests(opened, kwargs, status):
+    assert post_open(1, **kwargs).status_code == status
+    assert opened == []
+
+
+def test_open_is_post_only(opened):
+    assert archive_browser.app.test_client().get("/api/open/1").status_code == 405
+
+
+def test_pages_only_offer_open_buttons_to_local_browsers(monkeypatch):
+    client = archive_browser.app.test_client()
+    assert b"const canOpen = true;" in client.get("/", environ_base={"REMOTE_ADDR": "127.0.0.1"}).data
+    assert b"const canOpen = false;" in client.get("/", environ_base={"REMOTE_ADDR": "10.0.0.5"}).data
+
+
+def test_launch_reveal_on_windows_selects_the_file(monkeypatch):
+    commands = []
+    monkeypatch.setattr(archive_browser.sys, "platform", "win32")
+    monkeypatch.setattr(archive_browser.subprocess, "Popen", commands.append)
+    archive_browser.launch(r"P:\some dir\x.png", reveal=True)
+    assert commands == [r'explorer /select,"P:\some dir\x.png"']

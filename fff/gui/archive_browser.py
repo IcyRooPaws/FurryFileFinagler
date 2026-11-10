@@ -3,6 +3,8 @@
 
 import argparse
 import os
+import subprocess
+import sys
 from pathlib import Path
 
 from flask import Flask, abort, jsonify, render_template_string, request, send_file
@@ -83,7 +85,9 @@ PAGE = r"""
     .artists { margin:7px 0 3px; color:var(--accent-dark); font-weight:700; overflow-wrap:anywhere; }
     .meta { color:var(--muted); font-size:13px; }
     .deleted { margin-top:8px; padding:6px 8px; border-left:3px solid var(--accent); background:#de3c2e18; color:var(--accent); font-size:13px; }
-    .links { margin-top:8px; font-family:"Trebuchet MS", sans-serif; font-size:12px; }
+    .links { display:flex; flex-wrap:wrap; gap:4px 12px; margin-top:8px; font-family:"Trebuchet MS", sans-serif; font-size:12px; }
+    .links button { width:auto; min-height:0; padding:0; border:0; background:none; color:var(--teal); font:inherit; font-weight:400; text-decoration:underline; }
+    .links button:hover { background:none; color:var(--accent); }
     a { color:var(--teal); }
     .pager { display:flex; justify-content:center; align-items:center; gap:14px; margin-top:24px; }
     .pager button { width:auto; min-width:90px; }
@@ -117,6 +121,7 @@ PAGE = r"""
   </main>
   <script>
     let currentPage = 1;
+    const canOpen = {{ 'true' if can_open else 'false' }};
         const initialSearch = new URLSearchParams(window.location.search).get('q') || '';
         document.querySelector('#q').value = initialSearch;
     const params = () => new URLSearchParams({ q: document.querySelector('#q').value.trim(), rating: document.querySelector('#rating').value, media: document.querySelector('#media').value, deleted: document.querySelector('#deleted').value, sort: document.querySelector('#sort').value, page: currentPage });
@@ -124,8 +129,18 @@ PAGE = r"""
     function card(post) {
       const media = post.has_file ? (post.is_video ? `<video class="preview" controls preload="metadata" src="${post.media_url}"></video>` : `<img class="preview" loading="lazy" src="${post.media_url}" alt="Post ${post.id}">`) : '<div class="preview missing">File unavailable</div>';
       const deleted = post.deleted ? `<div class="deleted">Deleted${post.deletion_reason ? ': ' + esc(post.deletion_reason) : ''}</div>` : '';
-    return `<article class="card"><a class="card-open" href="/post/${post.id}">${media}</a><div class="body"><div class="topline"><a class="id" href="/post/${post.id}">#${post.id}</a><span class="rating ${esc(post.rating)}">${esc(post.rating)}</span></div><div class="artists">${esc(post.artists || 'Unknown artist')}</div><div class="meta">${esc(post.file_name || 'No filename')}</div>${deleted}<div class="links">${post.file_url ? `<a href="${esc(post.file_url)}" target="_blank" rel="noreferrer">Open source</a>` : ''}</div></div></article>`;
+    return `<article class="card"><a class="card-open" href="/post/${post.id}">${media}</a><div class="body"><div class="topline"><a class="id" href="/post/${post.id}">#${post.id}</a><span class="rating ${esc(post.rating)}">${esc(post.rating)}</span></div><div class="artists">${esc(post.artists || 'Unknown artist')}</div><div class="meta">${esc(post.file_name || 'No filename')}</div>${deleted}<div class="links">${post.file_url ? `<a href="${esc(post.file_url)}" target="_blank" rel="noreferrer">Open source</a>` : ''}${post.has_file && canOpen ? `<button type="button" data-open="${post.id}" data-action="open">Open file</button><button type="button" data-open="${post.id}" data-action="reveal">Show in folder</button>` : ''}</div></div></article>`;
     }
+    async function openLocal(button) {
+      const label = button.textContent;
+      try {
+        const response = await fetch(`/api/open/${button.dataset.open}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: button.dataset.action }) });
+        if (response.ok) return;
+        button.textContent = (await response.json().catch(() => ({}))).error || 'Could not open';
+      } catch { button.textContent = 'Could not open'; }
+      setTimeout(() => { button.textContent = label; }, 3000);
+    }
+    document.querySelector('#grid').addEventListener('click', event => { const button = event.target.closest('button[data-open]'); if (button) openLocal(button); });
     async function load() {
       const grid = document.querySelector('#grid'); grid.innerHTML = '<div class="empty">Loading...</div>';
       const response = await fetch('/api/posts?' + params()); const data = await response.json();
@@ -216,6 +231,10 @@ DETAIL_PAGE = r"""
         dd { margin:0; overflow-wrap:anywhere; }
         a { color:var(--teal); }
         .sources { margin:0; padding-left:20px; overflow-wrap:anywhere; }
+        .local-actions { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-top:12px; }
+        .local-actions button { padding:7px 12px; border:1px solid var(--teal); border-radius:4px; background:var(--teal); color:white; font:700 13px "Trebuchet MS", sans-serif; cursor:pointer; }
+        .local-actions button:hover { background:var(--accent); border-color:var(--accent); }
+        .open-status { color:var(--accent); font-size:13px; }
         @media (max-width:850px) { .layout { grid-template-columns:1fr; } .media-panel { min-height:260px; } }
     </style>
 </head>
@@ -241,12 +260,28 @@ DETAIL_PAGE = r"""
                 {% endfor %}
                 <h2>File Details</h2>
                 <dl><dt>Path</dt><dd>{{ post.file_path or 'Unavailable' }}</dd><dt>Type</dt><dd>{{ post.file_type or 'Unknown' }}</dd><dt>MD5</dt><dd>{{ post.md5 or 'Unavailable' }}</dd><dt>Deleted at</dt><dd>{{ post.deleted_at or 'Not deleted' }}</dd></dl>
+                {% if post.has_file and can_open %}
+                <div class="local-actions"><button type="button" data-action="open">Open file</button><button type="button" data-action="reveal">Show in folder</button><span class="open-status" id="open-status"></span></div>
+                {% endif %}
                 <h2>Links</h2>
                 <p><a href="https://e621.net/posts/{{ post.id }}" target="_blank" rel="noreferrer">View on e621</a></p>
                 {% if sources %}<ul class="sources">{% for source in sources %}<li><a href="{{ source }}" target="_blank" rel="noreferrer">{{ source }}</a></li>{% endfor %}</ul>{% endif %}
             </aside>
         </div>
     </main>
+    {% if post.has_file and can_open %}
+    <script>
+        document.querySelector('.local-actions').addEventListener('click', async event => {
+            const button = event.target.closest('button[data-action]'), status = document.querySelector('#open-status');
+            if (!button) return;
+            status.textContent = '';
+            try {
+                const response = await fetch('/api/open/{{ post.id }}', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: button.dataset.action }) });
+                if (!response.ok) status.textContent = (await response.json().catch(() => ({}))).error || 'Could not open the file';
+            } catch { status.textContent = 'Could not open the file'; }
+        });
+    </script>
+    {% endif %}
 </body>
 </html>
 """
@@ -306,7 +341,7 @@ def post_sort(args):
 
 @app.get("/")
 def index():
-    return render_template_string(PAGE)
+    return render_template_string(PAGE, can_open=is_local_request())
 
 
 @app.get("/post/<int:post_id>")
@@ -372,7 +407,8 @@ def post_detail(post_id):
         "is_video": extension in VIDEO_EXTENSIONS,
         "media_url": f"/media/{post_id}" if exists else None,
     }
-    return render_template_string(DETAIL_PAGE, post=post, artists=artists, tags=tags, sources=sources)
+    return render_template_string(DETAIL_PAGE, post=post, artists=artists, tags=tags, sources=sources,
+                                  can_open=is_local_request())
 
 
 @app.get("/api/posts")
@@ -477,20 +513,71 @@ def suggest():
     return jsonify({"suggestions": suggestions})
 
 
-@app.get("/media/<int:post_id>")
-def media(post_id):
+def post_file_path(post_id):
+    """The post's local file path if it exists on disk, else None."""
+    connection = database_connection()
     try:
-        connection = database_connection()
         cursor = connection.cursor()
         cursor.execute("SELECT file_path FROM posts WHERE id = %s", (post_id,))
         row = cursor.fetchone()
         cursor.close()
+    finally:
         connection.close()
+    if not row or not row[0] or not os.path.isfile(row[0]):
+        return None
+    return row[0]
+
+
+@app.get("/media/<int:post_id>")
+def media(post_id):
+    try:
+        path = post_file_path(post_id)
     except Exception:
         abort(404)
-    if not row or not row[0] or not os.path.isfile(row[0]):
+    if not path:
         abort(404)
-    return send_file(row[0], conditional=True)
+    return send_file(path, conditional=True)
+
+
+def is_local_request():
+    """Opening files acts on the machine running the server, so only allow it
+    from a browser on that same machine (matters when run with --host 0.0.0.0)."""
+    return request.remote_addr in {"127.0.0.1", "::1"}
+
+
+def launch(path, reveal=False):
+    """Open path in its default app, or reveal it in the file manager."""
+    if sys.platform == "win32":
+        if reveal:
+            # explorer wants '/select,"path"' as one unsplit argument.
+            subprocess.Popen(f'explorer /select,"{path}"')
+        else:
+            os.startfile(path)
+    elif sys.platform == "darwin":
+        subprocess.Popen(["open", "-R", path] if reveal else ["open", path])
+    else:
+        subprocess.Popen(["xdg-open", os.path.dirname(path) if reveal else path])
+
+
+@app.post("/api/open/<int:post_id>")
+def open_local(post_id):
+    if not is_local_request():
+        return jsonify({"error": "Files can only be opened from the machine running the browser server"}), 403
+    # Requiring JSON means another site can't trigger this with a plain form
+    # post: a cross-origin JSON fetch needs a CORS preflight this app never grants.
+    if not request.is_json:
+        return jsonify({"error": "Expected a JSON request"}), 400
+    action = (request.get_json(silent=True) or {}).get("action", "open")
+    if action not in {"open", "reveal"}:
+        return jsonify({"error": f"Unknown action {action!r}"}), 400
+    try:
+        path = post_file_path(post_id)
+        if not path:
+            return jsonify({"error": "The local file is unavailable"}), 404
+        launch(path, reveal=action == "reveal")
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+    return jsonify({"ok": True})
 
 
 def parse_args(argv=None):  # fff: the original parsed args inside the __main__ block
