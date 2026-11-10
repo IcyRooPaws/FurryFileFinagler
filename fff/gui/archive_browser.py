@@ -16,6 +16,36 @@ app.config["JSON_SORT_KEYS"] = False
 
 PAGE_SIZE = 48
 VIDEO_EXTENSIONS = {"mp4", "webm", "mov", "m4v", "avi", "mkv"}
+# Media-type filter. posts.file_type holds the category ingest derived from
+# file_url, but deleted posts keep the post-page URL there (no extension) and
+# end up 'unknown', so for anything outside these categories fall back to the
+# extension of the local file_path.
+MEDIA_EXTENSIONS = {
+    "image": ("jpg", "jpeg", "png", "bmp", "webp", "avif", "heic", "heif", "tif", "tiff"),
+    "gif": ("gif",),
+    "video": tuple(sorted(VIDEO_EXTENSIONS)),
+}
+MEDIA_TYPES = tuple(MEDIA_EXTENSIONS)
+_PATH_EXTENSION = "LOWER(SUBSTRING_INDEX(p.file_path, '.', -1))"
+
+
+def _placeholders(items):
+    return ", ".join(["%s"] * len(items))
+
+
+def media_filter(media):
+    """WHERE clause and values for one media-type choice, or None for no filter."""
+    known = f"COALESCE(p.file_type, '') NOT IN ({_placeholders(MEDIA_TYPES)})"
+    if media in MEDIA_EXTENSIONS:
+        exts = MEDIA_EXTENSIONS[media]
+        return (f"(p.file_type = %s OR ({known} AND {_PATH_EXTENSION} IN ({_placeholders(exts)})))",
+                [media, *MEDIA_TYPES, *exts])
+    if media == "other":
+        exts = [ext for group in MEDIA_EXTENSIONS.values() for ext in group]
+        return (f"({known} AND (p.file_path IS NULL OR {_PATH_EXTENSION} NOT IN ({_placeholders(exts)})))",
+                [*MEDIA_TYPES, *exts])
+    return None
+
 
 PAGE = r"""
 <!doctype html>
@@ -32,7 +62,7 @@ PAGE = r"""
     h1 { margin:0; font:700 clamp(28px, 4vw, 48px)/1.05 "Trebuchet MS", sans-serif; letter-spacing:0; }
     .subtitle { color:var(--muted); margin:8px 0 0; }
     main { max-width:1280px; margin:0 auto; padding:28px 24px 50px; }
-    .controls { display:grid; grid-template-columns:minmax(220px, 1fr) 160px 160px 190px auto; gap:10px; align-items:end; margin-bottom:18px; }
+    .controls { display:grid; grid-template-columns:minmax(220px, 1fr) 160px 160px 160px 190px auto; gap:10px; align-items:end; margin-bottom:18px; }
     label { display:block; color:var(--muted); font:600 12px "Trebuchet MS", sans-serif; text-transform:uppercase; letter-spacing:.04em; }
     input, select, button { width:100%; min-height:42px; padding:9px 11px; border:1px solid var(--line); border-radius:4px; background:#1d2321; color:var(--ink); font:inherit; }
     button { cursor:pointer; background:var(--teal); border-color:var(--teal); color:white; font-family:"Trebuchet MS", sans-serif; font-weight:700; }
@@ -76,6 +106,7 @@ PAGE = r"""
     <form id="filters" class="controls">
       <div class="search"><label for="q">Search</label><input id="q" name="q" placeholder="artist, tag, filename, or post ID" autocomplete="off" role="combobox" aria-autocomplete="list" aria-controls="suggest" aria-expanded="false"><ul id="suggest" class="suggest" role="listbox" hidden></ul></div>
       <div><label for="rating">Rating</label><select id="rating"><option value="">All ratings</option><option>safe</option><option>questionable</option><option>explicit</option></select></div>
+      <div><label for="media">Media type</label><select id="media"><option value="">All media</option><option value="image">Images</option><option value="gif">GIFs</option><option value="video">Videos</option><option value="other">Other</option></select></div>
       <div><label for="deleted">Status</label><select id="deleted"><option value="">All posts</option><option value="0">Active</option><option value="1">Deleted</option></select></div>
     <div><label for="sort">Sort by</label><select id="sort"><option value="created_at_desc">Created: newest</option><option value="created_at_asc">Created: oldest</option><option value="deleted_at_desc">Deleted: newest</option><option value="deleted_at_asc">Deleted: oldest</option></select></div>
       <button type="submit">Search archive</button>
@@ -88,7 +119,7 @@ PAGE = r"""
     let currentPage = 1;
         const initialSearch = new URLSearchParams(window.location.search).get('q') || '';
         document.querySelector('#q').value = initialSearch;
-    const params = () => new URLSearchParams({ q: document.querySelector('#q').value.trim(), rating: document.querySelector('#rating').value, deleted: document.querySelector('#deleted').value, sort: document.querySelector('#sort').value, page: currentPage });
+    const params = () => new URLSearchParams({ q: document.querySelector('#q').value.trim(), rating: document.querySelector('#rating').value, media: document.querySelector('#media').value, deleted: document.querySelector('#deleted').value, sort: document.querySelector('#sort').value, page: currentPage });
     const esc = (value) => String(value ?? '').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
     function card(post) {
       const media = post.has_file ? (post.is_video ? `<video class="preview" controls preload="metadata" src="${post.media_url}"></video>` : `<img class="preview" loading="lazy" src="${post.media_url}" alt="Post ${post.id}">`) : '<div class="preview missing">File unavailable</div>';
@@ -235,6 +266,7 @@ def post_filters(args):
     query = args.get("q", "").strip()
     rating = args.get("rating", "").strip().lower()
     deleted = args.get("deleted", "").strip()
+    media = args.get("media", "").strip().lower()
 
     if query:
         like = f"%{query}%"
@@ -252,6 +284,10 @@ def post_filters(args):
     if rating in {"safe", "questionable", "explicit"}:
         where.append("p.rating = %s")
         values.append(rating)
+    media_clause = media_filter(media)
+    if media_clause:
+        where.append(media_clause[0])
+        values.extend(media_clause[1])
     if deleted in {"0", "1"}:
         where.append("p.deleted = %s")
         values.append(int(deleted))
