@@ -1,7 +1,8 @@
 # Changelog
 
 Every change to FurryFileFinagler, newest first. Each commit is one version, starting at 1.0.0
-for the first commit. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
+for the first commit. A commit that only updates this changelog for a release doesn't get a
+version of its own. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 Version numbers follow [Semantic Versioning](https://semver.org/):
 
@@ -14,9 +15,7 @@ Version numbers follow [Semantic Versioning](https://semver.org/):
 The version lives in `fff/__init__.py` (`fff --version` prints it). `pyproject.toml` reads it
 from there, and a test checks that the newest entry here matches it.
 
-## [1.29.0] - Unreleased
-
-Not committed yet.
+## [1.29.0] - 2026-11-10 (`3dfd89d`)
 
 ### Added
 - **Guided first-time setup.** A new install must finish a step-by-step wizard before FFF can be
@@ -36,6 +35,8 @@ Not committed yet.
   or fetish tag, over the last 3, 6 or 12 months. The initial import is its own "Earlier"
   column, with a posts-per-month row on top, a "Show numbers" table view and hover details.
 - A **Copyrights** list in the archive browser's trending sidebar.
+- **Version numbers and this changelog.** Every commit since the first has a version, starting
+  at 1.0.0. `fff --version` prints the current one.
 
 ### Changed
 - The archive browser's pages (posts grid, post page, trends) use an e621-style layout:
@@ -45,6 +46,10 @@ Not committed yet.
   - Colors come from the FFF artwork palette, with e621's tag-category colors lightened for
     contrast.
 - `fff setup` opens the settings editor once setup is finished.
+- The README leads with highlights and covers every feature. Its nightly-run section now lists
+  the database backup and the AI-cleanup stage, which it used to leave out.
+- The version is set only in `fff/__init__.py`, and `pyproject.toml` reads it from there
+  (it said 0.1.0). Tests check that the changelog and the README match it.
 
 ### Fixed
 - `manager.bat` didn't start on a fresh install: `fff gui manager` refused to run without a
