@@ -5,7 +5,9 @@ import argparse
 import os
 import subprocess
 import sys
+import threading
 import time
+from collections import OrderedDict
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
@@ -14,6 +16,7 @@ from flask import Flask, abort, jsonify, render_template_string, request, send_f
 from fff.archive import generic_tags
 from fff.archive.config import load_config
 from fff.archive.db import FLAG_TOKENS, connect_to_mysql
+from fff.gui import thumbnails
 
 
 app = Flask(__name__)
@@ -123,7 +126,8 @@ PAGE = r"""
     .stats strong { color:var(--ink); }
     .grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(170px, 1fr)); gap:18px 10px; }
     .thumb { display:flex; flex-direction:column; align-items:center; min-width:0; text-align:center; }
-    .thumb-img { display:flex; align-items:center; justify-content:center; width:100%; height:180px; }
+    .thumb-img { position:relative; display:flex; align-items:center; justify-content:center; width:100%; height:180px; }
+    .play-badge { position:absolute; left:50%; top:50%; display:grid; place-items:center; width:40px; height:40px; margin:-20px 0 0 -20px; border-radius:50%; background:#1d2321cc; color:#ffffff; font-size:16px; pointer-events:none; }
     .thumb-img img, .thumb-img video { display:block; max-width:100%; max-height:180px; border:2px solid transparent; border-radius:3px; }
     .thumb.deleted .thumb-img img, .thumb.deleted .thumb-img video, .thumb.deleted .missing { border-color:var(--deleted); }
     .missing { display:grid; place-items:center; width:150px; height:150px; border:2px dashed var(--box-3); border-radius:3px; color:var(--muted); font-size:11px; }
@@ -202,7 +206,7 @@ PAGE = r"""
     const RATING_LETTER = { safe: 'S', questionable: 'Q', explicit: 'E' };
     function card(post) {
       const media = post.has_file
-        ? (post.is_video ? `<video preload="metadata" muted src="${post.media_url}#t=0.1"></video>` : `<img loading="lazy" src="${post.media_url}" alt="Post ${post.id}">`)
+        ? `<img loading="lazy" decoding="async" src="${post.thumb_url}" alt="Post ${post.id}" data-kind="${post.is_video ? 'video' : 'image'}">${post.is_video ? '<span class="play-badge" aria-hidden="true">&#9654;</span>' : ''}`
         : '<div class="missing">No file</div>';
       const kind = post.is_video ? 'VIDEO' : post.ext === 'gif' ? 'GIF' : '';
       const deleted = post.deleted ? `<div class="deleted-note" title="${esc(post.deletion_reason || '')}">deleted</div>` : '';
@@ -225,7 +229,8 @@ PAGE = r"""
     document.querySelector('#grid').addEventListener('error', event => {
       const media = event.target;
       if (media.matches && media.matches('.thumb-img img, .thumb-img video')) {
-        const box = document.createElement('div'); box.className = 'missing'; box.textContent = 'No file';
+        // a video whose frame couldn't be read still plays on its post page
+        const box = document.createElement('div'); box.className = 'missing'; box.textContent = media.dataset.kind === 'video' ? 'Video' : 'No file';
         media.replaceWith(box);
       }
     }, true);
@@ -793,12 +798,14 @@ def posts():
         # The media endpoint performs the authoritative existence check on demand.
         exists = bool(file_path)
         extension = Path(file_path).suffix.lower().lstrip(".") if file_path else ""
+        remember_path(post_id, file_path)
         result.append({
             "id": post_id, "file_name": file_name, "file_url": file_url,
             "rating": rating or "unknown", "deleted": bool(deleted),
             "deletion_reason": reason, "artists": artists, "has_file": exists,
             "is_video": extension in VIDEO_EXTENSIONS, "ext": extension,
             "media_url": f"/media/{post_id}" if exists else None,
+            "thumb_url": f"/thumb/{post_id}" if exists else None,
         })
     pages = (total + PAGE_SIZE - 1) // PAGE_SIZE
     return jsonify({"posts": result, "total": total, "page": page, "pages": pages})
@@ -856,6 +863,34 @@ def suggest():
         if len(suggestions) >= 12:
             break
     return jsonify({"suggestions": suggestions})
+
+
+# post id -> file path, filled from each page of /api/posts so the ~48 thumbnail requests that
+# follow need no database round trip each. A path that no longer exists is looked up again.
+_known_paths: "OrderedDict[int, str]" = OrderedDict()
+_KNOWN_PATHS_MAX = 20000
+_known_paths_lock = threading.Lock()
+
+
+def remember_path(post_id, file_path):
+    if not file_path:
+        return
+    with _known_paths_lock:
+        _known_paths[post_id] = file_path
+        _known_paths.move_to_end(post_id)
+        while len(_known_paths) > _KNOWN_PATHS_MAX:
+            _known_paths.popitem(last=False)
+
+
+def known_file_path(post_id):
+    """Like post_file_path, but uses the path remembered from the post listing when it still exists."""
+    with _known_paths_lock:
+        path = _known_paths.get(post_id)
+    if path and os.path.isfile(path):
+        return path
+    path = post_file_path(post_id)
+    remember_path(post_id, path)
+    return path
 
 
 def post_file_path(post_id):
@@ -1142,15 +1177,44 @@ def trends_api():
     return jsonify(result)
 
 
+# Browsers may reuse files for this long before asking again (a changed file gets a new
+# thumbnail, and at worst shows the old one until then).
+MEDIA_MAX_AGE = 24 * 3600
+THUMB_MAX_AGE = 7 * 24 * 3600
+
+
+def _cached_privately(response):
+    """Let the browser keep the file, but no shared cache (proxy): the archive is private."""
+    response.cache_control.public = False
+    response.cache_control.private = True
+    return response
+
+
 @app.get("/media/<int:post_id>")
 def media(post_id):
     try:
-        path = post_file_path(post_id)
+        path = known_file_path(post_id)
     except Exception:
         abort(404)
     if not path:
         abort(404)
-    return send_file(path, conditional=True)
+    return _cached_privately(send_file(path, conditional=True, max_age=MEDIA_MAX_AGE))
+
+
+@app.get("/thumb/<int:post_id>")
+def thumb(post_id):
+    """A small cached preview (fff.gui.thumbnails) for the grid: images shrunk, videos a frame."""
+    try:
+        path = known_file_path(post_id)
+    except Exception:
+        abort(404)
+    if not path:
+        abort(404)
+    is_video = Path(path).suffix.lower().lstrip(".") in VIDEO_EXTENSIONS
+    preview = thumbnails.thumbnail(path, video=is_video)
+    if preview is None:
+        abort(404)
+    return _cached_privately(send_file(preview, mimetype="image/webp", conditional=True, max_age=THUMB_MAX_AGE))
 
 
 def is_local_request():

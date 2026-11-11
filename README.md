@@ -4,7 +4,7 @@ FFF keeps your e621 favorites archived on your own disk, finds sources for image
 have one, and keeps your media library sorted. It runs nightly on its own, and there's a
 desktop Manager and a local web gallery for everything else.
 
-Version 1.29.0 · [Changelog](CHANGELOG.md) · [Command reference](docs/COMMANDS.md) · [Usage guide](docs/USAGE.md)
+Version 1.30.0 · [Changelog](CHANGELOG.md) · [Command reference](docs/COMMANDS.md) · [Usage guide](docs/USAGE.md)
 
 ## Highlights
 
@@ -43,6 +43,9 @@ Version 1.29.0 · [Changelog](CHANGELOG.md) · [Command reference](docs/COMMANDS
   or artist shows exactly that tag; a typed search also matches parts of names.
 - **Filter** by rating, media type (images, GIFs, videos), active or deleted, and sort by
   created or deleted date.
+- **Fast thumbnails.** The grid shows small previews, made once and cached in
+  `data/cache/thumbs`; videos show a still frame. A page of 48 posts is under 1 MB instead of
+  150–200 MB of original files.
 - **Post pages** look like e621's: tag sections colored by category (artists, copyrights,
   characters, species, general, meta, lore), file details, sources, and a deleted notice.
 - **Open file** and **Show in folder** buttons open the file on your computer. They're offered

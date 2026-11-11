@@ -15,6 +15,22 @@ Version numbers follow [Semantic Versioning](https://semver.org/):
 The version lives in `fff/__init__.py` (`fff --version` prints it). `pyproject.toml` reads it
 from there, and a test checks that the newest entry here matches it.
 
+## [1.30.0] - 2026-11-10
+
+### Changed
+- **The archive gallery loads much faster.**
+  - The grid shows small cached previews instead of every post's original file. One page went
+    from about 200 MB to under 1 MB.
+  - Previews are made once and kept in `data/cache/thumbs`, and are made again only when a file
+    changes. A page already seen loads in a few hundredths of a second; a first visit makes its
+    previews in about 85 ms each.
+  - Videos show a still frame with a play badge, instead of opening a video player per
+    thumbnail.
+  - Browsers reuse previews for 7 days and full files for 1 day, instead of re-checking every
+    file on each visit. Shared caches such as proxies may not keep them.
+  - Previews and files no longer need a database lookup each; the path comes from the post
+    listing.
+
 ## [1.29.0] - 2026-11-10 (`3dfd89d`)
 
 ### Added
