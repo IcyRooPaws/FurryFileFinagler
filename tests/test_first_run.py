@@ -9,6 +9,8 @@ import yaml
 from fff.common import config as fff_config
 from fff.common import first_run, paths
 
+pytestmark = pytest.mark.usefixtures("fresh_install")  # these tests are about the setup itself
+
 EXAMPLE = paths.CONFIG_DIR / "config.example.yaml"
 SECRETS_EXAMPLE = paths.CONFIG_DIR / "secrets.example.yaml"
 

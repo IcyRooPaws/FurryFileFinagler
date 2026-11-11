@@ -3,6 +3,8 @@ import pytest
 from fff.cli.app import build_parser, main
 from fff.common import first_run
 
+pytestmark = pytest.mark.usefixtures("fresh_install")  # these tests are about the setup itself
+
 
 @pytest.fixture
 def opened(monkeypatch):

@@ -26,11 +26,26 @@ def pytest_collection_modifyitems(config, items):
 
 @pytest.fixture(autouse=True)
 def _setup_state_in_tmp(tmp_path, monkeypatch):
-    """Tests never touch the real data/setup_state.json: an unfinished one would lock the
-    install out of every command. Without a state file, an existing config.yaml counts as set up."""
+    """Tests run as a finished install, with their own setup_state.json.
+
+    They never touch the real data/setup_state.json, where an unfinished one would lock the
+    install out of every command. Finished is set explicitly rather than inferred from a
+    config.yaml on disk: CI has none, and CLI tests hand main() a config in memory, so the
+    setup gate would stop them there (and only there). Tests of the setup itself start from a
+    fresh install with the ``fresh_install`` fixture.
+    """
     from fff.common import first_run
 
     monkeypatch.setattr(first_run, "STATE_FILE", tmp_path / "setup_state.json")
+    first_run.save_state({"completed": True})
+
+
+@pytest.fixture
+def fresh_install():
+    """No setup progress yet: whether FFF counts as set up depends on config.yaml, as on a new install."""
+    from fff.common import first_run
+
+    first_run.STATE_FILE.unlink(missing_ok=True)
 
 
 @pytest.fixture(autouse=True)

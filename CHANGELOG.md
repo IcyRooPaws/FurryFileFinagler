@@ -15,6 +15,34 @@ Version numbers follow [Semantic Versioning](https://semver.org/):
 The version lives in `fff/__init__.py` (`fff --version` prints it). `pyproject.toml` reads it
 from there, and a test checks that the newest entry here matches it.
 
+## [1.31.0] - 2026-11-11
+
+### Added
+- **Search with several tags** in the archive gallery, using e621's syntax:
+
+  | You type | Finds |
+  |---|---|
+  | `wolf solo` | posts with all the tags |
+  | `wolf -comic` | posts without a tag |
+  | `~fox ~wolf` | posts with either |
+  | `wolf*` | names starting with "wolf" |
+
+  - A word that is a tag or artist name matches exactly that name. Any other word matches
+    tag, artist and file names containing it, and a number also matches a post ID.
+  - Search suggestions complete the word being typed instead of replacing the whole search.
+  - Shift- or Ctrl-clicking a trending name adds it to the search.
+  - A short syntax hint sits under the search box.
+
+### Changed
+- A space in the search box now separates words, as on e621: `fallow deer` finds posts
+  matching both "fallow" and "deer". Type tag names with underscores (`fallow_deer`).
+
+### Fixed
+- CI failed on every run since 1.29.0: two command-line tests were stopped by the
+  first-time-setup check. CI machines have no config.yaml, so FFF counted them as not set up.
+  Tests now start as a finished install, and only the setup tests start from a fresh one.
+  Checked from a clean clone on Python 3.12 and 3.14.
+
 ## [1.30.0] - 2026-11-10
 
 ### Changed

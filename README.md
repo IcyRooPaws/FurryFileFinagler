@@ -4,7 +4,7 @@ FFF keeps your e621 favorites archived on your own disk, finds sources for image
 have one, and keeps your media library sorted. It runs nightly on its own, and there's a
 desktop Manager and a local web gallery for everything else.
 
-Version 1.30.0 · [Changelog](CHANGELOG.md) · [Command reference](docs/COMMANDS.md) · [Usage guide](docs/USAGE.md)
+Version 1.31.0 · [Changelog](CHANGELOG.md) · [Command reference](docs/COMMANDS.md) · [Usage guide](docs/USAGE.md)
 
 ## Highlights
 
@@ -39,8 +39,18 @@ Version 1.30.0 · [Changelog](CHANGELOG.md) · [Command reference](docs/COMMANDS
 `fff web` (or **Open archive gallery** in the Manager) serves a local gallery at
 <http://127.0.0.1:5000>.
 
-- **Search** artists, tags, file names or post IDs, with suggestions as you type. Clicking a tag
-  or artist shows exactly that tag; a typed search also matches parts of names.
+- **Search with several tags**, e621-style, with suggestions as you type:
+
+  | You type | Finds |
+  |---|---|
+  | `wolf solo` | posts with all the tags |
+  | `wolf -comic` | posts without a tag |
+  | `~fox ~wolf` | posts with either |
+  | `wolf*` | names starting with "wolf" |
+
+  - A tag or artist name matches exactly that name. Other words match parts of tag, artist and
+    file names, and a number finds a post ID.
+  - Shift-click a trending name to add it to the search.
 - **Filter** by rating, media type (images, GIFs, videos), active or deleted, and sort by
   created or deleted date.
 - **Fast thumbnails.** The grid shows small previews, made once and cached in

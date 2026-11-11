@@ -318,10 +318,82 @@ def test_exact_search_matches_whole_tag_or_artist_names_only():
     assert values == ["macro", "macro"]
 
 
-def test_typed_search_still_matches_substrings():
-    where, values = post_filters({"q": "macro"})
-    assert "qtag.name LIKE %s" in where
-    assert values == ["%macro%"] * 4
+def test_parse_search_splits_required_excluded_and_either():
+    from fff.gui.archive_browser import parse_search
+    assert parse_search("  Wolf solo -comic ~fox ~DOG - ~ ") == (["wolf", "solo"], ["comic"], ["fox", "dog"])
+    assert parse_search("") == ([], [], [])
+
+
+# --- searching with several tags, run against SQLite ----------------------------------
+
+@pytest.fixture
+def search_db():
+    conn = sqlite3.connect(":memory:")
+    conn.executescript("""
+        CREATE TABLE posts (id INTEGER PRIMARY KEY, file_name TEXT, deletion_reason TEXT,
+                            rating TEXT, deleted INTEGER, file_type TEXT, file_path TEXT);
+        CREATE TABLE tags (tag_id INTEGER PRIMARY KEY, name TEXT, tag_type TEXT);
+        CREATE TABLE posts_tags (post_id INTEGER, tag_id INTEGER);
+        CREATE TABLE artists (artist_id INTEGER PRIMARY KEY, name TEXT);
+        CREATE TABLE posts_artists (post_id INTEGER, artist_id INTEGER);
+    """)
+    posts = {  # id: (file name, tags, artists)
+        1: ("alice-explicit-1.png", ["wolf", "solo"], ["alice"]),
+        2: ("bob-explicit-2.png", ["wolf", "duo", "comic"], ["bob"]),
+        3: ("carol-safe-3.png", ["fox", "solo"], ["carol"]),
+        4: ("x-safe-4.png", ["macropod", "kangaroo"], []),
+        5: ("x-safe-5.png", ["macro", "wolf"], []),
+        6: (None, ["2020", "dog"], []),                   # no file name recorded
+        7: ("fallow_deer_sketch.png", [], []),
+        8: ("odd-100%_done.png", ["sketch"], []),
+    }
+    tag_ids, artist_ids = {}, {}
+    for post_id, (file_name, tags, artists) in posts.items():
+        conn.execute("INSERT INTO posts VALUES (?, ?, NULL, 'safe', 0, 'image', ?)", (post_id, file_name, file_name))
+        for tag in tags:
+            tag_id = tag_ids.setdefault(tag, len(tag_ids) + 1)
+            conn.execute("INSERT OR IGNORE INTO tags VALUES (?, ?, 'general')", (tag_id, tag))
+            conn.execute("INSERT INTO posts_tags VALUES (?, ?)", (post_id, tag_id))
+        for artist in artists:
+            artist_id = artist_ids.setdefault(artist, len(artist_ids) + 1)
+            conn.execute("INSERT OR IGNORE INTO artists VALUES (?, ?)", (artist_id, artist))
+            conn.execute("INSERT INTO posts_artists VALUES (?, ?)", (post_id, artist_id))
+    yield conn
+    conn.close()
+
+
+def found(db, q, **args):
+    where, values = post_filters({"q": q, **args})
+    sql = f"SELECT p.id FROM posts p{where} ORDER BY p.id".replace("%s", "?")
+    return [row[0] for row in db.execute(sql, values)]
+
+
+@pytest.mark.parametrize("q, expected", [
+    ("wolf solo", [1]),                 # every tag
+    ("wolf -comic", [1, 5]),            # without
+    ("~fox ~kangaroo", [3, 4]),         # either
+    ("solo ~fox ~wolf", [1, 3]),        # all of, plus one of
+    ("-comic -wolf", [3, 4, 6, 7, 8]),  # only exclusions; a post with no file name isn't dropped
+    ("macro", [5]),                     # an existing tag matches exactly, not macropod
+    ("macro*", [4, 5]),                 # wildcard: starts with
+    ("*o", [1, 2, 3, 4, 5]),            # wildcard: ends with (solo, duo, kangaroo, macro)
+    ("alice", [1]),                     # an artist
+    ("Wolf SOLO", [1]),                 # case doesn't matter
+    ("kanga", [4]),                     # not a name: tags containing it
+    ("deer", [7]),                      # not a name: file names containing it
+    ("2020", [6]),                      # a tag that is a number
+    ("3", [3]),                         # a post id (no tag "3"); no file name contains a 3 either
+    ("100%", [8]),                      # % is a literal character, not a wildcard
+    ("", [1, 2, 3, 4, 5, 6, 7, 8]),
+])
+def test_search_words_combine_like_e621(search_db, q, expected):
+    assert found(search_db, q) == expected
+
+
+def test_picked_names_match_exactly_without_falling_back(search_db):
+    assert found(search_db, "macro", exact="1") == [5]
+    assert found(search_db, "kanga", exact="1") == []          # not a name: nothing, no "contains"
+    assert found(search_db, "wolf solo", exact="1") == [1]     # several picked names
 
 
 def test_post_page_tag_links_are_exact_searches():

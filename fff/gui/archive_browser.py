@@ -121,6 +121,7 @@ PAGE = r"""
     .searchbar label { display:block; margin-bottom:2px; color:var(--muted); font-size:11px; }
     .searchbar .search { position:relative; flex:3 1 280px; }
     .searchbar .search input { width:100%; }
+    .search-help { margin-top:3px; color:var(--muted); font-size:11px; }
     .layout { display:grid; grid-template-columns:minmax(0, 1fr) 260px; gap:20px; align-items:start; }
     .stats { margin:0 0 12px; color:var(--muted); }
     .stats strong { color:var(--ink); }
@@ -171,7 +172,7 @@ PAGE = r"""
   {{ site_header('posts')|safe }}
   <div class="wrap"><main class="box">
     <form id="filters" class="searchbar">
-      <div class="search"><label for="q">Search</label><input id="q" name="q" placeholder="artist, tag, filename, or post ID" autocomplete="off" role="combobox" aria-autocomplete="list" aria-controls="suggest" aria-expanded="false"><ul id="suggest" class="suggest" role="listbox" hidden></ul></div>
+      <div class="search"><label for="q">Search</label><input id="q" name="q" placeholder="tags, artists, file name or post ID, e.g. wolf solo -comic" autocomplete="off" role="combobox" aria-autocomplete="list" aria-controls="suggest" aria-expanded="false" aria-describedby="search-help"><ul id="suggest" class="suggest" role="listbox" hidden></ul><div class="search-help" id="search-help">{{ search_help }}</div></div>
       <div><label for="rating">Rating</label><select id="rating"><option value="">All ratings</option><option>safe</option><option>questionable</option><option>explicit</option></select></div>
       <div><label for="media">Media type</label><select id="media"><option value="">All media</option><option value="image">Images</option><option value="gif">GIFs</option><option value="video">Videos</option><option value="other">Other</option></select></div>
       <div><label for="deleted">Status</label><select id="deleted"><option value="">All posts</option><option value="0">Active</option><option value="1">Deleted</option></select></div>
@@ -241,7 +242,8 @@ PAGE = r"""
       const response = await fetch('/api/posts?' + params()); const data = await response.json();
       if (!response.ok) { grid.innerHTML = `<div class="empty">${esc(data.error || 'Unable to load posts')}</div>`; return; }
       const term = document.querySelector('#q').value.trim();
-      document.querySelector('#stats').innerHTML = `<strong>${data.total.toLocaleString()}</strong> ${exactSearch && term ? `posts tagged <strong>${esc(term)}</strong> (exact match)` : 'matching posts'}`;
+      document.querySelector('#stats').innerHTML = `<strong>${data.total.toLocaleString()}</strong> ${!term ? 'posts'
+        : `posts matching <strong>${esc(term)}</strong>${exactSearch ? ' (exact names)' : ''}`}`;
       grid.innerHTML = data.posts.length ? data.posts.map(card).join('') : '<div class="empty">No posts matched those filters.</div>';
       document.querySelector('#page').textContent = `Page ${data.page} of ${Math.max(1, data.pages)}`;
       document.querySelector('#prev').disabled = data.page <= 1; document.querySelector('#next').disabled = data.page >= data.pages;
@@ -260,9 +262,25 @@ PAGE = r"""
       list.hidden = false; q.setAttribute('aria-expanded', 'true');
       list.querySelector('.active')?.scrollIntoView({ block: 'nearest' });
     }
-    function pick(i) { q.value = suggestions[i].name; exactSearch = true; hideSuggestions(); currentPage = 1; load(); }
+    // The word being typed: the text after the last space, without a leading - or ~.
+    function currentWord() {
+      const start = q.value.search(/\S*$/);
+      const raw = q.value.slice(start);
+      const prefix = /^[-~]/.test(raw) ? raw[0] : '';
+      return { start, prefix, term: raw.slice(prefix.length).toLowerCase() };
+    }
+    function searchWords() { return q.value.trim().toLowerCase().split(/\s+/).filter(Boolean); }
+    // Picking a suggestion completes the word being typed (keeping its - or ~) and searches.
+    function pick(i) {
+      const word = currentWord();
+      q.value = q.value.slice(0, word.start) + word.prefix + suggestions[i].name + ' ';
+      hideSuggestions(); currentPage = 1; load(); q.focus();
+    }
+    function addToSearch(name) {
+      if (!searchWords().includes(name)) q.value = (q.value.trim() + ' ' + name).trim();
+    }
     const trendingList = document.querySelector('#trending'), trendingDays = document.querySelector('#trending-days');
-    function markActiveTrend() { trendingList.querySelectorAll('.trend').forEach(b => b.classList.toggle('active', b.dataset.tag === q.value.trim())); }
+    function markActiveTrend() { const words = searchWords(); trendingList.querySelectorAll('.trend').forEach(b => b.classList.toggle('active', words.includes(b.dataset.tag))); }
     const trendOrderButtons = document.querySelectorAll('.trend-order button');
     let trendOrder = 'top';
     try { if (localStorage.getItem('trendOrder') === 'rising') trendOrder = 'rising'; } catch {}
@@ -277,7 +295,7 @@ PAGE = r"""
     const trendEmpty = { fetish: 'Nothing trending. Tags show here when listed in data/kink_tags.txt or marked fetish (key F) in the Generic tags tool.' };
     function trendItem(t, i, data) {
       const tip = `${t.recent.toLocaleString()} of ${data.recent_posts.toLocaleString()} posts archived in the last ${data.days} days (${t.total.toLocaleString()} all-time), ${t.lift}x its usual rate`;
-      return `<li><button type="button" class="trend" data-tag="${esc(t.name)}" title="${esc(tip)}"><span class="tname">${esc(t.name.replace(/_/g, ' '))}</span><span class="tcount">${t.recent.toLocaleString()}</span></button></li>`;
+      return `<li><button type="button" class="trend" data-tag="${esc(t.name)}" title="${esc(tip + ' · Shift-click to add to the search')}"><span class="tname">${esc(t.name.replace(/_/g, ' '))}</span><span class="tcount">${t.recent.toLocaleString()}</span></button></li>`;
     }
     async function loadTrending() {
       trendingList.innerHTML = '<p class="note">Loading...</p>';
@@ -291,13 +309,20 @@ PAGE = r"""
         markActiveTrend();
       } catch { trendingList.innerHTML = '<p class="note">Trending is unavailable right now.</p>'; }
     }
-    trendingList.addEventListener('click', event => { const b = event.target.closest('.trend'); if (b) { q.value = b.dataset.tag; exactSearch = true; hideSuggestions(); currentPage = 1; load(); } });
+    // Click searches for the name; Shift- or Ctrl-click adds it to the current search.
+    trendingList.addEventListener('click', event => {
+      const b = event.target.closest('.trend');
+      if (!b) return;
+      if (event.shiftKey || event.ctrlKey || event.metaKey) { addToSearch(b.dataset.tag); }
+      else { q.value = b.dataset.tag; exactSearch = true; }
+      hideSuggestions(); currentPage = 1; load();
+    });
     trendingDays.addEventListener('change', loadTrending);
     q.addEventListener('input', () => {
       exactSearch = false;
       clearTimeout(suggestTimer);
-      const term = q.value.trim().toLowerCase().replace(/ /g, '_');
-      if (term.length < 2) { hideSuggestions(); return; }
+      const term = currentWord().term;
+      if (term.length < 2 || term.includes('*')) { hideSuggestions(); return; }
       suggestTimer = setTimeout(async () => {
         const seq = ++suggestSeq;
         try {
@@ -309,7 +334,7 @@ PAGE = r"""
     });
     q.addEventListener('keydown', event => {
       if (list.hidden) return;
-      const term = q.value.trim().toLowerCase().replace(/ /g, '_');
+      const term = currentWord().term;
       if (event.key === 'ArrowDown') { event.preventDefault(); active = (active + 1) % suggestions.length; renderSuggestions(term); }
       else if (event.key === 'ArrowUp') { event.preventDefault(); active = active <= 0 ? suggestions.length - 1 : active - 1; renderSuggestions(term); }
       else if ((event.key === 'Enter' || event.key === 'Tab') && active >= 0) { event.preventDefault(); pick(active); }
@@ -635,35 +660,84 @@ def database_connection():
     return connection
 
 
+# Search syntax, as on e621: words separated by spaces must all match; "-word" excludes;
+# "~a ~b" matches either; "*" is a wildcard. A word that is a tag or artist name matches
+# exactly that name (so "macro" doesn't find "macropod"); any other word falls back to
+# matching inside tag, artist and file names, and a number also matches a post id.
+SEARCH_HELP = "Spaces between tags: all of them · -tag: without · ~a ~b: either · wolf*: starts with"
+_LIKE_ESCAPE = "!"  # an ESCAPE character that means the same in MySQL and SQLite string literals
+
+# Tags/artists are matched first and their posts looked up by id; a per-post EXISTS would
+# re-scan the tag names for every post (~400x slower).
+_TAG_POSTS = ("p.id IN (SELECT qt.post_id FROM posts_tags qt JOIN tags qtag ON qtag.tag_id = qt.tag_id"
+              " WHERE qtag.name {match})")
+_ARTIST_POSTS = ("p.id IN (SELECT qa.post_id FROM posts_artists qa JOIN artists qar ON qar.artist_id = qa.artist_id"
+                 " WHERE qar.name {match})")
+
+
+def parse_search(query: str) -> tuple[list[str], list[str], list[str]]:
+    """'wolf Solo -comic ~fox ~dog' -> (['wolf', 'solo'], ['comic'], ['fox', 'dog'])."""
+    required, excluded, any_of = [], [], []
+    for word in query.lower().split():
+        if word[0] in "-~" and len(word) > 1:
+            (excluded if word[0] == "-" else any_of).append(word[1:])
+        elif word not in ("-", "~"):
+            required.append(word)
+    return required, excluded, any_of
+
+
+def _like_escape_for_search(text: str) -> str:
+    return text.replace(_LIKE_ESCAPE, _LIKE_ESCAPE * 2).replace("%", _LIKE_ESCAPE + "%").replace(
+        "_", _LIKE_ESCAPE + "_")
+
+
+def search_condition(word: str, exact_only: bool = False) -> tuple[str, list]:
+    """SQL (true for posts matching one search word) and its values."""
+    like_op = f"LIKE %s ESCAPE '{_LIKE_ESCAPE}'"
+    if "*" in word:
+        pattern = _like_escape_for_search(word).replace("*", "%")
+        return (f"({_TAG_POSTS.format(match=like_op)} OR {_ARTIST_POSTS.format(match=like_op)})",
+                [pattern, pattern])
+    exact = f"{_TAG_POSTS.format(match='= %s')} OR {_ARTIST_POSTS.format(match='= %s')}"
+    if exact_only:
+        return f"({exact})", [word, word]
+    like = f"%{_like_escape_for_search(word)}%"
+    contains = (f"COALESCE(p.file_name, '') {like_op} OR COALESCE(p.deletion_reason, '') {like_op}"
+                f" OR {_TAG_POSTS.format(match=like_op)} OR {_ARTIST_POSTS.format(match=like_op)}")
+    contains_values = [like, like, like, like]
+    if word.isdecimal():
+        contains, contains_values = f"p.id = %s OR {contains}", [int(word), *contains_values]
+    # Not correlated with p, so MySQL works out "is this a known name" once per search.
+    known = "(EXISTS (SELECT 1 FROM tags kt WHERE kt.name = %s) OR EXISTS (SELECT 1 FROM artists ka WHERE ka.name = %s))"
+    return (f"({exact} OR (NOT {known} AND ({contains})))",
+            [word, word, word, word, *contains_values])
+
+
 def post_filters(args):
     where = []
     values = []
     query = args.get("q", "").strip()
-    # exact=1: q is one tag or artist name picked from a list (trending, suggestions, a
-    # post's tags), so match that name only. Typed searches match substrings, which
-    # would make "macro" also find every "macropod" post.
+    # exact=1: the words were picked from a list (trending, suggestions, a post's tags), so
+    # they are tag/artist names: match exactly, with no "contains" fallback.
     exact = args.get("exact", "") == "1"
     rating = args.get("rating", "").strip().lower()
     deleted = args.get("deleted", "").strip()
     media = args.get("media", "").strip().lower()
 
-    if query and exact:
-        where.append("(p.id IN (SELECT qa.post_id FROM posts_artists qa JOIN artists qar ON qar.artist_id = qa.artist_id WHERE qar.name = %s)"
-                     " OR p.id IN (SELECT qt.post_id FROM posts_tags qt JOIN tags qtag ON qtag.tag_id = qt.tag_id WHERE qtag.name = %s))")
-        values.extend([query, query])
-    elif query:
-        like = f"%{query}%"
-        # Resolve matching tags/artists first and look their posts up by id; a
-        # per-post EXISTS re-scans the tag names for every post (~400x slower).
-        text_match = ("p.file_name LIKE %s OR p.deletion_reason LIKE %s"
-                      " OR p.id IN (SELECT qa.post_id FROM posts_artists qa JOIN artists qar ON qar.artist_id = qa.artist_id WHERE qar.name LIKE %s)"
-                      " OR p.id IN (SELECT qt.post_id FROM posts_tags qt JOIN tags qtag ON qtag.tag_id = qt.tag_id WHERE qtag.name LIKE %s)")
-        if query.isdecimal():
-            where.append(f"(p.id = %s OR {text_match})")
-            values.append(int(query))
-        else:
-            where.append(f"({text_match})")
-        values.extend([like, like, like, like])
+    required, excluded, any_of = parse_search(query)
+    for word in required:
+        sql, word_values = search_condition(word, exact)
+        where.append(sql)
+        values.extend(word_values)
+    for word in excluded:
+        sql, word_values = search_condition(word, exact)
+        where.append(f"NOT {sql}")
+        values.extend(word_values)
+    if any_of:
+        parts = [search_condition(word, exact) for word in any_of]
+        where.append("(" + " OR ".join(sql for sql, _ in parts) + ")")
+        for _sql, word_values in parts:
+            values.extend(word_values)
     if rating in {"safe", "questionable", "explicit"}:
         where.append("p.rating = %s")
         values.append(rating)
@@ -689,7 +763,8 @@ def post_sort(args):
 
 @app.get("/")
 def index():
-    return render_template_string(PAGE, can_open=is_local_request(), site_header=site_header)
+    return render_template_string(PAGE, can_open=is_local_request(), site_header=site_header,
+                                  search_help=SEARCH_HELP)
 
 
 @app.get("/post/<int:post_id>")
