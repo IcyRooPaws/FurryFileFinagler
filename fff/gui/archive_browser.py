@@ -5,10 +5,13 @@ import argparse
 import os
 import subprocess
 import sys
+import time
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from flask import Flask, abort, jsonify, render_template_string, request, send_file
 
+from fff.archive import generic_tags
 from fff.archive.config import load_config
 from fff.archive.db import connect_to_mysql
 
@@ -63,8 +66,13 @@ PAGE = r"""
     header { padding:32px 24px 26px; border-bottom:1px solid var(--line); background:#1d2321ee; text-align:center; }
     h1 { margin:0; font:700 clamp(28px, 4vw, 48px)/1.05 "Trebuchet MS", sans-serif; letter-spacing:0; }
     .subtitle { color:var(--muted); margin:8px 0 0; }
-    main { max-width:1280px; margin:0 auto; padding:28px 24px 50px; }
-    .controls { display:grid; grid-template-columns:minmax(220px, 1fr) 160px 160px 160px 190px auto; gap:10px; align-items:end; margin-bottom:18px; }
+    main { max-width:1560px; margin:0 auto; padding:28px 24px 50px; }
+    .controls { display:flex; flex-wrap:wrap; gap:10px; align-items:flex-end; margin-bottom:18px; }
+    .controls > div { flex:1 1 150px; }
+    .controls > .search { flex:3 1 260px; }
+    .controls > button { flex:0 0 auto; width:auto; padding-inline:18px; }
+    .layout { display:grid; grid-template-columns:minmax(0, 1fr) 300px; gap:24px; align-items:start; }
+    .sidebar { position:sticky; top:16px; max-height:calc(100vh - 32px); overflow-y:auto; }
     label { display:block; color:var(--muted); font:600 12px "Trebuchet MS", sans-serif; text-transform:uppercase; letter-spacing:.04em; }
     input, select, button { width:100%; min-height:42px; padding:9px 11px; border:1px solid var(--line); border-radius:4px; background:#1d2321; color:var(--ink); font:inherit; }
     button { cursor:pointer; background:var(--teal); border-color:var(--teal); color:white; font-family:"Trebuchet MS", sans-serif; font-weight:700; }
@@ -92,6 +100,21 @@ PAGE = r"""
     .pager { display:flex; justify-content:center; align-items:center; gap:14px; margin-top:24px; }
     .pager button { width:auto; min-width:90px; }
     .empty { padding:50px 15px; text-align:center; color:var(--muted); }
+    .trending { padding:14px; border:1px solid var(--line); border-radius:6px; background:#33365f80; }
+    .trending-head { display:flex; justify-content:space-between; align-items:center; gap:12px; }
+    .trending h2 { margin:0; color:var(--muted); font:600 12px "Trebuchet MS", sans-serif; text-transform:uppercase; letter-spacing:.04em; }
+    .trending select { width:auto; min-height:0; padding:4px 8px; font-size:13px; }
+    .trend-group { margin-top:14px; }
+    .trend-group h3 { margin:0 0 4px; padding-bottom:4px; border-bottom:1px solid var(--line); font:700 14px "Trebuchet MS", sans-serif; }
+    .trend-group ol { margin:0; padding:0; list-style:none; }
+    .trending .note { margin:6px 0 0; color:var(--muted); font-size:13px; }
+    .trend { display:flex; align-items:baseline; gap:8px; width:100%; min-height:0; padding:4px 6px; border:0; border-radius:4px; background:none; color:var(--ink); font:400 14px Georgia, serif; text-align:left; }
+    .trend:hover { background:#1d2321aa; border-color:transparent; }
+    .trend.active { background:#de3c2e2a; }
+    .trend .rank { flex:none; width:1.5em; text-align:right; color:var(--muted); font:700 12px "Trebuchet MS", sans-serif; }
+    .trend .tname { flex:1; min-width:0; overflow-wrap:anywhere; }
+    .trend .tcount { flex:none; color:var(--accent); font:700 12px "Trebuchet MS", sans-serif; }
+    @media (max-width:1000px) { .layout { grid-template-columns:1fr; } .sidebar { position:static; max-height:none; order:-1; } .trend-groups { display:grid; grid-template-columns:repeat(auto-fill, minmax(220px, 1fr)); gap:0 20px; } }
     .search { position:relative; }
     .suggest { position:absolute; z-index:10; top:100%; left:0; right:0; margin:4px 0 0; padding:4px 0; list-style:none; border:1px solid var(--line); border-radius:4px; background:#1d2321; box-shadow:0 10px 28px #00000080; max-height:360px; overflow-y:auto; }
     .suggest[hidden] { display:none; }
@@ -101,7 +124,7 @@ PAGE = r"""
     .suggest .name mark { background:none; color:var(--accent); font-weight:700; }
     .suggest .kind, .suggest .count { color:var(--muted); font:12px "Trebuchet MS", sans-serif; }
     .suggest .kind.artist { color:var(--accent); }
-    @media (max-width:700px) { .controls { grid-template-columns:1fr 1fr; } .controls .search { grid-column:1/-1; } .grid { grid-template-columns:repeat(auto-fill, minmax(160px, 1fr)); gap:9px; } }
+    @media (max-width:700px) { .controls > .search { flex-basis:100%; } .grid { grid-template-columns:repeat(auto-fill, minmax(160px, 1fr)); gap:9px; } }
   </style>
 </head>
 <body>
@@ -115,9 +138,19 @@ PAGE = r"""
     <div><label for="sort">Sort by</label><select id="sort"><option value="created_at_desc">Created: newest</option><option value="created_at_asc">Created: oldest</option><option value="deleted_at_desc">Deleted: newest</option><option value="deleted_at_asc">Deleted: oldest</option></select></div>
       <button type="submit">Search archive</button>
     </form>
-    <div class="stats" id="stats">Loading archive...</div>
-    <section class="grid" id="grid"></section>
-    <div class="pager"><button id="prev">Previous</button><span id="page"></span><button id="next">Next</button></div>
+    <div class="layout">
+      <div class="results">
+        <div class="stats" id="stats">Loading archive...</div>
+        <section class="grid" id="grid"></section>
+        <div class="pager"><button id="prev">Previous</button><span id="page"></span><button id="next">Next</button></div>
+      </div>
+      <aside class="sidebar">
+        <section class="trending" aria-labelledby="trending-title">
+          <div class="trending-head"><h2 id="trending-title">Trending</h2><select id="trending-days" aria-label="Trending window"><option value="7">Last 7 days</option><option value="30" selected>Last 30 days</option><option value="90">Last 90 days</option></select></div>
+          <div class="trend-groups" id="trending"><p class="note">Loading...</p></div>
+        </section>
+      </aside>
+    </div>
   </main>
   <script>
     let currentPage = 1;
@@ -143,6 +176,7 @@ PAGE = r"""
     document.querySelector('#grid').addEventListener('click', event => { const button = event.target.closest('button[data-open]'); if (button) openLocal(button); });
     async function load() {
       const grid = document.querySelector('#grid'); grid.innerHTML = '<div class="empty">Loading...</div>';
+      markActiveTrend();
       const response = await fetch('/api/posts?' + params()); const data = await response.json();
       if (!response.ok) { grid.innerHTML = `<div class="empty">${esc(data.error || 'Unable to load posts')}</div>`; return; }
       document.querySelector('#stats').innerHTML = `<strong>${data.total.toLocaleString()}</strong> matching posts`;
@@ -165,6 +199,27 @@ PAGE = r"""
       list.querySelector('.active')?.scrollIntoView({ block: 'nearest' });
     }
     function pick(i) { q.value = suggestions[i].name; hideSuggestions(); currentPage = 1; load(); }
+    const trendingList = document.querySelector('#trending'), trendingDays = document.querySelector('#trending-days');
+    function markActiveTrend() { trendingList.querySelectorAll('.trend').forEach(b => b.classList.toggle('active', b.dataset.tag === q.value.trim())); }
+    const trendEmpty = { fetish: 'Nothing trending. Tags only show here once marked fetish (key F) in the Generic tags tool.' };
+    function trendItem(t, i, data) {
+      const tip = `${t.recent.toLocaleString()} of ${data.recent_posts.toLocaleString()} posts archived in the last ${data.days} days (${t.total.toLocaleString()} all-time), ${t.lift}x its usual rate`;
+      return `<li><button type="button" class="trend" data-tag="${esc(t.name)}" title="${esc(tip)}"><span class="rank">${i + 1}</span><span class="tname">${esc(t.name.replace(/_/g, ' '))}</span><span class="tcount">${t.recent.toLocaleString()}</span></button></li>`;
+    }
+    async function loadTrending() {
+      trendingList.innerHTML = '<p class="note">Loading...</p>';
+      try {
+        const response = await fetch('/api/trending?' + new URLSearchParams({ days: trendingDays.value })); const data = await response.json();
+        if (!response.ok) throw new Error(data.error);
+        if (!data.recent_posts) { trendingList.innerHTML = `<p class="note">No posts archived in the last ${data.days} days.</p>`; return; }
+        trendingList.innerHTML = data.categories.map(cat => `<section class="trend-group"><h3>${esc(cat.title)}</h3>${cat.items.length
+          ? `<ol>${cat.items.map((t, i) => trendItem(t, i, data)).join('')}</ol>`
+          : `<p class="note">${esc(trendEmpty[cat.key] || 'Nothing stands out.')}</p>`}</section>`).join('');
+        markActiveTrend();
+      } catch { trendingList.innerHTML = '<p class="note">Trending is unavailable right now.</p>'; }
+    }
+    trendingList.addEventListener('click', event => { const b = event.target.closest('.trend'); if (b) { q.value = b.dataset.tag; hideSuggestions(); currentPage = 1; load(); } });
+    trendingDays.addEventListener('change', loadTrending);
     q.addEventListener('input', () => {
       clearTimeout(suggestTimer);
       const term = q.value.trim().toLowerCase().replace(/ /g, '_');
@@ -191,6 +246,7 @@ PAGE = r"""
     document.querySelector('#prev').addEventListener('click', () => { if (currentPage > 1) { currentPage--; load(); } });
     document.querySelector('#next').addEventListener('click', () => { currentPage++; load(); });
     load();
+    loadTrending();
   </script>
 </body>
 </html>
@@ -287,6 +343,18 @@ DETAIL_PAGE = r"""
 """
 
 
+# e621's order on a post page: the specific sections first, the long General list
+# after them, then Meta. (Alphabetical put Species last, under 50+ General tags.)
+TAG_SECTION_ORDER = ("copyright", "character", "species", "general", "lore", "meta")
+
+
+def tag_section_rank(category):
+    category = (category or "").lower()
+    if category in TAG_SECTION_ORDER:
+        return TAG_SECTION_ORDER.index(category), category
+    return len(TAG_SECTION_ORDER), category  # unknown types go last, alphabetically
+
+
 def database_connection():
     config = load_config()
     connection = connect_to_mysql(config.get("mysql", {}))
@@ -379,6 +447,7 @@ def post_detail(post_id):
         tags = {}
         for category, tag in cursor.fetchall():
             tags.setdefault(category or "other", []).append(tag)
+        tags = dict(sorted(tags.items(), key=lambda item: tag_section_rank(item[0])))
 
         cursor.execute("""
             SELECT source_link
@@ -526,6 +595,100 @@ def post_file_path(post_id):
     if not row or not row[0] or not os.path.isfile(row[0]):
         return None
     return row[0]
+
+
+TRENDING_WINDOWS = (7, 30, 90)  # days; the UI offers these
+TRENDING_LIMIT = 10
+TRENDING_CACHE_SECONDS = 600
+# One top-10 list each, in sidebar order. Character and species are e621 tag types;
+# e621 files fetish tags under General, so that list only holds tags marked fetish in
+# the Generic tags tool (fff gui generic-tags). Tags marked generic there never trend.
+TRENDING_CATEGORIES = (("artist", "Artists"), ("character", "Characters"), ("species", "Species"),
+                       ("fetish", "Fetish"))
+_trending_cache = {}
+
+
+def trending(cursor, days, now=None, limit=TRENDING_LIMIT):
+    """Artists and tags that show up far more in recently archived posts than usual.
+
+    Raw recent counts just repeat the all-time leaders (mammal, canine, ...),
+    so everything is ranked by lift: its share of posts archived in the last
+    `days` against its share of the whole archive. A minimum recent count
+    keeps a name seen on one or two new posts from topping a list.
+    """
+    cutoff = (now or datetime.now()) - timedelta(days=days)
+    cursor.execute("SELECT COUNT(*) FROM posts WHERE ingested_at >= %s", (cutoff,))
+    recent_posts = cursor.fetchone()[0]
+    cursor.execute("SELECT COUNT(*) FROM posts")
+    total_posts = cursor.fetchone()[0]
+    buckets = {key: [] for key, _ in TRENDING_CATEGORIES}
+    if recent_posts:
+        min_uses = max(5, recent_posts // 200)
+        cursor.execute("""
+            SELECT ar.name, r.uses, a.uses
+            FROM (SELECT pa.artist_id, COUNT(*) AS uses
+                  FROM posts p JOIN posts_artists pa ON pa.post_id = p.id
+                  WHERE p.ingested_at >= %s
+                  GROUP BY pa.artist_id
+                  HAVING COUNT(*) >= %s) r
+            JOIN artists ar ON ar.artist_id = r.artist_id
+            JOIN (SELECT artist_id, COUNT(*) AS uses FROM posts_artists GROUP BY artist_id) a
+              ON a.artist_id = r.artist_id
+        """, (cutoff, min_uses))
+        buckets["artist"] = [(name, recent, total) for name, recent, total in cursor.fetchall()]
+        cursor.execute(f"""
+            SELECT t.name, LOWER(COALESCE(t.tag_type, 'general')), r.uses, a.uses, tc.is_generic, tc.is_fetish
+            FROM (SELECT pt.tag_id, COUNT(*) AS uses
+                  FROM posts p JOIN posts_tags pt ON pt.post_id = p.id
+                  WHERE p.ingested_at >= %s
+                  GROUP BY pt.tag_id
+                  HAVING COUNT(*) >= %s) r
+            JOIN tags t ON t.tag_id = r.tag_id
+            JOIN (SELECT tag_id, COUNT(*) AS uses FROM posts_tags GROUP BY tag_id) a ON a.tag_id = r.tag_id
+            LEFT JOIN {generic_tags.TABLE} tc ON tc.tag_id = t.tag_id
+        """, (cutoff, min_uses))
+        for name, kind, recent, total, is_generic, is_fetish in cursor.fetchall():
+            if is_generic:
+                continue
+            key = "fetish" if is_fetish else kind
+            if key in buckets and key != "artist":
+                buckets[key].append((name, recent, total))
+
+    def ranked(rows):
+        rows = sorted(rows, key=lambda r: (-(r[1] / r[2]), -r[1], r[0]))[:limit]
+        return [{"name": name, "recent": recent, "total": total,
+                 "lift": round((recent / recent_posts) / (total / total_posts), 1)}
+                for name, recent, total in rows]
+
+    return {"days": days, "recent_posts": recent_posts,
+            "categories": [{"key": key, "title": title, "items": ranked(buckets[key])}
+                           for key, title in TRENDING_CATEGORIES]}
+
+
+@app.get("/api/trending")
+def trending_api():
+    try:
+        days = int(request.args.get("days", 30))
+    except ValueError:
+        days = 30
+    if days not in TRENDING_WINDOWS:
+        days = 30
+    cached = _trending_cache.get(days)
+    if cached and time.monotonic() - cached[0] < TRENDING_CACHE_SECONDS:
+        return jsonify(cached[1])
+    try:
+        connection = database_connection()
+        try:
+            generic_tags.ensure_table(connection)
+            cursor = connection.cursor()
+            result = trending(cursor, days)
+            cursor.close()
+        finally:
+            connection.close()
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+    _trending_cache[days] = (time.monotonic(), result)
+    return jsonify(result)
 
 
 @app.get("/media/<int:post_id>")

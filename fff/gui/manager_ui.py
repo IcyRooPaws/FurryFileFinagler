@@ -135,6 +135,8 @@ TOOLS = (
     Tool("artist-review", "Artist review", "Review archive posts by the artists in review_artists.yaml.",
          "fff.gui.artists_review_ui", ("gui", "artist-review"),
          warning="Delete unfavorites the post on e621 and sends its file to the Recycle Bin."),
+    Tool("generic-tags", "Generic tags", "Mark archive tags as generic or not, and copy a query that leaves "
+         "the generic ones out.", "fff.gui.generic_tags_ui", ("gui", "generic-tags")),
 )
 
 

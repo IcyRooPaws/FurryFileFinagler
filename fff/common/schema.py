@@ -47,7 +47,7 @@ REQUIRED_TABLES = {
     "archive": ("posts", "tags", "artists", "posts_artists", "posts_tags", "source_links", "pools",
                 "posts_pools", "e621_perceptual_hashes", "artist_file_renames", "post_relationships",
                 "takedowns", "post_takedowns", "unfavorited_posts_archive", "ai_generated_posts_archive",
-                "ai_flagged_artists", "fa_pending_unfavorites"),
+                "ai_flagged_artists", "fa_pending_unfavorites", "tag_classifications"),
     "sorter": ("file_operations", "video_signatures", "similarity_checkpoint", "non_duplicate_groups",
                "duplicate_sessions"),
 }
@@ -248,10 +248,12 @@ def init(progress=print) -> dict:
     progress(f"archive: {names['archive']}")
     from fff.archive.db import create_tables_if_not_exists
     from fff.archive.fa_unfavorite import _ensure_pending_table
+    from fff.archive.generic_tags import ensure_table as _ensure_tag_classifications
     conn = db.connect("archive", cfg, pooled=False)
     try:
         create_tables_if_not_exists(conn)
         _ensure_pending_table(conn)
+        _ensure_tag_classifications(conn)
     finally:
         conn.close()
 

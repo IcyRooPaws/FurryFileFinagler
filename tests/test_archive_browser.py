@@ -135,3 +135,137 @@ def test_launch_reveal_on_windows_selects_the_file(monkeypatch):
     monkeypatch.setattr(archive_browser.subprocess, "Popen", commands.append)
     archive_browser.launch(r"P:\some dir\x.png", reveal=True)
     assert commands == [r'explorer /select,"P:\some dir\x.png"']
+
+
+# --- trending tags -------------------------------------------------------------
+
+from datetime import datetime, timedelta  # noqa: E402
+
+NOW = datetime(2026, 11, 10, 12, 0, 0)
+
+
+class _Cursor:
+    """MySQL-style %s placeholders and datetime params over sqlite3."""
+
+    def __init__(self, conn):
+        self._cur = conn.cursor()
+
+    def execute(self, sql, params=()):
+        params = [p.isoformat(" ") if isinstance(p, datetime) else p for p in params]
+        self._cur.execute(sql.replace("%s", "?"), params)
+
+    def fetchone(self):
+        return self._cur.fetchone()
+
+    def fetchall(self):
+        return self._cur.fetchall()
+
+
+@pytest.fixture
+def tag_db():
+    conn = sqlite3.connect(":memory:")
+    conn.executescript("""
+        CREATE TABLE posts (id INTEGER PRIMARY KEY, ingested_at TEXT);
+        CREATE TABLE tags (tag_id INTEGER PRIMARY KEY, name TEXT, tag_type TEXT);
+        CREATE TABLE posts_tags (post_id INTEGER, tag_id INTEGER);
+        CREATE TABLE artists (artist_id INTEGER PRIMARY KEY, name TEXT);
+        CREATE TABLE posts_artists (post_id INTEGER, artist_id INTEGER);
+        CREATE TABLE tag_classifications (tag_id INTEGER PRIMARY KEY, is_generic INTEGER, is_fetish INTEGER);
+    """)
+    old = (NOW - timedelta(days=200)).isoformat(" ")
+    recent = (NOW - timedelta(days=3)).isoformat(" ")
+    old_ids, recent_ids = range(1, 101), range(101, 121)  # 100 old posts, 20 recent
+    conn.executemany("INSERT INTO posts VALUES (?, ?)",
+                     [(i, old) for i in old_ids] + [(i, recent) for i in recent_ids])
+    tags = {  # name: (type, old posts, recent posts, mark)
+        "mammal": ("Species", old_ids, recent_ids, None),              # everywhere: lift 1
+        "newchar": ("Character", [], recent_ids[:6], None),             # lift 6
+        "oldchar": ("Character", old_ids[:10], recent_ids[:5], None),   # lift 2
+        "rare": ("Character", [], recent_ids[:2], None),                # under the minimum
+        "male_(lore)": ("Lore", [], recent_ids[:5], None),              # no lore list
+        "solo": ("General", [], recent_ids, None),                      # general, not marked fetish
+        "comic": ("Meta", [], recent_ids[:10], None),                   # meta
+        "untyped": (None, [], recent_ids[:8], None),                    # counts as general
+        "dragon": ("Species", [], recent_ids[:9], "generic"),           # lift 6, but generic
+        "scalie": ("Species", [], recent_ids[:7], "specific"),          # reviewed: not generic
+        "chastity_cage": ("General", [], recent_ids[:8], "fetish"),     # lift 6
+        "hyper": ("General", old_ids[:5], recent_ids[:5], "fetish"),    # lift 3
+        "bondage": ("General", [], recent_ids[:3], "fetish"),           # under the minimum
+    }
+    for tag_id, (name, (kind, olds, recents, mark)) in enumerate(tags.items(), 1):
+        conn.execute("INSERT INTO tags VALUES (?, ?, ?)", (tag_id, name, kind))
+        conn.executemany("INSERT INTO posts_tags VALUES (?, ?)", [(p, tag_id) for p in [*olds, *recents]])
+        if mark:
+            conn.execute("INSERT INTO tag_classifications VALUES (?, ?, ?)",
+                         (tag_id, int(mark == "generic"), int(mark == "fetish")))
+    artists = {"newartist": ([], recent_ids[:10]), "steady": (old_ids[:50], recent_ids[10:]),
+               "oneoff": ([], recent_ids[:2])}
+    for artist_id, (name, (olds, recents)) in enumerate(artists.items(), 1):
+        conn.execute("INSERT INTO artists VALUES (?, ?)", (artist_id, name))
+        conn.executemany("INSERT INTO posts_artists VALUES (?, ?)", [(p, artist_id) for p in [*olds, *recents]])
+    yield conn
+    conn.close()
+
+
+def lists(result):
+    return {cat["key"]: [(t["name"], t["recent"], t["lift"]) for t in cat["items"]] for cat in result["categories"]}
+
+
+def test_trending_lists_rank_by_lift_per_category(tag_db):
+    result = archive_browser.trending(_Cursor(tag_db), 30, now=NOW)
+    assert result["recent_posts"] == 20
+    assert [cat["title"] for cat in result["categories"]] == ["Artists", "Characters", "Species", "Fetish"]
+    assert lists(result) == {
+        "artist": [("newartist", 10, 6.0), ("steady", 10, 1.0)],
+        "character": [("newchar", 6, 6.0), ("oldchar", 5, 2.0)],
+        "species": [("scalie", 7, 6.0), ("mammal", 20, 1.0)],   # dragon is marked generic
+        "fetish": [("chastity_cage", 8, 6.0), ("hyper", 5, 3.0)],  # only tags marked fetish
+    }
+
+
+def test_trending_respects_limit(tag_db):
+    result = archive_browser.trending(_Cursor(tag_db), 30, now=NOW, limit=1)
+    assert all(len(cat["items"]) == 1 for cat in result["categories"])
+
+
+def test_trending_with_no_recent_posts_is_empty(tag_db):
+    result = archive_browser.trending(_Cursor(tag_db), 7, now=NOW + timedelta(days=30))
+    assert result["recent_posts"] == 0
+    assert all(cat["items"] == [] for cat in result["categories"])
+
+
+@pytest.fixture
+def trending_calls(monkeypatch):
+    calls = []
+
+    class _Conn:
+        def cursor(self):
+            return self
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(archive_browser, "_trending_cache", {})
+    monkeypatch.setattr(archive_browser.generic_tags, "ensure_table", lambda conn: None)
+    monkeypatch.setattr(archive_browser, "database_connection", _Conn)
+    monkeypatch.setattr(archive_browser, "trending",
+                        lambda cursor, days: calls.append(days) or {"days": days, "recent_posts": 1, "categories": []})
+    return calls
+
+
+@pytest.mark.parametrize("query, days", [("", 30), ("?days=7", 7), ("?days=90", 90), ("?days=365", 30), ("?days=x", 30)])
+def test_trending_endpoint_only_allows_offered_windows(trending_calls, query, days):
+    assert archive_browser.app.test_client().get(f"/api/trending{query}").get_json()["days"] == days
+
+
+def test_trending_endpoint_caches_each_window(trending_calls):
+    client = archive_browser.app.test_client()
+    for query in ("?days=30", "?days=30", "?days=7", "?days=30"):
+        client.get(f"/api/trending{query}")
+    assert trending_calls == [30, 7]
+
+
+def test_tag_sections_follow_e621_order_with_unknown_types_last():
+    sections = ["Meta", "General", "other", "Species", "Lore", "Character", "Copyright", "Invalid"]
+    assert sorted(sections, key=archive_browser.tag_section_rank) == [
+        "Copyright", "Character", "Species", "General", "Lore", "Meta", "Invalid", "other"]

@@ -78,6 +78,7 @@ Global options: `fff [--config PATH] [--env prod|test] <command>`.
 | `fff fa sync-external` | Track FA source links from e621 posts and favorite them on FA |
 | `fff gui blacklist-review` | Review blacklisted posts (auto-deletes critical/AI-tagged posts first) |
 | `fff gui artist-review` | Review posts by artists from review_artists.yaml |
+| `fff gui generic-tags` | Mark archive tags as generic or not; copy a query that leaves them out |
 | `fff web` | Local web gallery for the archive (Flask) |
 
 ## `fff sort` Sub-commands

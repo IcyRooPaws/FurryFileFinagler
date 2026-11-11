@@ -145,6 +145,8 @@ COMMANDS = [
             "Review blacklisted posts (auto-deletes critical/AI-tagged posts first)", options=[]),
     Command(("gui", "artist-review"), "fff.gui.artists_review_ui", "Review posts by artists from review_artists.yaml",
             options=[]),
+    Command(("gui", "generic-tags"), "fff.gui.generic_tags_ui",
+            "Mark archive tags as generic or not; copy a query that leaves them out", options=[]),
     Command(("web",), "fff.gui.archive_browser", "Local web gallery for the archive (Flask)"),
 ]
 
