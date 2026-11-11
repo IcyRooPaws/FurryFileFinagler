@@ -161,8 +161,10 @@ PAGE = r"""
     let currentPage = 1;
     const canOpen = {{ 'true' if can_open else 'false' }};
         const initialSearch = new URLSearchParams(window.location.search).get('q') || '';
+    // true while q holds a name picked from a list (see post_filters); typing clears it
+    let exactSearch = initialSearch !== '' && new URLSearchParams(window.location.search).get('exact') === '1';
         document.querySelector('#q').value = initialSearch;
-    const params = () => new URLSearchParams({ q: document.querySelector('#q').value.trim(), rating: document.querySelector('#rating').value, media: document.querySelector('#media').value, deleted: document.querySelector('#deleted').value, sort: document.querySelector('#sort').value, page: currentPage });
+    const params = () => new URLSearchParams({ q: document.querySelector('#q').value.trim(), rating: document.querySelector('#rating').value, media: document.querySelector('#media').value, deleted: document.querySelector('#deleted').value, sort: document.querySelector('#sort').value, page: currentPage, ...(exactSearch ? { exact: '1' } : {}) });
     const esc = (value) => String(value ?? '').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
     function card(post) {
       const media = post.has_file ? (post.is_video ? `<video class="preview" controls preload="metadata" src="${post.media_url}"></video>` : `<img class="preview" loading="lazy" src="${post.media_url}" alt="Post ${post.id}">`) : '<div class="preview missing">File unavailable</div>';
@@ -184,7 +186,8 @@ PAGE = r"""
       markActiveTrend();
       const response = await fetch('/api/posts?' + params()); const data = await response.json();
       if (!response.ok) { grid.innerHTML = `<div class="empty">${esc(data.error || 'Unable to load posts')}</div>`; return; }
-      document.querySelector('#stats').innerHTML = `<strong>${data.total.toLocaleString()}</strong> matching posts`;
+      const term = document.querySelector('#q').value.trim();
+      document.querySelector('#stats').innerHTML = `<strong>${data.total.toLocaleString()}</strong> ${exactSearch && term ? `posts tagged <strong>${esc(term)}</strong> (exact match)` : 'matching posts'}`;
       grid.innerHTML = data.posts.length ? data.posts.map(card).join('') : '<div class="empty">No posts matched those filters.</div>';
       document.querySelector('#page').textContent = `Page ${data.page} of ${Math.max(1, data.pages)}`;
       document.querySelector('#prev').disabled = data.page <= 1; document.querySelector('#next').disabled = data.page >= data.pages;
@@ -203,7 +206,7 @@ PAGE = r"""
       list.hidden = false; q.setAttribute('aria-expanded', 'true');
       list.querySelector('.active')?.scrollIntoView({ block: 'nearest' });
     }
-    function pick(i) { q.value = suggestions[i].name; hideSuggestions(); currentPage = 1; load(); }
+    function pick(i) { q.value = suggestions[i].name; exactSearch = true; hideSuggestions(); currentPage = 1; load(); }
     const trendingList = document.querySelector('#trending'), trendingDays = document.querySelector('#trending-days');
     function markActiveTrend() { trendingList.querySelectorAll('.trend').forEach(b => b.classList.toggle('active', b.dataset.tag === q.value.trim())); }
     const trendOrderButtons = document.querySelectorAll('.trend-order button');
@@ -234,9 +237,10 @@ PAGE = r"""
         markActiveTrend();
       } catch { trendingList.innerHTML = '<p class="note">Trending is unavailable right now.</p>'; }
     }
-    trendingList.addEventListener('click', event => { const b = event.target.closest('.trend'); if (b) { q.value = b.dataset.tag; hideSuggestions(); currentPage = 1; load(); } });
+    trendingList.addEventListener('click', event => { const b = event.target.closest('.trend'); if (b) { q.value = b.dataset.tag; exactSearch = true; hideSuggestions(); currentPage = 1; load(); } });
     trendingDays.addEventListener('change', loadTrending);
     q.addEventListener('input', () => {
+      exactSearch = false;
       clearTimeout(suggestTimer);
       const term = q.value.trim().toLowerCase().replace(/ /g, '_');
       if (term.length < 2) { hideSuggestions(); return; }
@@ -325,10 +329,10 @@ DETAIL_PAGE = r"""
                 <span class="rating {{ post.rating or '' }}">{{ post.rating or 'unknown' }}</span>
                 {% if post.deleted %}<div class="deleted"><strong>Deleted post</strong>{% if post.deletion_reason %}<br>{{ post.deletion_reason }}{% endif %}</div>{% endif %}
                 <h2>Artists</h2>
-                <div class="tags">{% for artist in artists %}<a class="tag artist" href="/?q={{ artist|urlencode }}">{{ artist }}</a>{% else %}<span>None recorded</span>{% endfor %}</div>
+                <div class="tags">{% for artist in artists %}<a class="tag artist" href="/?q={{ artist|urlencode }}&amp;exact=1">{{ artist }}</a>{% else %}<span>None recorded</span>{% endfor %}</div>
                 {% for category, category_tags in tags.items() %}
                     <h2>{{ category|title }}</h2>
-                    <div class="tags">{% for tag in category_tags %}<a class="tag" href="/?q={{ tag|urlencode }}">{{ tag }}</a>{% endfor %}</div>
+                    <div class="tags">{% for tag in category_tags %}<a class="tag" href="/?q={{ tag|urlencode }}&amp;exact=1">{{ tag }}</a>{% endfor %}</div>
                 {% endfor %}
                 <h2>File Details</h2>
                 <dl><dt>Path</dt><dd>{{ post.file_path or 'Unavailable' }}</dd><dt>Type</dt><dd>{{ post.file_type or 'Unknown' }}</dd><dt>MD5</dt><dd>{{ post.md5 or 'Unavailable' }}</dd><dt>Deleted at</dt><dd>{{ post.deleted_at or 'Not deleted' }}</dd></dl>
@@ -383,11 +387,19 @@ def post_filters(args):
     where = []
     values = []
     query = args.get("q", "").strip()
+    # exact=1: q is one tag or artist name picked from a list (trending, suggestions, a
+    # post's tags), so match that name only. Typed searches match substrings, which
+    # would make "macro" also find every "macropod" post.
+    exact = args.get("exact", "") == "1"
     rating = args.get("rating", "").strip().lower()
     deleted = args.get("deleted", "").strip()
     media = args.get("media", "").strip().lower()
 
-    if query:
+    if query and exact:
+        where.append("(p.id IN (SELECT qa.post_id FROM posts_artists qa JOIN artists qar ON qar.artist_id = qa.artist_id WHERE qar.name = %s)"
+                     " OR p.id IN (SELECT qt.post_id FROM posts_tags qt JOIN tags qtag ON qtag.tag_id = qt.tag_id WHERE qtag.name = %s))")
+        values.extend([query, query])
+    elif query:
         like = f"%{query}%"
         # Resolve matching tags/artists first and look their posts up by id; a
         # per-post EXISTS re-scans the tag names for every post (~400x slower).

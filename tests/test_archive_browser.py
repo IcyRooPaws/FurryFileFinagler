@@ -306,3 +306,21 @@ def test_tag_sections_follow_e621_order_with_unknown_types_last():
     sections = ["Meta", "General", "other", "Species", "Lore", "Character", "Copyright", "Invalid"]
     assert sorted(sections, key=archive_browser.tag_section_rank) == [
         "Copyright", "Character", "Species", "General", "Lore", "Meta", "Invalid", "other"]
+
+
+def test_exact_search_matches_whole_tag_or_artist_names_only():
+    where, values = post_filters({"q": "macro", "exact": "1"})
+    assert "LIKE" not in where
+    assert "qtag.name = %s" in where and "qar.name = %s" in where
+    assert values == ["macro", "macro"]
+
+
+def test_typed_search_still_matches_substrings():
+    where, values = post_filters({"q": "macro"})
+    assert "qtag.name LIKE %s" in where
+    assert values == ["%macro%"] * 4
+
+
+def test_post_page_tag_links_are_exact_searches():
+    html = archive_browser.DETAIL_PAGE
+    assert html.count("&amp;exact=1") == 2  # artist links and tag links
