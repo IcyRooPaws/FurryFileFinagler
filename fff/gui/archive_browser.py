@@ -13,7 +13,7 @@ from flask import Flask, abort, jsonify, render_template_string, request, send_f
 
 from fff.archive import generic_tags
 from fff.archive.config import load_config
-from fff.archive.db import connect_to_mysql
+from fff.archive.db import FLAG_TOKENS, connect_to_mysql
 
 
 app = Flask(__name__)
@@ -104,6 +104,10 @@ PAGE = r"""
     .trending-head { display:flex; justify-content:space-between; align-items:center; gap:12px; }
     .trending h2 { margin:0; color:var(--muted); font:600 12px "Trebuchet MS", sans-serif; text-transform:uppercase; letter-spacing:.04em; }
     .trending select { width:auto; min-height:0; padding:4px 8px; font-size:13px; }
+    .trend-order { display:flex; margin-top:10px; border:1px solid var(--line); border-radius:4px; overflow:hidden; }
+    .trend-order button { flex:1; width:auto; min-height:0; padding:5px 8px; border:0; border-radius:0; background:#1d2321; color:var(--muted); font:600 12px "Trebuchet MS", sans-serif; }
+    .trend-order button:hover { background:#33365f; border-color:transparent; color:var(--ink); }
+    .trend-order button[aria-pressed="true"] { background:var(--teal); color:#1d2321; }
     .trend-group { margin-top:14px; }
     .trend-group h3 { margin:0 0 4px; padding-bottom:4px; border-bottom:1px solid var(--line); font:700 14px "Trebuchet MS", sans-serif; }
     .trend-group ol { margin:0; padding:0; list-style:none; }
@@ -147,6 +151,7 @@ PAGE = r"""
       <aside class="sidebar">
         <section class="trending" aria-labelledby="trending-title">
           <div class="trending-head"><h2 id="trending-title">Trending</h2><select id="trending-days" aria-label="Trending window"><option value="7">Last 7 days</option><option value="30" selected>Last 30 days</option><option value="90">Last 90 days</option></select></div>
+          <div class="trend-order" role="group" aria-label="Order trending lists by"><button type="button" data-order="top" aria-pressed="true" title="Most posts archived in this window first">Most posts</button><button type="button" data-order="rising" aria-pressed="false" title="Names showing up far more than usual first, even if they are on fewer posts">Rising</button></div>
           <div class="trend-groups" id="trending"><p class="note">Loading...</p></div>
         </section>
       </aside>
@@ -201,7 +206,18 @@ PAGE = r"""
     function pick(i) { q.value = suggestions[i].name; hideSuggestions(); currentPage = 1; load(); }
     const trendingList = document.querySelector('#trending'), trendingDays = document.querySelector('#trending-days');
     function markActiveTrend() { trendingList.querySelectorAll('.trend').forEach(b => b.classList.toggle('active', b.dataset.tag === q.value.trim())); }
-    const trendEmpty = { fetish: 'Nothing trending. Tags only show here once marked fetish (key F) in the Generic tags tool.' };
+    const trendOrderButtons = document.querySelectorAll('.trend-order button');
+    let trendOrder = 'top';
+    try { if (localStorage.getItem('trendOrder') === 'rising') trendOrder = 'rising'; } catch {}
+    function showTrendOrder() { trendOrderButtons.forEach(b => b.setAttribute('aria-pressed', String(b.dataset.order === trendOrder))); }
+    showTrendOrder();
+    trendOrderButtons.forEach(b => b.addEventListener('click', () => {
+      if (b.dataset.order === trendOrder) return;
+      trendOrder = b.dataset.order; showTrendOrder();
+      try { localStorage.setItem('trendOrder', trendOrder); } catch {}
+      loadTrending();
+    }));
+    const trendEmpty = { fetish: 'Nothing trending. Tags show here when listed in data/kink_tags.txt or marked fetish (key F) in the Generic tags tool.' };
     function trendItem(t, i, data) {
       const tip = `${t.recent.toLocaleString()} of ${data.recent_posts.toLocaleString()} posts archived in the last ${data.days} days (${t.total.toLocaleString()} all-time), ${t.lift}x its usual rate`;
       return `<li><button type="button" class="trend" data-tag="${esc(t.name)}" title="${esc(tip)}"><span class="rank">${i + 1}</span><span class="tname">${esc(t.name.replace(/_/g, ' '))}</span><span class="tcount">${t.recent.toLocaleString()}</span></button></li>`;
@@ -209,7 +225,7 @@ PAGE = r"""
     async function loadTrending() {
       trendingList.innerHTML = '<p class="note">Loading...</p>';
       try {
-        const response = await fetch('/api/trending?' + new URLSearchParams({ days: trendingDays.value })); const data = await response.json();
+        const response = await fetch('/api/trending?' + new URLSearchParams({ days: trendingDays.value, order: trendOrder })); const data = await response.json();
         if (!response.ok) throw new Error(data.error);
         if (!data.recent_posts) { trendingList.innerHTML = `<p class="note">No posts archived in the last ${data.days} days.</p>`; return; }
         trendingList.innerHTML = data.categories.map(cat => `<section class="trend-group"><h3>${esc(cat.title)}</h3>${cat.items.length
@@ -601,21 +617,33 @@ TRENDING_WINDOWS = (7, 30, 90)  # days; the UI offers these
 TRENDING_LIMIT = 10
 TRENDING_CACHE_SECONDS = 600
 # One top-10 list each, in sidebar order. Character and species are e621 tag types;
-# e621 files fetish tags under General, so that list only holds tags marked fetish in
-# the Generic tags tool (fff gui generic-tags). Tags marked generic there never trend.
+# e621 files fetish tags under General, so that list holds tags marked fetish in the
+# Generic tags tool (fff gui generic-tags) or named in its default list
+# (data/kink_tags.txt). Tags marked generic there never trend.
 TRENDING_CATEGORIES = (("artist", "Artists"), ("character", "Characters"), ("species", "Species"),
                        ("fetish", "Fetish"))
+# How each list is ordered (the sidebar toggle):
+#   top     most recent posts first.
+#   rising  by lift: share of recent posts against share of the whole archive, so
+#           names that suddenly turn up a lot beat ones that are always common.
+TRENDING_ORDERS = ("top", "rising")
+# e621 files these warnings and placeholders under "artist", so they end up in the
+# artists table; they would top the Artists list by post count.
+NOT_ARTISTS = frozenset(name.lower() for name in FLAG_TOKENS) | {
+    "avoid_posting", "unknown", "unknown_artist", "unknown_artist_signature", "anonymous_artist",
+    "epilepsy_warning", "jumpscare_warning", "artist_request"}
 _trending_cache = {}
 
 
-def trending(cursor, days, now=None, limit=TRENDING_LIMIT):
-    """Artists and tags that show up far more in recently archived posts than usual.
+def trending_candidates(cursor, days, now=None, default_fetish=None):
+    """Every artist/tag on enough posts archived in the last `days`, bucketed by list.
 
-    Raw recent counts just repeat the all-time leaders (mammal, canine, ...),
-    so everything is ranked by lift: its share of posts archived in the last
-    `days` against its share of the whole archive. A minimum recent count
-    keeps a name seen on one or two new posts from topping a list.
+    Each bucket holds (name, recent posts, all-time posts). A minimum recent count
+    keeps a name seen on one or two new posts out of the lists. Tags with no saved
+    mark count as fetish when the default fetish list names them.
     """
+    if default_fetish is None:
+        default_fetish = generic_tags.default_fetish_names()
     cutoff = (now or datetime.now()) - timedelta(days=days)
     cursor.execute("SELECT COUNT(*) FROM posts WHERE ingested_at >= %s", (cutoff,))
     recent_posts = cursor.fetchone()[0]
@@ -635,7 +663,8 @@ def trending(cursor, days, now=None, limit=TRENDING_LIMIT):
             JOIN (SELECT artist_id, COUNT(*) AS uses FROM posts_artists GROUP BY artist_id) a
               ON a.artist_id = r.artist_id
         """, (cutoff, min_uses))
-        buckets["artist"] = [(name, recent, total) for name, recent, total in cursor.fetchall()]
+        buckets["artist"] = [(name, recent, total) for name, recent, total in cursor.fetchall()
+                             if name.lower() not in NOT_ARTISTS]
         cursor.execute(f"""
             SELECT t.name, LOWER(COALESCE(t.tag_type, 'general')), r.uses, a.uses, tc.is_generic, tc.is_fetish
             FROM (SELECT pt.tag_id, COUNT(*) AS uses
@@ -650,19 +679,36 @@ def trending(cursor, days, now=None, limit=TRENDING_LIMIT):
         for name, kind, recent, total, is_generic, is_fetish in cursor.fetchall():
             if is_generic:
                 continue
+            if is_generic is None and name.lower() in default_fetish:
+                is_fetish = True  # no saved mark: the default list applies
             key = "fetish" if is_fetish else kind
             if key in buckets and key != "artist":
                 buckets[key].append((name, recent, total))
+    return {"days": days, "recent_posts": recent_posts, "total_posts": total_posts, "buckets": buckets}
+
+
+def rank_trending(candidates, order="top", limit=TRENDING_LIMIT):
+    """The sidebar's lists from trending_candidates, ordered by `order` (see TRENDING_ORDERS)."""
+    recent_posts, total_posts = candidates["recent_posts"], candidates["total_posts"]
+    if order == "rising":
+        def key(row):
+            return -(row[1] / row[2]), -row[1], row[0]
+    else:
+        def key(row):
+            return -row[1], -(row[1] / row[2]), row[0]
 
     def ranked(rows):
-        rows = sorted(rows, key=lambda r: (-(r[1] / r[2]), -r[1], r[0]))[:limit]
         return [{"name": name, "recent": recent, "total": total,
                  "lift": round((recent / recent_posts) / (total / total_posts), 1)}
-                for name, recent, total in rows]
+                for name, recent, total in sorted(rows, key=key)[:limit]]
 
-    return {"days": days, "recent_posts": recent_posts,
-            "categories": [{"key": key, "title": title, "items": ranked(buckets[key])}
-                           for key, title in TRENDING_CATEGORIES]}
+    return {"days": candidates["days"], "order": order, "recent_posts": recent_posts,
+            "categories": [{"key": cat, "title": title, "items": ranked(candidates["buckets"][cat])}
+                           for cat, title in TRENDING_CATEGORIES]}
+
+
+def trending(cursor, days, now=None, limit=TRENDING_LIMIT, order="top", default_fetish=None):
+    return rank_trending(trending_candidates(cursor, days, now=now, default_fetish=default_fetish), order, limit)
 
 
 @app.get("/api/trending")
@@ -673,22 +719,25 @@ def trending_api():
         days = 30
     if days not in TRENDING_WINDOWS:
         days = 30
+    order = request.args.get("order", "top")
+    if order not in TRENDING_ORDERS:
+        order = "top"
     cached = _trending_cache.get(days)
     if cached and time.monotonic() - cached[0] < TRENDING_CACHE_SECONDS:
-        return jsonify(cached[1])
+        return jsonify(rank_trending(cached[1], order))
     try:
         connection = database_connection()
         try:
             generic_tags.ensure_table(connection)
             cursor = connection.cursor()
-            result = trending(cursor, days)
+            candidates = trending_candidates(cursor, days)
             cursor.close()
         finally:
             connection.close()
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
-    _trending_cache[days] = (time.monotonic(), result)
-    return jsonify(result)
+    _trending_cache[days] = (time.monotonic(), candidates)  # both orders rank from these
+    return jsonify(rank_trending(candidates, order))
 
 
 @app.get("/media/<int:post_id>")

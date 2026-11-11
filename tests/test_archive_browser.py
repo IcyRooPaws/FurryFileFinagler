@@ -85,6 +85,12 @@ def test_media_combines_with_other_filters(db):
 from fff.gui import archive_browser  # noqa: E402
 
 
+@pytest.fixture(autouse=True)
+def _no_default_list(monkeypatch, tmp_path):
+    """data/kink_tags.txt is the user's own file; tests never read it."""
+    monkeypatch.setattr(archive_browser.generic_tags, "DEFAULT_FETISH_FILE", tmp_path / "missing.txt")
+
+
 @pytest.fixture
 def opened(monkeypatch):
     calls = []
@@ -199,7 +205,8 @@ def tag_db():
             conn.execute("INSERT INTO tag_classifications VALUES (?, ?, ?)",
                          (tag_id, int(mark == "generic"), int(mark == "fetish")))
     artists = {"newartist": ([], recent_ids[:10]), "steady": (old_ids[:50], recent_ids[10:]),
-               "oneoff": ([], recent_ids[:2])}
+               "oneoff": ([], recent_ids[:2]),
+               "conditional_dnp": (old_ids, recent_ids)}  # an e621 warning, not an artist
     for artist_id, (name, (olds, recents)) in enumerate(artists.items(), 1):
         conn.execute("INSERT INTO artists VALUES (?, ?)", (artist_id, name))
         conn.executemany("INSERT INTO posts_artists VALUES (?, ?)", [(p, artist_id) for p in [*olds, *recents]])
@@ -211,8 +218,8 @@ def lists(result):
     return {cat["key"]: [(t["name"], t["recent"], t["lift"]) for t in cat["items"]] for cat in result["categories"]}
 
 
-def test_trending_lists_rank_by_lift_per_category(tag_db):
-    result = archive_browser.trending(_Cursor(tag_db), 30, now=NOW)
+def test_rising_ranks_each_list_by_lift(tag_db):
+    result = archive_browser.trending(_Cursor(tag_db), 30, now=NOW, order="rising")
     assert result["recent_posts"] == 20
     assert [cat["title"] for cat in result["categories"]] == ["Artists", "Characters", "Species", "Fetish"]
     assert lists(result) == {
@@ -221,6 +228,22 @@ def test_trending_lists_rank_by_lift_per_category(tag_db):
         "species": [("scalie", 7, 6.0), ("mammal", 20, 1.0)],   # dragon is marked generic
         "fetish": [("chastity_cage", 8, 6.0), ("hyper", 5, 3.0)],  # only tags marked fetish
     }
+
+
+def test_most_posts_ranks_each_list_by_recent_posts(tag_db):
+    result = archive_browser.trending(_Cursor(tag_db), 30, now=NOW)  # the default order
+    assert result["order"] == "top"
+    assert lists(result)["species"] == [("mammal", 20, 1.0), ("scalie", 7, 6.0)]
+    # equal recent counts fall back to lift; conditional_dnp (20 recent) is not an artist
+    assert lists(result)["artist"] == [("newartist", 10, 6.0), ("steady", 10, 1.0)]
+
+
+def test_default_fetish_list_fills_the_fetish_trend_unless_marked(tag_db):
+    # solo: no mark, so the list applies. scalie: saved "not generic", so the list doesn't.
+    result = archive_browser.trending(_Cursor(tag_db), 30, now=NOW, order="rising",
+                                      default_fetish=frozenset({"solo", "scalie"}))
+    assert lists(result)["fetish"] == [("solo", 20, 6.0), ("chastity_cage", 8, 6.0), ("hyper", 5, 3.0)]
+    assert ("scalie", 7, 6.0) in lists(result)["species"]
 
 
 def test_trending_respects_limit(tag_db):
@@ -248,8 +271,9 @@ def trending_calls(monkeypatch):
     monkeypatch.setattr(archive_browser, "_trending_cache", {})
     monkeypatch.setattr(archive_browser.generic_tags, "ensure_table", lambda conn: None)
     monkeypatch.setattr(archive_browser, "database_connection", _Conn)
-    monkeypatch.setattr(archive_browser, "trending",
-                        lambda cursor, days: calls.append(days) or {"days": days, "recent_posts": 1, "categories": []})
+    monkeypatch.setattr(archive_browser, "trending_candidates", lambda cursor, days: calls.append(days) or {
+        "days": days, "recent_posts": 10, "total_posts": 100,
+        "buckets": {"artist": [("a", 5, 50), ("b", 4, 4)], "character": [], "species": [], "fetish": []}})
     return calls
 
 
@@ -263,6 +287,19 @@ def test_trending_endpoint_caches_each_window(trending_calls):
     for query in ("?days=30", "?days=30", "?days=7", "?days=30"):
         client.get(f"/api/trending{query}")
     assert trending_calls == [30, 7]
+
+
+def test_trending_endpoint_orders_from_the_same_cached_query(trending_calls):
+    client = archive_browser.app.test_client()
+
+    def artists(query):
+        data = client.get(f"/api/trending{query}").get_json()
+        return data["order"], [t["name"] for t in data["categories"][0]["items"]]
+
+    assert artists("") == ("top", ["a", "b"])
+    assert artists("?order=rising") == ("rising", ["b", "a"])
+    assert artists("?order=bogus") == ("top", ["a", "b"])
+    assert trending_calls == [30]  # switching order never re-queries
 
 
 def test_tag_sections_follow_e621_order_with_unknown_types_last():

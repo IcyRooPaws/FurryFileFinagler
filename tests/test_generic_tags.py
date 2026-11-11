@@ -6,6 +6,12 @@ import pytest
 
 from fff.archive import generic_tags
 
+
+@pytest.fixture(autouse=True)
+def _no_default_list(monkeypatch, tmp_path):
+    """data/kink_tags.txt is the user's own file; tests never read it."""
+    monkeypatch.setattr(generic_tags, "DEFAULT_FETISH_FILE", tmp_path / "missing.txt")
+
 TAGS = [
     {"tag_id": 1, "name": "mammal", "type": "Species", "posts": 900, "mark": "generic"},
     {"tag_id": 2, "name": "pirate_eagle", "type": "Character", "posts": 40, "mark": "specific"},
@@ -89,12 +95,39 @@ def test_inline_query_with_nothing_marked_is_still_valid(db):
 
 def test_load_tags_counts_posts_and_reads_classifications(db):
     loaded = {t["name"]: t for t in generic_tags.load_tags(db)}
-    assert loaded["mammal"] == {"tag_id": 1, "name": "mammal", "type": "Species", "posts": 2, "mark": "generic"}
+    assert loaded["mammal"] == {"tag_id": 1, "name": "mammal", "type": "Species", "posts": 2,
+                                "saved": "generic", "listed": False, "mark": "generic"}
     assert loaded["pirate_eagle"]["mark"] == "specific"
     assert loaded["chastity_cage"]["mark"] == "fetish"
     assert loaded["comic"]["posts"] == 0 and loaded["comic"]["mark"] is None
     assert loaded["odd"]["type"] == "General"
     assert next(iter(loaded)) == "mammal"  # most-used first
+
+
+def test_default_list_reads_names_comments_and_species_prefix(tmp_path):
+    listed = tmp_path / "kink_tags.txt"
+    listed.write_text("# fetish tags\n\nVore\nspecies:Taur  # a species tag\n  hyper  \n", encoding="utf-8")
+    assert generic_tags.default_fetish_names(listed) == {"vore", "taur", "hyper"}
+    assert generic_tags.default_fetish_names(tmp_path / "missing.txt") == frozenset()
+
+
+def test_listed_tags_default_to_fetish_but_saved_marks_win(db):
+    loaded = {t["name"]: t for t in generic_tags.load_tags(db, frozenset({"solo", "mammal", "comic"}))}
+    assert (loaded["solo"]["saved"], loaded["solo"]["listed"], loaded["solo"]["mark"]) == (None, True, "fetish")
+    assert loaded["mammal"]["mark"] == "generic"  # saved generic beats the list
+    assert loaded["fallow_deer"]["mark"] is None  # not listed, not reviewed
+    tag = loaded["solo"]
+    tag["saved"] = "specific"
+    assert generic_tags.effective_mark(tag) == "specific"
+    tag["saved"] = None  # clearing goes back to the list default
+    assert generic_tags.effective_mark(tag) == "fetish"
+
+
+def test_load_tags_reads_the_default_file(db, tmp_path, monkeypatch):
+    listed = tmp_path / "kink_tags.txt"
+    listed.write_text("comic\n", encoding="utf-8")
+    monkeypatch.setattr(generic_tags, "DEFAULT_FETISH_FILE", listed)
+    assert [t["name"] for t in generic_tags.load_tags(db) if t["listed"]] == ["comic"]
 
 
 def test_set_mark_rejects_unknown_marks():

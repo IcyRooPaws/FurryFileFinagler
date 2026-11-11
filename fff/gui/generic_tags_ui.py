@@ -3,7 +3,8 @@
 Run as 'fff gui generic-tags' or from the FFF Manager. Tags are listed most-used first,
 since those matter most. With the list focused: G marks the selection generic, N not
 generic, F fetish, U clears it, Ctrl+Z undoes, Ctrl+A selects every listed tag. Fetish
-marks feed the archive browser's Fetish trending list. Each mark is saved
+marks feed the archive browser's Fetish trending list. Tags in data/kink_tags.txt show
+as "Fetish (list)" until marked otherwise; clearing a mark returns a tag to that default. Each mark is saved
 to tag_classifications straight away. The side panel shows a MySQL query that leaves
 the generic tags out, ready to copy.
 """
@@ -61,7 +62,9 @@ class GenericTagsApp:
         ttk.Label(head, text="Generic tags", style="Heading.TLabel").pack(anchor="w")
         ttk.Label(head, text="Mark tags that are on so many posts they say little (mammal, canine, ...), and "
                              "fetish tags for the browser's Fetish trending list. Most-used tags come first; "
-                             "each mark is saved straight away.",
+                             "each mark is saved straight away. Tags in "
+                             f"{generic_tags.DEFAULT_FETISH_FILE.name} start as Fetish (list); "
+                             "N or G overrides that, U goes back to it.",
                   style="Muted.TLabel").pack(anchor="w", pady=(2, 0))
         self.progress_var = tk.StringVar()
         ttk.Label(head, textvariable=self.progress_var).pack(anchor="w", pady=(6, 0))
@@ -187,7 +190,8 @@ class GenericTagsApp:
         self._search_job = self.host.after(200, self.refresh)
 
     def _row_values(self, tag):
-        return (tag["name"], tag["type"], f"{tag['posts']:,}", STATUS_TEXT[tag["mark"]])
+        status = "Fetish (list)" if tag["saved"] is None and tag["mark"] == FETISH else STATUS_TEXT[tag["mark"]]
+        return (tag["name"], tag["type"], f"{tag['posts']:,}", status)
 
     def refresh(self):
         """Rebuild the list from the filters."""
@@ -254,7 +258,9 @@ class GenericTagsApp:
             messagebox.showerror("Could not save", f"The change was not saved:\n{exc}", parent=self.host)
             return False
         for tag_id in tag_ids:
-            self.by_id[tag_id]["mark"] = mark
+            tag = self.by_id[tag_id]
+            tag["saved"] = mark
+            tag["mark"] = generic_tags.effective_mark(tag)
         return True
 
     def mark(self, mark):
@@ -264,8 +270,9 @@ class GenericTagsApp:
         children = self.tree.get_children()
         positions = sorted(children.index(iid) for iid in selection)
         tag_ids = [int(iid) for iid in selection]
-        changed = [(tag_id, self.by_id[tag_id]["mark"]) for tag_id in tag_ids
-                   if self.by_id[tag_id]["mark"] != mark]
+        # Compare saved marks: pressing F on a list-default tag saves it as a real mark.
+        changed = [(tag_id, self.by_id[tag_id]["saved"]) for tag_id in tag_ids
+                   if self.by_id[tag_id]["saved"] != mark]
         if changed:
             if not self._save([tag_id for tag_id, _ in changed], mark):
                 return

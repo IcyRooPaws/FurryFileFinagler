@@ -5,11 +5,17 @@ fetish tag type (those tags are General), so fetish tags are marked by hand too;
 fetish tag is never generic.
 
 The archive keeps one row per reviewed tag in ``tag_classifications``; tags nobody has
-reviewed have no row and count as not generic. The Generic tags tool
+reviewed have no row and count as not generic. Tags named in data/kink_tags.txt (one
+per line; '#' comments and a 'species:' prefix are allowed) count as fetish until marked
+otherwise: the file supplies defaults, a saved mark always wins. The Generic tags tool
 (fff.gui.generic_tags_ui) fills the table, the archive browser's trending lists read it,
 and ``filter_sql`` writes a MySQL query that leaves the generic tags out.
 """
 from __future__ import annotations
+
+from pathlib import Path
+
+from fff.common import paths
 
 TABLE = "tag_classifications"
 
@@ -21,7 +27,32 @@ MARKS = (GENERIC, SPECIFIC, FETISH)
 # leave these out wholesale (General has 22k+ tags, too many to review one by one).
 GENERIC_TYPES = ("general", "meta")
 
+# The default fetish list (user data, not in git). Missing file = no defaults.
+DEFAULT_FETISH_FILE = paths.DATA_DIR / "kink_tags.txt"
+
 _table_ready = False
+
+
+def default_fetish_names(path: Path | None = None) -> frozenset[str]:
+    """Tag names listed as fetish by default, lowercased."""
+    path = Path(path or DEFAULT_FETISH_FILE)
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except FileNotFoundError:
+        return frozenset()
+    names = set()
+    for line in lines:
+        line = line.split("#", 1)[0].strip()
+        if line.lower().startswith("species:"):
+            line = line[len("species:"):].strip()
+        if line:
+            names.add(line.lower())
+    return frozenset(names)
+
+
+def effective_mark(tag: dict) -> str | None:
+    """A saved mark, else fetish when the tag is on the default list, else None (to review)."""
+    return tag["saved"] or (FETISH if tag["listed"] else None)
 
 
 def ensure_table(conn) -> None:
@@ -55,8 +86,15 @@ def _mark(is_generic, is_fetish) -> str | None:
     return GENERIC if is_generic else FETISH if is_fetish else SPECIFIC
 
 
-def load_tags(conn) -> list[dict]:
-    """Every tag with its post count and mark (see MARKS; None = not reviewed), most-used first."""
+def load_tags(conn, default_fetish: frozenset[str] | None = None) -> list[dict]:
+    """Every tag with its post count, most-used first.
+
+    ``saved`` is the mark stored in the database (see MARKS; None = none), ``listed``
+    whether the default fetish list names it, and ``mark`` the one that applies
+    (effective_mark).
+    """
+    if default_fetish is None:
+        default_fetish = default_fetish_names()
     cursor = conn.cursor()
     try:
         cursor.execute(f"""
@@ -67,8 +105,12 @@ def load_tags(conn) -> list[dict]:
             LEFT JOIN {TABLE} tc ON tc.tag_id = t.tag_id
             ORDER BY uses DESC, t.name
         """)
-        return [{"tag_id": tag_id, "name": name, "type": kind, "posts": int(uses), "mark": _mark(generic, fetish)}
+        tags = [{"tag_id": tag_id, "name": name, "type": kind, "posts": int(uses),
+                 "saved": _mark(generic, fetish), "listed": name.lower() in default_fetish}
                 for tag_id, name, kind, uses, generic, fetish in cursor.fetchall()]
+        for tag in tags:
+            tag["mark"] = effective_mark(tag)
+        return tags
     finally:
         cursor.close()
 
