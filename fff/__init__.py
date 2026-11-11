@@ -1,3 +1,5 @@
 """FurryFileFinagler media archiving, source search, and library management toolkit."""
 
-__version__ = "0.1.0"
+# The only place the version is set; pyproject.toml reads it. Every commit gets one, with a
+# matching entry at the top of CHANGELOG.md (tests/test_docs.py checks they agree).
+__version__ = "1.29.0"

@@ -22,3 +22,13 @@ def test_docs_contain_no_private_ip_addresses():
 
 def test_plan_document_is_not_shipped():
     assert not (paths.ROOT / "project notes").exists()
+
+
+def test_changelog_starts_with_the_current_version():
+    import fff
+
+    changelog = (paths.ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    newest = re.search(r"^## \[(\d+\.\d+\.\d+)\]", changelog, re.MULTILINE)
+    assert newest and newest.group(1) == fff.__version__, "bump fff.__version__ with each CHANGELOG entry"
+    readme = (paths.ROOT / "README.md").read_text(encoding="utf-8")
+    assert f"Version {fff.__version__} " in readme, "update the version line at the top of README.md"

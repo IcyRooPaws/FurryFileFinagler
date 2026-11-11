@@ -132,8 +132,10 @@ COMMANDS = [
     Command(("db", "diagnose", "op-logging"), "fff.sorter.scripts.diagnose_file_operations_logging",
             "Exercise file_operations logging (writes and deletes test rows)", options=[]),
     Command(("hash",), "fff.sorter.hash_cli", "Hash files / show info / find duplicates (v1 media_hasher CLI)"),
+    # No config needed: on a fresh install the Manager opens the guided setup itself.
     Command(("gui", "manager"), "fff.gui.manager_ui",
-            "Unified manager for workflows, settings, and desktop tools", options=[]),
+            "Unified manager for workflows, settings, and desktop tools", options=[],
+            extra={"needs_config": False}),
     Command(("gui", "duplicates"), "fff.gui.duplicate_manager_ui", "Duplicate manager GUI", options=[]),
     Command(("gui", "tag-sort-config"), "fff.gui.tag_sort_config_ui_v2", "Tag sorting rule editor GUI"),
     Command(("gui", "artist-config"), "fff.gui.artist_config_ui", "Artist config editor GUI (sort_artists.yaml)"),
@@ -242,4 +244,4 @@ def register(sub) -> None:
                                   formatter_class=argparse.RawDescriptionHelpFormatter)
             for flags, kwargs in command.options:
                 p.add_argument(*flags, **kwargs)
-        p.set_defaults(func=lambda args, c=command: _run(c, args))
+        p.set_defaults(func=lambda args, c=command: _run(c, args), **command.extra)

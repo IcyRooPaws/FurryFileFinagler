@@ -12,6 +12,7 @@ import os
 import time
 import logging
 import signal
+import threading
 from concurrent.futures import ThreadPoolExecutor
 from .utils import hash_file, compute_md5_hash, is_configured_file, is_video, is_gif, is_image
 
@@ -27,10 +28,13 @@ def signal_handler(signum, frame):
     print("[TIME] Finishing current files and stopping...")
     shutdown_requested = True
 
-# Set up signal handlers
-signal.signal(signal.SIGINT, signal_handler)  # Ctrl+C
-if hasattr(signal, 'SIGTERM'):
-    signal.signal(signal.SIGTERM, signal_handler)  # Termination signal
+# Set up signal handlers. Python only allows that on the main thread; when this module is
+# first imported from a worker thread (the setup wizard creates the tables in the background)
+# there is no console Ctrl+C to catch, so it is skipped instead of failing the import.
+if threading.current_thread() is threading.main_thread():
+    signal.signal(signal.SIGINT, signal_handler)  # Ctrl+C
+    if hasattr(signal, 'SIGTERM'):
+        signal.signal(signal.SIGTERM, signal_handler)  # Termination signal
 
 class HashManager:
     """Manages hashing operations for destination directories."""

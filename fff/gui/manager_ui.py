@@ -576,12 +576,29 @@ def build(root) -> ManagerApp:
 def main(argv=None, *, root=None, run_mainloop: bool = True) -> int:
     import tkinter as tk
 
-    root = tk.Tk() if root is None else root
-    build(root)
-    if run_mainloop:
-        from fff.common import consent
+    from fff.common import consent, first_run
 
-        # First run: actions launched from here have no console to ask in
-        root.after(300, lambda: consent.ask_in_dialog(consent.BROWSER_COOKIES, parent=root))
+    root = tk.Tk() if root is None else root
+    if first_run.is_complete():
+        build(root)
+        if run_mainloop:
+            # First run: actions launched from here have no console to ask in
+            root.after(300, lambda: consent.ask_in_dialog(consent.BROWSER_COOKIES, parent=root))
+    else:
+        # Not set up yet: the guided setup takes the whole window, and the Manager replaces
+        # it once setup is finished (the wizard asks for the cookie consent itself).
+        from fff.gui import first_run_ui, theme
+
+        theme.apply(root)
+        root.title("FFF Manager – first-time setup")
+        root.geometry("1180x800")
+
+        def finished():
+            for child in root.winfo_children():
+                child.destroy()
+            build(root)
+
+        first_run_ui.build(root, on_finish=finished)
+    if run_mainloop:
         root.mainloop()
     return 0

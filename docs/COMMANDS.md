@@ -17,7 +17,7 @@ Global options: `fff [--config PATH] [--env prod|test] <command>`.
 | `fff db snapshot` | Write the live schema to sql/schema/*.sql (reference; includes report views and procedures) |
 | `fff db backup` | Back up the databases (gzipped SQL, one consistent snapshot) and remove old backups |
 | `fff db restore` | Restore a backup into the test_* databases (or production with --prod) |
-| `fff setup` | Open the guided configuration and first-run checks |
+| `fff setup` | Guided first-time setup; once finished, the settings editor |
 | `fff consent` | Agree to (or revoke) FFF reading your FurAffinity browser cookies |
 | `fff doctor` | Check databases, folders and dependencies |
 

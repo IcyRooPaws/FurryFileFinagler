@@ -116,7 +116,8 @@ def build(parent, config_path: str | Path | None = None) -> None:
     if not isinstance(root, tool_host.ToolHost):  # the manager shows its own heading
         ttk.Label(root, text="FurryFileFinagler Setup", style="Title.TLabel").pack(
             anchor="w", padx=18, pady=(16, 2))
-        ttk.Label(root, text="Configure connections, folders, and credentials, then run first-time checks.",
+        ttk.Label(root, text="Configure connections, folders, and credentials, then run the checks. "
+                             "For the step-by-step guided setup, run 'fff setup --wizard'.",
                   style="Muted.TLabel").pack(
             anchor="w", padx=18, pady=(0, 12))
 
@@ -264,9 +265,11 @@ def build(parent, config_path: str | Path | None = None) -> None:
             for module, name, status in doctor.check_databases(cfg):
                 lines.append(f"  {module}: {name}: {status}")
                 problems += not status.startswith(doctor.OK)
-            view = doctor.check_all_files_view(cfg)
-            lines.append(f"  all_files view: {view}")
-            problems += view != doctor.OK
+            schema_problems = [line for line in doctor.check_schema() if not line.startswith("run ")]
+            lines.extend(f"  {line}" for line in schema_problems)
+            if not schema_problems:
+                lines.append("  Every table FFF uses exists.")
+            problems += len(schema_problems)
         lines.append(f"\n{problems} problem(s) found." if problems else "\nAll checks passed.")
         report(lines)
 

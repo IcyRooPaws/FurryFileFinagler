@@ -14,13 +14,33 @@ The full command list is in [COMMANDS.md](COMMANDS.md).
 python -m venv .venv
 .venv\Scripts\python -m pip install -r requirements.txt
 .venv\Scripts\python -m pip install -e . --no-deps
-fff setup               # guided configuration and first-run checks
-fff db init             # create the three databases and every table FFF uses
+fff setup               # the guided first-time setup (required before anything else)
 fff doctor              # packages, configured folders, all three databases
 ```
 
-The setup window starts from the committed examples unless real config files already exist. It keeps
-credentials in `config/secrets.yaml`; database connectivity checks are opt-in and read-only.
+### Guided first-time setup
+
+A new install has to go through the guided setup before FFF does anything else. `setup.bat` opens it,
+and so do `fff setup` and the FFF Manager (which shows it instead of its pages). Until it's finished,
+every other `fff` command stops with "FFF isn't set up yet". The steps, each of which must pass before
+**Next** unlocks:
+
+1. **Welcome**: pick the optional features you'll use (library sorting, reverse image search, FurAffinity).
+2. **Database**: MySQL server and account; test the connection, then create the databases and every table
+   (`fff db init`).
+3. **e621 account**: username and API key, checked by signing in to e621. The user agent and the
+   favorites username are filled in from the username.
+4. **Folders**: four places (media library, work area, long-term archive, user folder) that every other
+   folder is laid out under. Change any single folder, then create the missing ones.
+5. **Extras**, only for the features you picked: the FuzzySearch API key, and permission to read your
+   FurAffinity browser cookies.
+6. **Final checks**: packages, filled-in settings, databases, tables, folders and the e621 sign-in, all together.
+
+Settings are saved at every **Next** (credentials go to `config/secrets.yaml`), so you can close the
+window and pick up where you left off; progress is kept in `data/setup_state.json`. After setup,
+`fff setup` opens the full settings editor instead, and `fff setup --wizard` runs the guided setup
+again without locking anything. Installs that had a `config.yaml` before the guided setup existed
+count as set up.
 
 ### Manual setup
 

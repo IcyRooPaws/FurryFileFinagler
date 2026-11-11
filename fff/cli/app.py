@@ -239,6 +239,13 @@ def _cmd_doctor(args) -> int:
 
 
 def _cmd_setup(args) -> int:
+    """The guided wizard until setup is finished (or with --wizard); the settings editor after."""
+    from fff.common import first_run
+
+    if args.wizard or not first_run.is_complete(args.config):
+        from fff.gui import first_run_ui
+
+        return first_run_ui.main(args.config)
     from fff.gui import setup_ui
 
     return setup_ui.main(args.config)
@@ -368,7 +375,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(func=lambda args: daily.run(args))
 
     # first-run setup
-    p = sub.add_parser("setup", help="Open the guided configuration and first-run checks")
+    p = sub.add_parser("setup", help="Guided first-time setup; once finished, the settings editor",
+                       description="Until setup is finished this opens the guided setup wizard (FFF can't "
+                                   "be used before that); afterwards it opens the settings editor.")
+    p.add_argument("--wizard", action="store_true",
+                   help="Open the guided setup wizard again, even though setup is finished")
     p.set_defaults(func=_cmd_setup, needs_config=False)
 
     # consent
@@ -418,6 +429,11 @@ def main(argv: list[str] | None = None) -> int:
     # A forwarded command parses its own --help; printing help needs no config.yaml.
     wants_help = forward_path is not None and any(a in ("-h", "--help") for a in args.rest)
     if getattr(args, "needs_config", True) and not wants_help:
+        from fff.common import first_run
+
+        if not first_run.is_complete(args.config):  # the guided setup comes first
+            print(first_run.NOT_SET_UP, file=sys.stderr)
+            return 2
         try:
             cfg = fff_config.load(args.config) if args.config else fff_config.load()
             if fff_config.is_test(cfg):

@@ -16,13 +16,20 @@ echo Installing FurryFileFinagler...
 ".venv\Scripts\python.exe" -m pip install -e . --no-deps
 if errorlevel 1 goto :failed
 
-echo Launching setup...
+echo Launching the guided setup...
 ".venv\Scripts\python.exe" -m fff setup
-if errorlevel 1 goto :failed
+if errorlevel 2 goto :failed
+if errorlevel 1 goto :unfinished
 
-echo Setup finished.
+echo Setup finished. Start FFF with manager.bat.
 pause
 exit /b 0
+
+:unfinished
+echo Setup isn't finished yet. FFF can't be used until it is.
+echo Run setup.bat again, or open manager.bat, to continue where you left off.
+pause
+exit /b 1
 
 :failed
 set "setup_error=%errorlevel%"

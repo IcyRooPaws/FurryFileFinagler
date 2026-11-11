@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "furryfilefinagler"
-version = "0.1.0"
+dynamic = ["version"]  # from fff/__init__.py (see CHANGELOG.md)
 description = "Toolkit for e621 archiving, reverse-image source search, and media library management"
 requires-python = ">=3.10"
 dependencies = [
@@ -31,6 +31,9 @@ dev = ["pytest>=8.0", "ruff==0.17.3"]
 
 [project.scripts]
 fff = "fff.cli.app:main"
+
+[tool.setuptools.dynamic]
+version = { attr = "fff.__version__" }
 
 [tool.setuptools.packages.find]
 include = ["fff*"]

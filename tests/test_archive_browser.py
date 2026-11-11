@@ -194,6 +194,7 @@ def tag_db():
         "untyped": (None, [], recent_ids[:8], None),                    # counts as general
         "dragon": ("Species", [], recent_ids[:9], "generic"),           # lift 6, but generic
         "scalie": ("Species", [], recent_ids[:7], "specific"),          # reviewed: not generic
+        "nintendo": ("Copyright", old_ids[:20], recent_ids[:10], None),  # lift 2
         "chastity_cage": ("General", [], recent_ids[:8], "fetish"),     # lift 6
         "hyper": ("General", old_ids[:5], recent_ids[:5], "fetish"),    # lift 3
         "bondage": ("General", [], recent_ids[:3], "fetish"),           # under the minimum
@@ -221,10 +222,11 @@ def lists(result):
 def test_rising_ranks_each_list_by_lift(tag_db):
     result = archive_browser.trending(_Cursor(tag_db), 30, now=NOW, order="rising")
     assert result["recent_posts"] == 20
-    assert [cat["title"] for cat in result["categories"]] == ["Artists", "Characters", "Species", "Fetish"]
+    assert [cat["title"] for cat in result["categories"]] == ["Artists", "Copyrights", "Characters", "Species", "Fetish"]
     assert lists(result) == {
         "artist": [("newartist", 10, 6.0), ("steady", 10, 1.0)],
         "character": [("newchar", 6, 6.0), ("oldchar", 5, 2.0)],
+        "copyright": [("nintendo", 10, 2.0)],
         "species": [("scalie", 7, 6.0), ("mammal", 20, 1.0)],   # dragon is marked generic
         "fetish": [("chastity_cage", 8, 6.0), ("hyper", 5, 3.0)],  # only tags marked fetish
     }
@@ -273,7 +275,8 @@ def trending_calls(monkeypatch):
     monkeypatch.setattr(archive_browser, "database_connection", _Conn)
     monkeypatch.setattr(archive_browser, "trending_candidates", lambda cursor, days: calls.append(days) or {
         "days": days, "recent_posts": 10, "total_posts": 100,
-        "buckets": {"artist": [("a", 5, 50), ("b", 4, 4)], "character": [], "species": [], "fetish": []}})
+        "buckets": {**{key: [] for key, _ in archive_browser.TRENDING_CATEGORIES},
+                    "artist": [("a", 5, 50), ("b", 4, 4)]}})
     return calls
 
 
@@ -324,3 +327,82 @@ def test_typed_search_still_matches_substrings():
 def test_post_page_tag_links_are_exact_searches():
     html = archive_browser.DETAIL_PAGE
     assert html.count("&amp;exact=1") == 2  # artist links and tag links
+
+
+# --- trends over time -------------------------------------------------------------
+
+
+def overview(tag_db, category, months=12, **kwargs):
+    kwargs.setdefault("default_fetish", frozenset())
+    return archive_browser.trends_overview(_Cursor(tag_db), months, category, now=NOW, **kwargs)
+
+
+def test_trends_put_the_first_import_day_in_its_own_column(tag_db):
+    data = overview(tag_db, "species")
+    # posts: 100 on the first day (the import, 200 days ago) and 20 three days ago
+    assert data["before"]["posts"] == 100
+    assert data["before"]["date"] == "Apr 24, 2026"
+    # 12 months back would start Dec 2025, but tracking began after the Apr 24 import
+    assert [m["key"] for m in data["months"]] == ["2026-04", "2026-05", "2026-06", "2026-07", "2026-08",
+                                                  "2026-09", "2026-10", "2026-11"]
+    assert [m["posts"] for m in data["months"]] == [0] * 7 + [20]
+    assert [(r["name"], r["total"], r["before"], r["counts"][-1]) for r in data["rows"]] == [
+        ("mammal", 20, 100, 20), ("scalie", 7, 0, 7)]  # dragon is marked generic
+
+
+def test_trends_range_and_row_limit(tag_db):
+    data = overview(tag_db, "species", months=3, limit=1)
+    assert [m["label"] for m in data["months"]] == ["Sep 2026", "Oct 2026", "Nov 2026"]
+    assert [r["name"] for r in data["rows"]] == ["mammal"]
+
+
+def test_trends_follow_the_sidebar_rules_per_category(tag_db):
+    names = lambda data: [(r["name"], r["total"], r["before"]) for r in data["rows"]]  # noqa: E731
+    # warning tags are not artists; ties on recent posts fall back to earlier posts
+    assert names(overview(tag_db, "artist")) == [("steady", 10, 50), ("newartist", 10, 0), ("oneoff", 2, 0)]
+    assert names(overview(tag_db, "copyright")) == [("nintendo", 10, 20)]
+    # fetish: saved fetish marks plus listed tags without a saved mark
+    assert names(overview(tag_db, "fetish", default_fetish=frozenset({"solo"}))) == [
+        ("solo", 20, 0), ("chastity_cage", 8, 0), ("hyper", 5, 5), ("bondage", 3, 0)]
+    # a listed tag with no saved mark leaves Species for Fetish; a saved mark keeps it
+    species = overview(tag_db, "species", default_fetish=frozenset({"mammal", "scalie"}))
+    assert [r["name"] for r in species["rows"]] == ["scalie"]
+
+
+@pytest.fixture
+def trends_calls(monkeypatch):
+    calls = []
+
+    class _Conn:
+        def cursor(self):
+            return self
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(archive_browser, "_trends_cache", {})
+    monkeypatch.setattr(archive_browser.generic_tags, "ensure_table", lambda conn: None)
+    monkeypatch.setattr(archive_browser, "database_connection", _Conn)
+    monkeypatch.setattr(archive_browser, "trends_overview",
+                        lambda cursor, months, category, limit: calls.append((months, category, limit)) or {})
+    return calls
+
+
+@pytest.mark.parametrize("query, expected", [
+    ("", (12, "species", 20)),
+    ("?range=3&category=fetish&rows=10", (3, "fetish", 10)),
+    ("?range=24&category=general&rows=500", (12, "species", 20)),  # only the offered choices
+    ("?range=x&rows=y", (12, "species", 20)),
+])
+def test_trends_endpoint_validates_and_caches(trends_calls, query, expected):
+    client = archive_browser.app.test_client()
+    assert client.get(f"/api/trends{query}").status_code == 200
+    client.get(f"/api/trends{query}")
+    assert trends_calls == [expected]
+
+
+def test_trends_page_and_links():
+    client = archive_browser.app.test_client()
+    page = client.get("/trends").data.decode()
+    assert '["copyright", "Copyrights"]' in page  # categories reach the page's script
+    assert 'href="/trends"' in client.get("/").data.decode()
