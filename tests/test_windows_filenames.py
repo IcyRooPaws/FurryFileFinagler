@@ -48,3 +48,13 @@ def test_every_archive_file_name_builder_applies_it():
         assert "windows_safe_filename(" in window, f"db.py line {i + 1} builds a file name without it"
     download = (paths.ROOT / "fff" / "archive" / "download.py").read_text(encoding="utf-8")
     assert "windows_safe_filename(strip_flag_tokens(file_name))" in download
+
+
+def test_fa_file_names_clean_every_part():
+    """rating, post_id and extension come from the FA page, not just the artist."""
+    from fff.common.naming import generate_fa_filename
+    name = generate_fa_filename({"artist": "a/b", "rating": r"..\..\x", "post_id": "1:2", "extension": ".png?y"})
+    assert not INVALID.search(name)
+    assert name == "a_b-.._.._x-FA-1_2.png_y"
+    assert generate_fa_filename({"artist": "wolf", "rating": "Adult", "post_id": "42", "extension": ".jpg"}) \
+        == "wolf-Adult-FA-42.jpg"

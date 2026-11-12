@@ -7,10 +7,45 @@ workflows use the latter.
 """
 import logging
 import os
+import subprocess
+import sys
 import time
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
+
+# Windows' SYSTEM account keeps access so backup software and the OS can still read the file.
+_SYSTEM_SID = "S-1-5-18"
+
+
+def restrict_to_owner(path) -> bool:
+    """Let only the current user (and Windows' SYSTEM account) read or change ``path``.
+
+    For files holding passwords and API keys. A project under a drive root such as D:\\
+    inherits an ACL that lets every signed-in user read it. Returns False when the
+    permissions couldn't be changed (the file is still usable).
+    """
+    path = Path(path)
+    if not path.is_file():
+        return False
+    if sys.platform != "win32":
+        try:
+            os.chmod(path, 0o600)
+            return True
+        except OSError:
+            return False
+    no_window = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    try:
+        who = subprocess.run(["whoami", "/user", "/fo", "csv", "/nh"], capture_output=True, text=True,
+                             check=True, creationflags=no_window)
+        sid = who.stdout.strip().rsplit(",", 1)[-1].strip('"')
+        if not sid.startswith("S-"):
+            return False
+        subprocess.run(["icacls", str(path), "/inheritance:r", "/grant:r", f"*{sid}:F", f"*{_SYSTEM_SID}:F"],
+                       capture_output=True, check=True, creationflags=no_window)
+        return True
+    except (OSError, subprocess.CalledProcessError):
+        return False
 
 # --- e621 archive/modules/config.py: backslash paths for e621_posts_db ---
 

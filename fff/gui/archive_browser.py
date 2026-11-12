@@ -3,6 +3,7 @@
 
 import argparse
 import os
+import socket
 import subprocess
 import sys
 import threading
@@ -34,7 +35,75 @@ MEDIA_EXTENSIONS = {
     "video": tuple(sorted(VIDEO_EXTENSIONS)),
 }
 MEDIA_TYPES = tuple(MEDIA_EXTENSIONS)
+# File types "Open file" may hand to the operating system.
+OPENABLE_EXTENSIONS = frozenset(ext for group in MEDIA_EXTENSIONS.values() for ext in group)
 _PATH_EXTENSION = "LOWER(SUBSTRING_INDEX(p.file_path, '.', -1))"
+
+
+# Host names the server answers to. A page on another site can point its own domain at
+# 127.0.0.1 ("DNS rebinding") and then read this server as if it were that site; its
+# requests still carry the attacker's domain in Host, so anything not listed is refused.
+LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
+app.config["FFF_ALLOWED_HOSTS"] = set(LOOPBACK_HOSTS)
+# Headers on every response: no framing (clickjacking the Open buttons), no sniffing a
+# file's type from its content, and no Referer sent to sites linked from a post.
+SECURITY_HEADERS = {
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "no-referrer",
+    "X-Frame-Options": "DENY",
+    "Content-Security-Policy": "frame-ancestors 'none'; object-src 'none'; base-uri 'none'",
+}
+# Archived files are served from this origin. "sandbox" keeps an HTML or SVG file opened
+# directly from running script here; images and videos still display.
+MEDIA_CSP = "sandbox"
+
+
+def is_web_url(url):
+    """True for an http(s) URL; only those are safe to put in a link's href."""
+    return isinstance(url, str) and url.strip().lower().startswith(("http://", "https://"))
+
+
+def host_name(host_header):
+    """The host name in a Host header, lower-cased and without the port ('[::1]:5000' -> '::1')."""
+    host = (host_header or "").strip().lower()
+    if host.startswith("["):
+        return host[1:host.find("]")] if "]" in host else host
+    return host.rsplit(":", 1)[0] if host.count(":") == 1 else host
+
+
+def is_loopback(bind_host):
+    return bind_host.lower() in LOOPBACK_HOSTS
+
+
+def allowed_hosts(bind_host, extra=()):
+    """Host names to accept when serving on ``bind_host``, plus any given with --allow-host."""
+    hosts = set(LOOPBACK_HOSTS) | {h.strip().lower() for h in extra if h.strip()}
+    if bind_host in ("0.0.0.0", "::", ""):
+        # Every interface: accept this machine's own names and addresses (the attacker's
+        # domain still isn't one of them).
+        try:
+            name = socket.gethostname()
+            hosts.update({name.lower(), socket.getfqdn().lower()})
+            hosts.update(info[4][0].lower() for info in socket.getaddrinfo(name, None))
+        except OSError:
+            pass
+    else:
+        hosts.add(bind_host.lower())
+    return hosts
+
+
+@app.before_request
+def reject_unknown_hosts():
+    if host_name(request.headers.get("Host")) not in app.config["FFF_ALLOWED_HOSTS"]:
+        return "Unknown host. Open the gallery at http://127.0.0.1:5000 (see 'fff web --allow-host').", 400
+    return None
+
+
+@app.after_request
+def add_security_headers(response):
+    for name, value in SECURITY_HEADERS.items():
+        response.headers.setdefault(name, value)
+    return response
 
 
 def _placeholders(items):
@@ -211,7 +280,7 @@ PAGE = r"""
         : '<div class="missing">No file</div>';
       const kind = post.is_video ? 'VIDEO' : post.ext === 'gif' ? 'GIF' : '';
       const deleted = post.deleted ? `<div class="deleted-note" title="${esc(post.deletion_reason || '')}">deleted</div>` : '';
-      const source = post.file_url ? `<a href="${esc(post.file_url)}" target="_blank" rel="noreferrer">Source</a>` : '';
+      const source = /^https?:\/\//i.test(post.file_url || '') ? `<a href="${esc(post.file_url)}" target="_blank" rel="noreferrer">Source</a>` : '';
       const local = post.has_file && canOpen ? `<button class="linkish" type="button" data-open="${post.id}" data-action="open">Open file</button><button class="linkish" type="button" data-open="${post.id}" data-action="reveal">Show in folder</button>` : '';
       return `<article class="thumb${post.deleted ? ' deleted' : ''}"><a class="thumb-img" href="/post/${post.id}" title="${esc(post.file_name || '')}">${media}</a>`
         + `<div class="thumb-desc"><span class="rating-letter r-${esc(post.rating)}" title="${esc(post.rating)}">${RATING_LETTER[post.rating] || '?'}</span><a href="/post/${post.id}">#${post.id}</a>${kind ? `<span class="ftype">${kind}</span>` : ''}</div>`
@@ -393,7 +462,7 @@ DETAIL_PAGE = r"""
         {% if post.has_file and can_open %}<li class="local-actions"><button class="linkish" type="button" data-action="open">Open file</button><br><button class="linkish" type="button" data-action="reveal">Show in folder</button><span class="open-status" id="open-status"></span></li>{% endif %}
         <li><a href="https://e621.net/posts/{{ post.id }}" target="_blank" rel="noreferrer">View on e621</a></li>
       </ul></section>
-      {% if sources %}<section><h2 class="section">Sources</h2><ul class="info">{% for source in sources %}<li><a href="{{ source }}" target="_blank" rel="noreferrer">{{ source }}</a></li>{% endfor %}</ul></section>{% endif %}
+      {% if sources %}<section><h2 class="section">Sources</h2><ul class="info">{% for source, is_link in sources %}<li>{% if is_link %}<a href="{{ source }}" target="_blank" rel="noreferrer">{{ source }}</a>{% else %}{{ source }}{% endif %}</li>{% endfor %}</ul></section>{% endif %}
     </aside>
     <section class="post-content">
       {% if post.deleted %}<div class="notice">This post was deleted{% if post.deletion_reason %}: {{ post.deletion_reason }}{% endif %}</div>{% endif %}
@@ -810,7 +879,9 @@ def post_detail(post_id):
             WHERE post_id = %s
             ORDER BY source_link
         """, (post_id,))
-        sources = [source[0] for source in cursor.fetchall()]
+        # Anyone can edit sources on e621, so only http(s) ones become links: a
+        # "javascript:" source would otherwise run script on this page when clicked.
+        sources = [(source[0], is_web_url(source[0])) for source in cursor.fetchall()]
         cursor.close()
     except Exception:
         if connection:
@@ -1259,9 +1330,11 @@ THUMB_MAX_AGE = 7 * 24 * 3600
 
 
 def _cached_privately(response):
-    """Let the browser keep the file, but no shared cache (proxy): the archive is private."""
+    """Let the browser keep the file, but no shared cache (proxy): the archive is private.
+    Also sandboxes it, since it is a downloaded file served from this origin."""
     response.cache_control.public = False
     response.cache_control.private = True
+    response.headers["Content-Security-Policy"] = MEDIA_CSP
     return response
 
 
@@ -1327,21 +1400,35 @@ def open_local(post_id):
         path = post_file_path(post_id)
         if not path:
             return jsonify({"error": "The local file is unavailable"}), 404
+        # Opening hands the file to Windows to run, so only media types; revealing just
+        # selects it in Explorer, which is safe for anything.
+        if action == "open" and os.path.splitext(path)[1].lower().lstrip(".") not in OPENABLE_EXTENSIONS:
+            return jsonify({"error": "Only images and videos can be opened from here; use Show in folder"}), 403
         launch(path, reveal=action == "reveal")
-    except Exception as exc:
-        return jsonify({"error": str(exc)}), 500
+    except Exception:
+        app.logger.exception("Could not open the file for post %s", post_id)
+        return jsonify({"error": "Could not open the file"}), 500
     return jsonify({"ok": True})
 
 
 def parse_args(argv=None):  # fff: the original parsed args inside the __main__ block
     parser = argparse.ArgumentParser(description="Browse the local e621 archive in a web browser.")
-    parser.add_argument("--host", default="127.0.0.1")
+    parser.add_argument("--host", default="127.0.0.1",
+                        help="address to serve on (default 127.0.0.1: this computer only)")
     parser.add_argument("--port", default=5000, type=int)
+    parser.add_argument("--allow-host", action="append", default=[], metavar="NAME",
+                        help="also accept requests addressed to this host name (repeatable), "
+                             "e.g. a name other devices use to reach this computer")
     return parser.parse_args(argv)
 
 
 def main(argv=None):
     args = parse_args(argv)
+    app.config["FFF_ALLOWED_HOSTS"] = allowed_hosts(args.host, args.allow_host)
+    if not is_loopback(args.host):
+        print(f"WARNING: serving on {args.host}, so other devices on your network can open the gallery.\n"
+              "         It has no login: anyone who can reach this computer can browse the whole archive.\n"
+              "         Leave out --host to keep it to this computer.", file=sys.stderr)
     app.run(host=args.host, port=args.port, debug=False)
 
 

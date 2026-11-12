@@ -143,6 +143,91 @@ def test_launch_reveal_on_windows_selects_the_file(monkeypatch):
     assert commands == [r'explorer /select,"P:\some dir\x.png"']
 
 
+# --- security ---------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("path, action, status", [
+    (r"P:\a\setup.exe", "open", 403),
+    (r"P:\a\page.html", "open", 403),
+    (r"P:\a\setup.exe", "reveal", 200),  # selecting it in Explorer runs nothing
+    (r"P:\a\clip.WEBM", "open", 200),
+])
+def test_open_only_runs_media_files(monkeypatch, path, action, status):
+    calls = []
+    monkeypatch.setattr(archive_browser, "post_file_path", lambda pid: path)
+    monkeypatch.setattr(archive_browser, "launch", lambda p, reveal=False: calls.append(p))
+    assert post_open(1, {"action": action}).status_code == status
+    assert calls == ([path] if status == 200 else [])
+
+
+def test_open_failure_does_not_leak_details(monkeypatch):
+    def fail(pid):
+        raise OSError(r"cannot reach P:\private\folder")
+    monkeypatch.setattr(archive_browser, "post_file_path", fail)
+    response = post_open(1, {"action": "open"})
+    assert response.status_code == 500
+    assert "private" not in response.get_data(as_text=True)
+
+
+@pytest.mark.parametrize("host, status", [
+    ("127.0.0.1:5000", 200), ("localhost:5000", 200), ("[::1]:5000", 200), ("LOCALHOST", 200),
+    ("evil.example:5000", 400), ("127.0.0.1.evil.example", 400), ("", 400),
+])
+def test_requests_for_other_host_names_are_refused(host, status):
+    """DNS rebinding: another site's page reaches 127.0.0.1 but its requests carry its own Host."""
+    client = archive_browser.app.test_client()
+    assert client.get("/trends", headers={"Host": host}).status_code == status
+
+
+def test_allowed_hosts_follow_the_bind_address():
+    assert archive_browser.allowed_hosts("127.0.0.1") == archive_browser.LOOPBACK_HOSTS
+    assert "192.168.1.5" in archive_browser.allowed_hosts("192.168.1.5")
+    assert "nas.local" in archive_browser.allowed_hosts("127.0.0.1", ["NAS.local"])
+    assert "evil.example" not in archive_browser.allowed_hosts("0.0.0.0")
+
+
+def test_responses_carry_security_headers():
+    headers = archive_browser.app.test_client().get("/trends").headers
+    assert headers["X-Content-Type-Options"] == "nosniff"
+    assert headers["X-Frame-Options"] == "DENY"
+    assert "frame-ancestors 'none'" in headers["Content-Security-Policy"]
+
+
+def test_archived_files_are_served_sandboxed(monkeypatch, tmp_path):
+    page = tmp_path / "x.svg"
+    page.write_text("<svg xmlns='http://www.w3.org/2000/svg'><script>alert(1)</script></svg>")
+    monkeypatch.setattr(archive_browser, "known_file_path", lambda pid: str(page))
+    response = archive_browser.app.test_client().get("/media/1")
+    assert response.status_code == 200
+    assert response.headers["Content-Security-Policy"] == "sandbox"
+    assert response.headers["X-Content-Type-Options"] == "nosniff"
+    response.close()
+
+
+@pytest.mark.parametrize("url, expected", [
+    ("https://www.furaffinity.net/view/1/", True), ("HTTP://example.com", True),
+    ("javascript:alert(1)", False), (" JavaScript:alert(1)", False), ("data:text/html,x", False),
+    ("www.example.com", False), (None, False),
+])
+def test_only_http_urls_count_as_links(url, expected):
+    assert archive_browser.is_web_url(url) is expected
+
+
+def test_post_page_shows_unsafe_sources_as_text():
+    from flask import render_template_string
+    sources = [("https://example.com/a", True), ("javascript:alert(1)", False)]
+    with archive_browser.app.test_request_context():
+        html = render_template_string(archive_browser.DETAIL_PAGE, post={"id": 1}, artists=[], tags={},
+                                      sources=sources, can_open=False, site_header=archive_browser.site_header,
+                                      section_titles=archive_browser.TAG_SECTION_TITLES)
+    assert 'href="https://example.com/a"' in html
+    assert "javascript:alert(1)" in html and 'href="javascript:' not in html
+
+
+def test_gallery_cards_only_link_http_sources():
+    assert "/^https?:\\/\\//i.test(post.file_url || '')" in archive_browser.PAGE
+
+
 # --- trending tags -------------------------------------------------------------
 
 from datetime import datetime, timedelta  # noqa: E402

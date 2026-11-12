@@ -15,6 +15,40 @@ Version numbers follow [Semantic Versioning](https://semver.org/):
 The version lives in `fff/__init__.py` (`fff --version` prints it). `pyproject.toml` reads it
 from there, and a test checks that the newest entry here matches it.
 
+## [1.32.0] - 2026-11-12
+
+### Added
+- `fff web --allow-host NAME` accepts requests addressed to another name for this computer
+  (repeatable). The gallery now refuses any other host name; see Security.
+- CI checks the pinned dependencies for known vulnerabilities (`pip-audit`).
+
+### Changed
+- `fff web --host` with anything other than this computer prints a warning that the gallery
+  has no login and the whole archive is visible to the network.
+- `fff doctor` and saving settings make `config/secrets.yaml` readable only by your account
+  (and Windows' SYSTEM). A project on a drive root such as `D:\` otherwise lets every
+  signed-in user read it.
+- Pillow 13.0.0 (Python 3.11 and newer) and certifi 2026.10.23, which fix 41 published
+  vulnerabilities. Python 3.10 stays on Pillow 12.3.0, the last release that supports it.
+
+### Security
+- **Archive gallery:**
+  - A post source that isn't an `http(s)` URL (such as `javascript:`) is shown as text, not
+    a link. Anyone can edit sources on e621, and clicking such a link ran script in the
+    gallery.
+  - Requests addressed to a host name other than this computer's are refused. This stops
+    another website from pointing its domain at 127.0.0.1 ("DNS rebinding") to read the
+    archive or open files.
+  - Archived files are served sandboxed, so an HTML or SVG file opened directly can't run
+    script. Every page sets `nosniff`, refuses to be framed, and sends no `Referer`.
+  - **Open file** only opens images, GIFs and videos. **Show in folder** still works for
+    any file.
+  - A failed **Open file** no longer shows the error's details (such as local paths) in the
+    page. They go to the server log instead.
+- FurAffinity downloads clean the whole file name, not just the artist: the rating, post ID
+  and extension from the page can no longer add path separators.
+- CI jobs get read-only access to the repository.
+
 ## [1.31.0] - 2026-11-11
 
 ### Added

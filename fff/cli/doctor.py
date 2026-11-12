@@ -9,6 +9,8 @@ import importlib
 from pathlib import Path
 
 from fff.common import config as fff_config
+from fff.common import paths
+from fff.common.fileops import restrict_to_owner
 
 OK, MISSING, FAIL = "OK", "MISSING", "FAIL"
 
@@ -125,6 +127,16 @@ def check_modules() -> list[tuple[str, str]]:
     return results
 
 
+def check_secrets(secrets_path: Path | None = None) -> tuple[bool, str]:
+    """Make secrets.yaml readable by the current user only (files saved before 1.32.0 weren't)."""
+    secrets_path = secrets_path or paths.CONFIG_DIR / "secrets.yaml"
+    if not secrets_path.is_file():
+        return True, f"{OK:<8} no {secrets_path.name} (credentials not set up yet)"
+    if restrict_to_owner(secrets_path):
+        return True, f"{OK:<8} {secrets_path.name}: only your account can read it"
+    return False, f"{FAIL:<8} {secrets_path.name}: could not limit it to your account; other users may read it"
+
+
 def run(args) -> int:
     cfg = fff_config.load()
     problems = 0
@@ -156,6 +168,11 @@ def run(args) -> int:
         if not schema_problems:
             print(f"  {OK:<8} schema: every table FFF uses exists; all_files covers every hash table")
         problems += sum(1 for line in schema_problems if not line.startswith("run "))
+
+    print("\n== Secrets")
+    ok, message = check_secrets()
+    print(f"  {message}")
+    problems += not ok
 
     print("\n== Database backups")
     ok, message = check_backups()

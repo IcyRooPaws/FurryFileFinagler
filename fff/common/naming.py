@@ -250,7 +250,9 @@ def generate_fa_filename(post_data: Dict[str, Any]) -> str:
     safe_artist = re.sub(r'[<>:"|?*]', '_', artist)
     safe_artist = safe_artist.strip()
 
-    return f"{safe_artist}-{rating}-FA-{post_id}{ext}"
+    # rating, post_id and extension come from the FA page too: clean the whole name so none of
+    # them can add a path separator or a character Windows rejects.
+    return windows_safe_filename(f"{safe_artist}-{rating}-FA-{post_id}{ext}")
 
 
 # --- fff additions -----------------------------------------------------------

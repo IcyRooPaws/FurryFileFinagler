@@ -7,6 +7,7 @@ from typing import Any
 import yaml
 
 from fff.common import paths
+from fff.common.fileops import restrict_to_owner
 
 
 def _read_yaml(path: Path) -> dict:
@@ -100,6 +101,7 @@ def save_documents(config_path: Path, secrets_path: Path, config: dict, secrets:
     config_path.parent.mkdir(parents=True, exist_ok=True)
     config_path.write_text(yaml.safe_dump(config, sort_keys=False, allow_unicode=True), encoding="utf-8")
     secrets_path.write_text(yaml.safe_dump(secrets, sort_keys=False, allow_unicode=True), encoding="utf-8")
+    restrict_to_owner(secrets_path)
 
 
 def build(parent, config_path: str | Path | None = None) -> None:

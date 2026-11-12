@@ -104,3 +104,23 @@ def test_path_normalizers():
     assert fileops.normalize_path("P:\\IPL\\a\\..\\b.png") == "P:/IPL/b.png"
     expected = "P:\\IPL\\b.png" if os.name == "nt" else "P:/IPL/b.png"
     assert fileops.normalize_file_path("P:/IPL/b.png") == expected
+
+
+def test_restrict_to_owner_limits_the_file_to_this_account(tmp_path):
+    secret = tmp_path / "secrets.yaml"
+    secret.write_text("x: 1\n", encoding="utf-8")
+    assert fileops.restrict_to_owner(secret)
+    assert secret.read_text(encoding="utf-8") == "x: 1\n"  # still readable by us
+    if os.name == "nt":
+        import subprocess
+        acl = subprocess.run(["icacls", str(secret)], capture_output=True, text=True).stdout
+        acl = acl.replace(str(secret), "")  # the temp path itself contains C:\Users
+        assert "(I)" not in acl  # nothing inherited from the folder
+        assert "Users" not in acl and "Everyone" not in acl
+        assert "NT AUTHORITY\\SYSTEM:(F)" in acl
+    else:
+        assert secret.stat().st_mode & 0o077 == 0
+
+
+def test_restrict_to_owner_skips_missing_files(tmp_path):
+    assert fileops.restrict_to_owner(tmp_path / "missing.yaml") is False

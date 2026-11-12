@@ -4,7 +4,7 @@ FFF keeps your e621 favorites archived on your own disk, finds sources for image
 have one, and keeps your media library sorted. It runs nightly on its own, and there's a
 desktop Manager and a local web gallery for everything else.
 
-Version 1.31.0 · [Changelog](CHANGELOG.md) · [Command reference](docs/COMMANDS.md) · [Usage guide](docs/USAGE.md)
+Version 1.32.0 · [Changelog](CHANGELOG.md) · [Command reference](docs/COMMANDS.md) · [Usage guide](docs/USAGE.md)
 
 ## Highlights
 
@@ -145,7 +145,8 @@ agree to the FurAffinity cookie use first.
 ### Databases and safety
 
 - `fff db init` creates the three databases and every table, and is safe to re-run.
-  `fff doctor` checks packages, folders, databases, tables and backup age.
+  `fff doctor` checks packages, folders, databases, tables and backup age, and makes
+  `secrets.yaml` readable only by your account.
 - `fff db backup` takes a consistent backup of all three databases; `fff db restore` restores
   into the test databases unless you ask for production.
 - **Test environment.** `fff --env test <command>`, or the Manager's selector, points every
