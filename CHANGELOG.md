@@ -15,6 +15,23 @@ Version numbers follow [Semantic Versioning](https://semver.org/):
 The version lives in `fff/__init__.py` (`fff --version` prints it). `pyproject.toml` reads it
 from there, and a test checks that the newest entry here matches it.
 
+## [1.33.0] - 2026-11-16
+
+### Added
+- `protected_directories:` in `config.yaml`: nothing inside these folders is ever moved
+  out, renamed, deleted or overwritten by any `fff` command, the GUIs included. Files can
+  still be copied out or moved in. The guard covers every way the toolkit moves or deletes
+  files (`shutil.move`, `os.rename`, `os.remove`, `send2trash` and the rest), so new code
+  can't skip it. A blocked move fails with a "Refused to move ... protected directory"
+  error and the file stays where it is.
+
+### Fixed
+- The artist sort moved commissioned art out of `P:/IPL/- Commissioned Art` into
+  `- Fav/Artists` when the file name matched a favorite artist (10 files, on 2026-06-08 and
+  2026-10-06). Every file in `P:/IPL` is hashed, which made that folder a candidate. The
+  artist scan now leaves protected directories out of its candidates, and the folder is
+  protected in this install's config.
+
 ## [1.32.0] - 2026-11-12
 
 ### Added

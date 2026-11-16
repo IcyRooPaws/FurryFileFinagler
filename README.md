@@ -9,7 +9,7 @@
 ![Platform: Windows](https://img.shields.io/badge/platform-Windows-0078D6)
 ![Database: MySQL](https://img.shields.io/badge/database-MySQL-4479A1?logo=mysql&logoColor=white)
 
-Version 1.32.0 · [Changelog](CHANGELOG.md) · [Commands](docs/COMMANDS.md) · [Usage guide](docs/USAGE.md)
+Version 1.33.0 · [Changelog](CHANGELOG.md) · [Commands](docs/COMMANDS.md) · [Usage guide](docs/USAGE.md)
 
 </div>
 
