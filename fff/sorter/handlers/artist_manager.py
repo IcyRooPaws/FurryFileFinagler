@@ -429,6 +429,10 @@ class ArtistManager:
                 except Exception:
                     continue
 
+            # Protected directories (commissioned art etc.) are never sorted out of.
+            from fff.common import protected
+            extra_exclude_dirs.extend(normalize_path(d) for d in protected.directories())
+
             extra_clauses = ''.join(
                 "\n                  AND file_path NOT LIKE CONCAT(%s, '%%')"
                 for _ in extra_exclude_dirs

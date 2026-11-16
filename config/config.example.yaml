@@ -8,6 +8,10 @@
 
 environment: prod
 test_paths_root: D:/Example
+# Nothing inside these is ever moved out, renamed, deleted or overwritten by any fff
+# command (files can still be copied out or moved in). See fff/common/protected.py.
+protected_directories:
+- D:/Example/Commissioned Art
 database:
   host: localhost
   port: 3306
