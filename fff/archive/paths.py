@@ -84,6 +84,16 @@ def unfavorited_directory() -> str:
     return configured or _test_path(DEFAULT_UNFAVORITED_DIRECTORY)
 
 
+def replaced_directory() -> str:
+    """Where a post's old local file goes when e621 has replaced the post's file
+    (archive.e621.replaced_directory). Defaults to a folder beside the unfavorited one."""
+    try:
+        configured = (fff_config.legacy_view("archive").get("e621") or {}).get("replaced_directory")
+    except fff_config.ConfigError:
+        configured = None
+    return configured or str(Path(unfavorited_directory()).parent / "Replaced on e621")
+
+
 def db_names() -> dict:
     """module -> schema for the active environment (prod or test_*)."""
     return fff_config.database_names(fff_config.load())
