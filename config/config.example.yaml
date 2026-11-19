@@ -101,6 +101,8 @@ archive:
     check_unfavorited_posts: true
     delete_unfavorited_files: true
     unfavorited_directory: D:/Work/Unfavorited
+    redownload_replaced_files: true
+    replaced_directory: D:/Work/Replaced on e621
     update_artist_filenames: true
   download:
     download_missing_files: true

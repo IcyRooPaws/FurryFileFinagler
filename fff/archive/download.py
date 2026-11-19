@@ -1,5 +1,6 @@
 # fff: MediaHasher is the archive hash profile (fff.hashing.archive_hasher).
 # fff: characters Windows doesn't allow in file names are replaced with _ (windows_safe_filename).
+import hashlib
 import os
 import re
 import time
@@ -75,6 +76,14 @@ def find_file_with_post_id(post_id, search_dirs):
             logging.debug("Skipping directory %s due to error: %s", root_dir, exc)
 
     return None
+
+def _md5_of_file(path) -> str:
+    digest = hashlib.md5()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
 
 def generate_media_hash(file_path, mysql_config=None):
     """Generate media hash for a file if media_hasher is available.
@@ -301,6 +310,10 @@ def download_missing_files(conn, download_config, e621_config, mysql_config=None
                         # Update the database with the file path and media hash
                         update_cursor = conn.cursor()
                         try:
+                            # posts.md5 is the md5 of the file the post has (the ingest keeps it
+                            # while a path is recorded); this is that file now.
+                            update_cursor.execute("UPDATE posts SET md5 = %s WHERE id = %s",
+                                                  (_md5_of_file(target_path), post_id))
                             if media_hash:
                                 update_cursor.execute(
                                     "UPDATE posts SET file_path = %s, media_hash = %s WHERE id = %s",

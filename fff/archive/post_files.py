@@ -119,11 +119,65 @@ def _drop_sorter_row(conn, table, file_path):
         cursor.close()
 
 
-def _apply(conn, post_ids, action, describe, dry_run) -> dict:
+def record_rename(conn, old_path, new_path, reason) -> int:
+    """After a library file was renamed in place: log it and re-point its sorter row.
+
+    The archive renames files when a post's artist or rating changes. Without this the sorter
+    row kept the old name until the next hash pass threw it away and rehashed the file, and the
+    rename never reached ``file_operations``. ``conn`` is an e621_posts_db connection with nothing
+    uncommitted. Never raises. Returns the number of sorter rows updated.
+    """
+    old_path, new_path = str(old_path), str(new_path)
+    try:
+        size = os.path.getsize(new_path) if os.path.exists(new_path) else None
+        _operation_logger().log_rename_operation(
+            os.path.basename(old_path), os.path.basename(new_path), os.path.dirname(old_path),
+            file_size=size, reason=reason)
+    except Exception as e:
+        logger.warning("Could not log the rename of %s: %s", old_path, e)
+
+    updated = 0
+    cursor = None
+    try:
+        cursor = conn.cursor()
+        sorter = archive_paths.db_names()["sorter"]
+        # Sorter rows hold forward-slash paths, with a few backslash ones among them.
+        spellings = sorted({old_path, fileops.normalize_path(old_path),
+                            fileops.normalize_file_path(os.path.normpath(old_path))})
+        cursor.execute(
+            f"SELECT table_name, file_path FROM `{sorter}`.all_files "
+            f"WHERE file_path IN ({','.join(['%s'] * len(spellings))})", spellings)
+        for table, stored in cursor.fetchall():
+            if not table or not _TABLE_NAME.match(table):
+                continue
+            cursor.execute(
+                # The artist scan caches its verdict per row; a new name needs a new look.
+                f"UPDATE `{sorter}`.`{table}` SET file_name = %s, file_path = %s, "
+                "last_artist_check = NULL, artist_matched = NULL WHERE file_path = %s",
+                (os.path.basename(new_path), fileops.normalize_path(new_path), stored))
+            updated += 1
+        conn.commit()
+    except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        logger.warning("Renamed %s to %s but could not update its sorter row: %s",
+                       old_path, os.path.basename(new_path), e)
+    finally:
+        if cursor is not None:
+            cursor.close()
+    return updated
+
+
+def _apply(conn, post_ids, action, describe, dry_run, keep=()) -> dict:
     post_ids = {int(p) for p in post_ids if p}
     stats = {"done": 0, "failed": 0, "cleared": set(post_ids)}
+    kept = {_key(path) for path in keep}
     for pid, copies in find_post_files(conn, post_ids).items():
         for path, table in copies:
+            if _key(path) in kept:
+                continue
             if dry_run:
                 logger.info("[DRY RUN] Would %s file of post %s: %s", describe, pid, path)
                 stats["done"] += 1
@@ -140,8 +194,10 @@ def _apply(conn, post_ids, action, describe, dry_run) -> dict:
     return stats
 
 
-def move_post_files(conn, post_ids, destination_dir, reason, dry_run=False) -> dict:
+def move_post_files(conn, post_ids, destination_dir, reason, dry_run=False, keep=()) -> dict:
     """Move every local copy of these posts' files into ``destination_dir``.
+
+    ``keep`` lists paths to leave where they are (a copy that is still wanted).
 
     Returns ``{"moved": n, "failed": n, "cleared": set(post ids safe to delete)}``. A post with
     no file on disk is cleared; a post with any copy that failed to move is not.
@@ -151,13 +207,24 @@ def move_post_files(conn, post_ids, destination_dir, reason, dry_run=False) -> d
     def move(path):
         destination.mkdir(parents=True, exist_ok=True)
         target = fileops.unique_destination(destination / os.path.basename(path))
-        fileops.move_file_with_logging(
-            path, str(target), db_manager=_operation_logger(), logger_obj=logger,
-            source_directory=os.path.dirname(path), destination_directory=str(destination),
-            reason=reason)
+        try:
+            fileops.move_file_with_logging(
+                path, str(target), db_manager=_operation_logger(), logger_obj=logger,
+                source_directory=os.path.dirname(path), destination_directory=str(destination),
+                reason=reason)
+        except Exception:
+            # Across drives a move is a copy, then a delete. A file held open by another program
+            # copies fine and then refuses the delete: without this every retry would leave one
+            # more full copy in the destination.
+            if os.path.exists(path) and target.exists():
+                try:
+                    target.unlink()
+                except OSError:
+                    pass
+            raise
         logger.info("Moved post file %s -> %s", path, target)
 
-    stats = _apply(conn, post_ids, move, f"move to {destination}", dry_run)
+    stats = _apply(conn, post_ids, move, f"move to {destination}", dry_run, keep)
     stats["moved"] = stats.pop("done")
     return stats
 

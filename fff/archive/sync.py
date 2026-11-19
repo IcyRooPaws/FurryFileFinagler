@@ -7,7 +7,9 @@ from fff.archive import paths as archive_paths
 from fff.archive.config import load_config
 from fff.archive.post_files import move_post_files
 from fff.archive.logging_setup import setup_logging
-from fff.archive.db import connect_to_mysql, create_tables_if_not_exists, get_existing_posts_info, insert_or_update_post, process_artists_and_tags, backfill_missing_file_names, normalize_ratings, backfill_missing_file_types, insert_post_sources, backfill_missing_sources, get_deleted_posts_count, insert_or_update_posts_bulk, process_artists_and_tags_bulk, sync_changed_post_tags, insert_post_sources_bulk, backfill_media_hashes, backfill_missing_file_paths, verify_and_repair_file_paths, backfill_timestamps_from_api, check_and_update_file_artist_names, insert_post_relationships_bulk, insert_post_relationships, process_pools_bulk, process_pools, upsert_pools_metadata_bulk, archive_unfavorited_posts
+from fff.archive.db import connect_to_mysql, create_tables_if_not_exists, get_existing_posts_info, insert_or_update_post, process_artists_and_tags, backfill_missing_file_names, normalize_ratings, backfill_missing_file_types, insert_post_sources, backfill_missing_sources, get_deleted_posts_count, insert_or_update_posts_bulk, process_artists_and_tags_bulk, sync_changed_post_tags, insert_post_sources_bulk, backfill_media_hashes, backfill_missing_file_paths, verify_and_repair_file_paths, backfill_timestamps_from_api, check_and_update_file_artist_names, insert_post_relationships_bulk, insert_post_relationships, process_pools_bulk, process_pools, upsert_pools_metadata_bulk, archive_unfavorited_posts, get_pools_missing_metadata
+from fff.archive.metadata_sync import (clear_restored_posts, replace_changed_files, stamp_last_checked,
+                                       sync_changed_post_metadata, sync_tag_types)
 from fff.archive.api import fetch_favorites, cleanup_temp_responses, load_recent_favorites_from_temp, check_and_cleanup_stale_responses, fetch_pool_metadata
 from fff.archive.scripts.database.backfill_deletion_reasons import backfill_deletion_reasons
 from fff.archive.ai_processing import run_ai_processing
@@ -267,8 +269,9 @@ def main(argv=None):
                 logging.error("Error fetching favorites: %s", e)
                 sys.exit(1)
 
-    # Reverse to process older posts first.
-    favorite_posts = list(reversed(favorite_posts))
+    # Reverse to process older posts first. A favorite added while the pages were being fetched
+    # shifts the list and puts one post on two pages; keep each post once.
+    favorite_posts = list({post.get("id"): post for post in reversed(favorite_posts)}.values())
     existing_posts = get_existing_posts_info(conn)
     logging.info("Existing posts in DB: %s", len(existing_posts))
 
@@ -354,23 +357,63 @@ def main(argv=None):
             total_processed += len(batch)
             logging.info("Completed fallback processing for batch (%s/%s total)", total_processed, len(posts_to_process))
 
+    # A post e621 has restored: the ingest above cleared its deleted flag but kept the old
+    # deletion date and reason. (The posts it skipped are checked just below.)
+    if posts_to_process:
+        try:
+            clear_restored_posts(conn, posts_to_process)
+        except Exception as e:
+            conn.rollback()
+            logging.error("Check for posts no longer deleted on e621 failed: %s", e)
+
     # Posts skipped above still need e621 tag changes (added and removed tags/artists);
     # only the ones whose tags differ from the database are rewritten.
+    all_ingested_pool_ids = set()
     if skipped_posts:
+        tags_compared = False
         try:
             logging.info("Checking %s already-downloaded posts for tag changes...", len(skipped_posts))
             sync_changed_post_tags(conn, skipped_posts)
+            tags_compared = True
         except Exception as e:
             conn.rollback()
             logging.error("Tag refresh for already-downloaded posts failed: %s", e)
+
+        # ...and everything else e621 can change after a post was ingested: rating, sources,
+        # pools, relationships, a restored post, and the file itself (fff.archive.metadata_sync).
+        try:
+            logging.info("Checking %s already-downloaded posts for other changes on e621...", len(skipped_posts))
+            metadata = sync_changed_post_metadata(conn, skipped_posts)
+            all_ingested_pool_ids.update(metadata["new_pool_ids"])
+            if ingest_only_mode:
+                logging.info("Skipping files changed on e621 (ingest-only mode)")
+            else:
+                replace_changed_files(conn, metadata["file_changed"], e621_config, compared=metadata["compared"])
+            if tags_compared:
+                stamp_last_checked(conn, skipped_posts)
+        except Exception as e:
+            conn.rollback()
+            logging.error("Metadata refresh for already-downloaded posts failed: %s", e)
+
+    # e621 moves tags between categories; the ingest only writes a tag's category once.
+    if favorite_posts:
+        try:
+            sync_tag_types(conn, favorite_posts)
+        except Exception as e:
+            conn.rollback()
+            logging.error("Tag category refresh failed: %s", e)
 
     # Note: Deletion status is now handled automatically during post processing
     # since we include deleted posts in favorites with status:any parameter
 
     # Fetch and store pool metadata for all pools touched in this run
-    all_ingested_pool_ids = set()
     for post in posts_to_process:
         all_ingested_pool_ids.update(post.get("pools", []))
+    try:
+        # ...and any pool still without a name: a run that failed after linking it never fetched it.
+        all_ingested_pool_ids.update(get_pools_missing_metadata(conn))
+    except Exception as e:
+        logging.error("Could not list pools without metadata: %s", e)
     if all_ingested_pool_ids:
         try:
             logging.info("Fetching metadata for %s pools...", len(all_ingested_pool_ids))

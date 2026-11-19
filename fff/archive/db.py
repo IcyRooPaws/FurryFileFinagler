@@ -1088,6 +1088,7 @@ def check_and_update_file_artist_names(conn, batch_limit=None, dry_run=False):
 
                 # Update database
                 update_cursor = conn.cursor()
+                recorded = False
                 try:
                     update_cursor.execute(
                         "UPDATE posts SET file_path = %s, file_name = %s WHERE id = %s",
@@ -1106,6 +1107,7 @@ def check_and_update_file_artist_names(conn, batch_limit=None, dry_run=False):
 
                     logging.info(f"Renamed post {post_id}: {current_base_name} -> {expected_file_name}")
                     stats["renamed"] += 1
+                    recorded = True
 
                 except Exception as db_error:
                     logging.error(f"Failed to update database for post {post_id}: {db_error}")
@@ -1117,6 +1119,12 @@ def check_and_update_file_artist_names(conn, batch_limit=None, dry_run=False):
                     stats["failed"] += 1
                 finally:
                     update_cursor.close()
+
+                if recorded:
+                    # The sorter's row and the move log follow the rename. Outside the try above:
+                    # nothing here may ever trigger its rename-back.
+                    from fff.archive.post_files import record_rename
+                    record_rename(conn, current_file_path, new_file_path, reason="artist_rename")
 
             except Exception as e:
                 logging.error(f"Failed to rename file for post {post_id}: {e}")
@@ -1440,7 +1448,10 @@ def insert_or_update_post(conn, post, commit: bool = True):
     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
     ON DUPLICATE KEY UPDATE
       file_url = VALUES(file_url),
-      md5 = VALUES(md5),
+      md5 = CASE
+              WHEN md5 IS NOT NULL AND md5 != '' AND file_path IS NOT NULL AND file_path != '' THEN md5
+              ELSE VALUES(md5)
+            END,
       media_hash = CASE
                      WHEN VALUES(media_hash) IS NULL THEN media_hash
                      ELSE VALUES(media_hash)
@@ -1625,7 +1636,10 @@ def insert_or_update_posts_bulk(conn, posts, commit: bool = True):
     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
     ON DUPLICATE KEY UPDATE
       file_url = VALUES(file_url),
-      md5 = VALUES(md5),
+      md5 = CASE
+              WHEN md5 IS NOT NULL AND md5 != '' AND file_path IS NOT NULL AND file_path != '' THEN md5
+              ELSE VALUES(md5)
+            END,
       media_hash = CASE
                      WHEN VALUES(media_hash) IS NULL THEN media_hash
                      ELSE VALUES(media_hash)
@@ -1653,6 +1667,10 @@ def insert_or_update_posts_bulk(conn, posts, commit: bool = True):
       created_at = VALUES(created_at),
       updated_at = VALUES(updated_at);
     """
+    # md5 above: a post that has a local file keeps the md5 it was stored with, the md5 of the
+    # file it has. Overwriting it with e621's current md5 here would hide a file e621 has since
+    # replaced; fff.archive.metadata_sync compares the two and replaces the file. (file_path in
+    # that CASE is still the old value: md5 is assigned before file_path.)
 
     cursor.executemany(query, post_values)
     if commit:
