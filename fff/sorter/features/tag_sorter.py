@@ -14,7 +14,7 @@ from typing import List, Dict, Set, Optional, Tuple
 from mysql.connector import Error
 
 from fff.common import db
-from fff.common.fileops import unique_destination
+from fff.common.fileops import normalize_file_path, normalize_path, unique_destination
 from fff.common.naming import is_image
 from fff.sorter.handlers.utils import compute_md5_hash, hash_file
 
@@ -844,6 +844,82 @@ class TagSorter:
         composite = hash_file(src_path, logger=logger) if is_image(src_path) else None
         return db.find_existing_copy(src_path, md5, composite)
 
+    def _sync_archive_paths(self, moves: List[Tuple[str, str]]) -> int:
+        """Point e621_posts_db ``posts.file_path`` at files this sort moved.
+
+        ``moves`` is ``[(old path, path the post's file is at now), ...]``. move_file_with_logging
+        updates the sorter's tables only, so posts.file_path used to keep the pre-sort path
+        until a later ``fff e621 sync`` noticed the file was gone.
+
+        A post is repointed when its file_path is the old path, or when the moved file is named
+        after it (``artist-rating-<id>.ext``) and the file it records is missing. A post whose
+        file_path is another copy that still exists is left alone. Never raises: the files have
+        already moved, and the next sync repairs whatever this could not write.
+
+        Returns the number of posts updated.
+        """
+        if not moves:
+            return 0
+
+        def key(path):
+            return os.path.normcase(os.path.normpath(path))
+
+        conn = None
+        try:
+            new_by_old = {key(old): new for old, new in moves}
+            new_by_id = {}
+            for old, new in moves:
+                post_id = self._get_post_id_from_filename(old)
+                if post_id:
+                    new_by_id[int(post_id)] = new
+            # posts.file_path holds backslash paths, with some forward-slash ones among them.
+            old_paths = sorted({variant for old, _ in moves
+                                for variant in (old, os.path.normpath(old),
+                                                normalize_path(old), normalize_file_path(os.path.normpath(old)))})
+
+            conn = self.connect_to_e621_db()
+            cursor = conn.cursor()
+            updates = {}
+            for start in range(0, len(old_paths), 500):
+                chunk = old_paths[start:start + 500]
+                cursor.execute(
+                    f"SELECT id, file_path FROM posts WHERE file_path IN ({','.join(['%s'] * len(chunk))})", chunk)
+                for post_id, stored in cursor.fetchall():
+                    new = new_by_old.get(key(stored))
+                    if new:
+                        updates[post_id] = new
+            named = [post_id for post_id in new_by_id if post_id not in updates]
+            for start in range(0, len(named), 500):
+                chunk = named[start:start + 500]
+                cursor.execute(
+                    f"SELECT id, file_path FROM posts WHERE id IN ({','.join(['%s'] * len(chunk))})", chunk)
+                for post_id, stored in cursor.fetchall():
+                    if not stored or not os.path.exists(stored):
+                        updates[post_id] = new_by_id[post_id]
+
+            updated = 0
+            for post_id, new in updates.items():
+                try:
+                    cursor.execute("UPDATE posts SET file_path = %s WHERE id = %s",
+                                   (normalize_file_path(os.path.normpath(new)), post_id))
+                    updated += 1
+                except Error as e:
+                    logger.warning(f"Could not update posts.file_path for post {post_id} to {new}: {e}")
+            conn.commit()
+            cursor.close()
+            if updated:
+                logger.info(f"Updated posts.file_path for {updated} post(s) moved by tag sorting")
+            return updated
+        except Exception as e:
+            logger.warning(f"Could not update posts.file_path for {len(moves)} moved file(s): {e}")
+            return 0
+        finally:
+            if conn is not None:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+
     def move_files_to_destination(self, files: Dict[str, str], destination_dir: Optional[str],
                                   base_directories: Optional[Dict[str, str]], folder_name: Optional[str],
                                   dry_run: bool = False, reason_tags: Optional[List[str]] = None,
@@ -864,10 +940,27 @@ class TagSorter:
                 when a moved file's name is a key, its modified/created timestamp
                 is set to match so pool/comic pages sort into upload order.
 
+        Every move is also written through to e621_posts_db (posts.file_path), see
+        _sync_archive_paths.
+
         Returns:
             (number of files successfully moved, number of files whose
             modified/created timestamp was actually set from post_dates)
         """
+        archive_moves: List[Tuple[str, str]] = []
+        try:
+            return self._move_files_to_destination(
+                files, destination_dir, base_directories, folder_name, dry_run, reason_tags,
+                append_media_type_label, post_dates, archive_moves)
+        finally:
+            # Also after an interrupted batch: the files moved so far have moved.
+            self._sync_archive_paths(archive_moves)
+
+    def _move_files_to_destination(self, files, destination_dir, base_directories, folder_name,
+                                   dry_run, reason_tags, append_media_type_label, post_dates,
+                                   archive_moves: List[Tuple[str, str]]) -> Tuple[int, int]:
+        """move_files_to_destination's loop; appends (old path, path the post's file is at now)
+        to ``archive_moves`` for each file whose location changed."""
         base_directories = base_directories or {}
 
         if destination_dir and not dry_run:
@@ -950,6 +1043,7 @@ class TagSorter:
                             else:
                                 shutil.move(src_path, dst_path)
                                 logger.info(f"Moved older file to destination: {src_path} -> {dst_path}")
+                            archive_moves.append((src_path, dst_path))
 
                             if self._apply_post_date(dst_path, filename, post_dates):
                                 dates_set += 1
@@ -985,6 +1079,8 @@ class TagSorter:
                             else:
                                 shutil.move(src_path, dup_path)
                                 logger.info(f"Moved newer file to duplicates: {src_path} -> {dup_path}")
+                            # The copy that stays in the library is the one already at the destination.
+                            archive_moves.append((src_path, dst_path))
 
                             print(f"  [WARNING] File exists (older): {filename}")
                             print(f"    Moved to duplicates: {os.path.basename(dup_path)}")
@@ -1009,6 +1105,9 @@ class TagSorter:
                                 )
                             else:
                                 shutil.move(src_path, dup_path)
+                            if existing.get('match') == 'md5':
+                                # Byte-identical, so the library copy is this post's file.
+                                archive_moves.append((src_path, existing['file_path']))
                             print(f"  [DUPLICATE] {filename}: already in the library ({existing['file_path']})")
                             print(f"    Moved to duplicates: {os.path.basename(dup_path)}")
                         continue
@@ -1032,6 +1131,7 @@ class TagSorter:
                         else:
                             shutil.move(src_path, dst_path)
                             logger.info(f"Moved {src_path} -> {dst_path}")
+                        archive_moves.append((src_path, dst_path))
 
                         if self._apply_post_date(dst_path, filename, post_dates):
                             dates_set += 1
