@@ -29,7 +29,7 @@ from fff.fluffle import ops
 
 # fff: the original imported these from scripts/ inside try/except ImportError
 from fff.fluffle.e621_matches import process_single_image, get_all_favorites
-from fff.fluffle.fa_matches import process_single_fa_image, get_firefox_cookies
+from fff.fluffle.fa_matches import process_single_fa_image, get_firefox_cookies, route_named_fa_file
 
 
 def load_config(config_path=None):
@@ -1264,7 +1264,14 @@ def main(argv=None):  # fff: argv accepted for the CLI; no options
                             else:
                                 print("    [i] FA source deleted - leaving file in place")
                         elif not e621_post_id and not fa_post_id:
-                            if move_not_found:
+                            # The name may already say which FA post this is (an earlier FA
+                            # download) - that file is sourced, so it belongs with FA, not No Source
+                            if route_named_fa_file(image_path, config, cookies=fa_cookies,
+                                                   image_id=image_id, connection=connection,
+                                                   base_search_dir=base_search_dir,
+                                                   preserve_structure=preserve_structure):
+                                fa_processed += 1
+                            elif move_not_found:
                                 print("    [i] No exact matches - moving to not_found...")
                                 if move_to_not_found(image_path, not_found_dir, base_search_dir, preserve_structure):
                                     print("    [OK] Moved to not_found")

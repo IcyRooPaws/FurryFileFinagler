@@ -139,3 +139,62 @@ def test_blocked_post_still_moves_when_unfavorite_fails(tmp_path, monkeypatch, c
     assert fa_matches.move_if_fa_blocklisted(image, post, blacklisted, inbox, cookies=object()) is True
     assert (blacklisted / image.name).exists()
     assert "Removing from FA favorites (if favorited)... [ERROR] (403)" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("name, expected", [
+    ("caspra-adult-FA-67061319.png", "67061319"),
+    ("some_artist-General-FA-123.jpg", "123"),
+    ("artist-Adult-unk-FA-123.png", None),       # deleted-post rename
+    ("artist-explicit-123.png", None),           # e621 name
+    ("1302921337.doodlies_lucario.jpg", None),   # raw FA name
+])
+def test_named_fa_post_id(name, expected):
+    assert fa_matches.named_fa_post_id(Path(name)) == expected
+
+
+def _fa_config(tmp_path):
+    return {"furaffinity": {"download_directory": str(tmp_path / "downloads"),
+                            "source_found_directory": str(tmp_path / "found")}}
+
+
+def test_unmatched_but_fa_named_file_goes_to_fa_not_no_source(tmp_path):
+    """Reverse search found nothing, but the name carries the FA post id -> FA folder."""
+    inbox = tmp_path / "inbox"
+    inbox.mkdir()
+    image = inbox / "caspra-adult-FA-67061319.png"
+    image.write_bytes(b"x")
+
+    assert fa_matches.route_named_fa_file(image, _fa_config(tmp_path), cookies=None,
+                                          base_search_dir=inbox)
+    assert not image.exists()
+    assert (tmp_path / "downloads" / image.name).exists()
+
+
+def test_unmatched_fa_named_file_uses_fa_flow_when_cookies_available(tmp_path, monkeypatch):
+    image = tmp_path / "caspra-adult-FA-67061319.png"
+    image.write_bytes(b"x")
+    calls = []
+    monkeypatch.setattr(fa_matches, "process_single_fa_image",
+                        lambda path, post_id, *a, **k: calls.append(post_id) or True)
+
+    assert fa_matches.route_named_fa_file(image, _fa_config(tmp_path), cookies=object())
+    assert calls == ["67061319"]
+
+
+def test_fa_flow_failure_falls_back_to_moving_into_fa_folder(tmp_path, monkeypatch):
+    inbox = tmp_path / "inbox"
+    inbox.mkdir()
+    image = inbox / "caspra-adult-FA-67061319.png"
+    image.write_bytes(b"x")
+    monkeypatch.setattr(fa_matches, "process_single_fa_image", lambda *a, **k: False)
+
+    assert fa_matches.route_named_fa_file(image, _fa_config(tmp_path), cookies=object(),
+                                          base_search_dir=inbox)
+    assert (tmp_path / "downloads" / image.name).exists()
+
+
+def test_unnamed_file_is_left_for_no_source(tmp_path):
+    image = tmp_path / "random.png"
+    image.write_bytes(b"x")
+    assert not fa_matches.route_named_fa_file(image, _fa_config(tmp_path))
+    assert image.exists()

@@ -108,6 +108,46 @@ def is_named_fa_download(image_path: Path, numeric_id: str) -> bool:
                         re.IGNORECASE) is not None
 
 
+def named_fa_post_id(image_path: Path) -> Optional[str]:
+    """The FA post id from a file already named as an FA download
+    (``{artist}-{rating}-FA-{postid}.ext``), or None if the name is not one."""
+    match = re.fullmatch(r".+-(?:general|mature|adult)-FA-(\d+)", image_path.stem, re.IGNORECASE)
+    return match.group(1) if match else None
+
+
+def route_named_fa_file(image_path: Path, config: Dict[str, Any], cookies=None, image_id: int = None,
+                        connection=None, base_search_dir: Path = None,
+                        preserve_structure: bool = False) -> bool:
+    """Handle a file that reverse search could not match but whose name already says which
+    FA post it is: run it through the normal FA flow (favorite, blocklist, move) using the
+    post id from the name, or, if FA can't be reached, move it to the FA download folder.
+
+    Returns False when the name is not an FA download name (caller treats it as unsourced)."""
+    post_id = named_fa_post_id(image_path)
+    if post_id is None:
+        return False
+    print(f"    [i] No reverse search match, but the name identifies FA post {post_id}")
+    if cookies:
+        try:
+            result = process_single_fa_image(image_path, post_id, config, cookies=cookies,
+                                             image_id=image_id, connection=connection,
+                                             base_search_dir=base_search_dir,
+                                             preserve_structure=preserve_structure)
+            if result:
+                return True
+        except Exception as e:
+            print(f"    [ERROR] FA processing failed: {e}")
+        if not image_path.exists():
+            return True
+    fa_config = config.get('furaffinity', {})
+    download_dir = Path(fa_config.get('download_directory', './fa_downloads'))
+    source_found_dir = Path(fa_config.get('source_found_directory', './source_found'))
+    download_dir.mkdir(parents=True, exist_ok=True)
+    source_found_dir.mkdir(parents=True, exist_ok=True)
+    return move_named_fa_download(image_path, download_dir, source_found_dir, base_search_dir,
+                                  preserve_structure)
+
+
 def move_named_fa_download(image_path: Path, download_dir: Path, source_found_dir: Path,
                            base_search_dir: Path = None, preserve_structure: bool = False) -> bool:
     """Put an already-named FA download where a fresh download would land, instead of
