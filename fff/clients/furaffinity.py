@@ -577,8 +577,11 @@ def remove_from_fa_favorites(post_id: str, cookies: http.cookiejar.CookieJar) ->
         return False
 
 
-def check_if_fa_favorited(post_id: str, cookies: http.cookiejar.CookieJar) -> bool:
-    """Check if a FA post is already favorited by looking for the unfav link."""
+def check_if_fa_favorited(post_id: str, cookies: http.cookiejar.CookieJar) -> Optional[bool]:
+    """Check if a FA post is already favorited by looking for the unfav link.
+
+    Returns None when the status is unknown (FA unreachable or blocking us).
+    Raises FASubmissionNotFoundError when the post no longer exists on FA."""
     try:
         url = f"https://www.furaffinity.net/view/{post_id}/"
         headers = _fa_headers()
@@ -608,6 +611,9 @@ def check_if_fa_favorited(post_id: str, cookies: http.cookiejar.CookieJar) -> bo
         # If already favorited, page will have "unfav" link instead of "fav" link
         return '/unfav/' in response.text
 
+    except FASubmissionNotFoundError:
+        # The post is gone (deleted) - callers record that rather than retrying
+        raise
     except Exception as e:
         print(f"Error checking FA favorites: {e}")
         return None

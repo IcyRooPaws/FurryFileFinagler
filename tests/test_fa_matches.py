@@ -198,3 +198,30 @@ def test_unnamed_file_is_left_for_no_source(tmp_path):
     image.write_bytes(b"x")
     assert not fa_matches.route_named_fa_file(image, _fa_config(tmp_path))
     assert image.exists()
+
+
+class _Page:
+    def __init__(self, text, status_code=200):
+        self.text, self.status_code = text, status_code
+
+
+@pytest.mark.parametrize("page, expected", [
+    (_Page('<a href="/unfav/1/">'), True),
+    (_Page('<a href="/fav/1/">'), False),
+    (_Page("", 403), None),     # blocked: unknown, retry later
+    (None, None),               # unreachable: unknown, retry later
+])
+def test_favorite_check_results(monkeypatch, page, expected):
+    from fff.clients import furaffinity
+    monkeypatch.setattr(furaffinity, "_fa_get_with_retry", lambda *a, **k: page)
+    assert furaffinity.check_if_fa_favorited("1", None) is expected
+
+
+def test_favorite_check_on_deleted_post_raises_not_found(monkeypatch):
+    """A deleted post must surface as not-found (so it is marked deleted), not as unknown/retry."""
+    from fff.clients import furaffinity
+    monkeypatch.setattr(furaffinity, "_fa_get_with_retry",
+                        lambda *a, **k: _Page("System Error - The submission you are trying to find "
+                                              "is not in our database."))
+    with pytest.raises(furaffinity.FASubmissionNotFoundError):
+        furaffinity.check_if_fa_favorited("20654289", None)

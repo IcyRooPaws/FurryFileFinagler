@@ -447,11 +447,11 @@ def main():
                         # Leave unchecked so the next run retries it
                         update_check_attempt(local_conn, source_id, "favorite request failed")
 
-            except FASubmissionNotFoundError as e:
-                print(f"[INFO] {str(e)}")
+            except FASubmissionNotFoundError:
+                print("[INFO] Post deleted on FA - can't favorite")
                 not_found_count += 1
-                # Mark as checked with specific error message
-                update_source_check_status(local_conn, source_id, False, str(e))
+                # Mark as checked (not favorited) so it is never retried
+                update_source_check_status(local_conn, source_id, False, "deleted on FA")
                 checked_count += 1
 
             except Exception as e:
@@ -467,7 +467,7 @@ def main():
         print(f"  Already favorited: {already_favorited_count}")
         print(f"  Newly favorited: {newly_favorited_count}")
         print(f"  Failed to favorite: {failed_to_favorite_count}")
-        print(f"  Not found in database: {not_found_count}")
+        print(f"  Deleted on FA: {not_found_count}")
         print(f"  Errors: {error_count}\n")
 
     # Close external connection

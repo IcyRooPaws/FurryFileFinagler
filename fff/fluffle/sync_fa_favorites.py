@@ -17,7 +17,8 @@ from mysql.connector import Error
 from fff.clients.furaffinity import (
     get_firefox_cookies,
     check_if_fa_favorited,
-    add_to_fa_favorites
+    add_to_fa_favorites,
+    FASubmissionNotFoundError,
 )
 from fff.common import config as fff_config
 from fff.common import db
@@ -116,6 +117,7 @@ def main(argv=None):  # fff: argv accepted for the CLI; no options
     favorited = 0
     already_favorited = 0
     failed = 0
+    deleted = 0
 
     for i, match in enumerate(matches, 1):
         fa_post_id = match['fa_post_id']
@@ -131,9 +133,16 @@ def main(argv=None):  # fff: argv accepted for the CLI; no options
 
         # Check if favorited
         print("  Checking favorites...", end=" ")
-        is_fav = check_if_fa_favorited(numeric_id, cookies)
+        try:
+            is_fav = check_if_fa_favorited(numeric_id, cookies)
+        except FASubmissionNotFoundError:
+            print("[i] Post deleted - can't favorite")
+            deleted += 1
+            is_fav = 'deleted'
 
-        if is_fav:
+        if is_fav == 'deleted':
+            pass
+        elif is_fav:
             print("[OK] Already favorited")
             already_favorited += 1
         else:
@@ -162,6 +171,8 @@ def main(argv=None):  # fff: argv accepted for the CLI; no options
     print(f"  Images processed: {len(matches)}")
     print(f"  Already favorited: {already_favorited}")
     print(f"  Newly favorited: {favorited}")
+    if deleted > 0:
+        print(f"  Deleted on FA (can't favorite): {deleted}")
     if failed > 0:
         print(f"  Failed: {failed}")
     print()

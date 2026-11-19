@@ -279,11 +279,21 @@ def process_single_fa_image(image_path: Path, post_id: str, config: Dict[str, An
 
     time.sleep(request_delay)
 
-    # Check if favorited
-    print("    Checking FA favorite status...", end=" ", flush=True)
-    is_fav = check_if_fa_favorited(numeric_id, cookies)
+    # Check if favorited (a deleted post can't be favorited - skip straight to its handling below)
+    if post_data.get('not_found'):
+        is_fav = 'deleted'
+    else:
+        print("    Checking FA favorite status...", end=" ", flush=True)
+        try:
+            is_fav = check_if_fa_favorited(numeric_id, cookies)
+        except FASubmissionNotFoundError:
+            print("[i] Post deleted - can't favorite")
+            is_fav = 'deleted'
+            post_data = {'not_found': True, 'post_id': numeric_id}
 
-    if is_fav:
+    if is_fav == 'deleted':
+        pass
+    elif is_fav:
         print("[OK] Already favorited")
     else:
         # None means FA didn't return the page (e.g. a Cloudflare 403), not "not favorited"
@@ -661,11 +671,21 @@ def main(argv=None):  # fff: argv accepted for the CLI; no options
 
         time.sleep(request_delay)
 
-        # Check if favorited
-        print("  Checking favorites...", end=" ", flush=True)
-        is_fav = check_if_fa_favorited(numeric_id, cookies)
+        # Check if favorited (a deleted post can't be favorited - skip straight to its handling below)
+        if post_data.get('not_found'):
+            is_fav = 'deleted'
+        else:
+            print("  Checking favorites...", end=" ", flush=True)
+            try:
+                is_fav = check_if_fa_favorited(numeric_id, cookies)
+            except FASubmissionNotFoundError:
+                print("[i] Post deleted - can't favorite")
+                is_fav = 'deleted'
+                post_data = {'not_found': True, 'post_id': numeric_id}
 
-        if is_fav is None:
+        if is_fav == 'deleted':
+            pass
+        elif is_fav is None:
             print("[WARN] FA server error (502/5xx) - skipping file")
             print()
             continue
