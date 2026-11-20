@@ -108,6 +108,42 @@ def delete_posts_from_db(conn, post_ids):
     finally:
         cursor.close()
 
+def malformed_favorites(posts) -> list:
+    """Favorites the sync cannot trust: no integer id, or no ``flags`` object with a ``deleted``
+    value. Returns their ids (or their position in the list when the id is missing).
+
+    Everything downstream reads ``flags.deleted`` with "not deleted" as the default, so a response
+    without it would un-delete every deleted post and drop its placeholder file URL.
+    """
+    bad = []
+    for index, post in enumerate(posts):
+        post_id = post.get("id") if isinstance(post, dict) else None
+        flags = post.get("flags") if isinstance(post, dict) else None
+        if not isinstance(post_id, int) or isinstance(post_id, bool):
+            bad.append(f"#{index}")
+        elif not isinstance(flags, dict) or not isinstance(flags.get("deleted"), bool):
+            bad.append(post_id)
+    return bad
+
+
+MAX_UNFAVORITED = 100
+
+
+def unfavorite_limit(conn, e621_config) -> int:
+    """How many posts one run may treat as unfavorited: the configured number, else 100 or 1%
+    of the posts in the database, whichever is more."""
+    configured = e621_config.get("max_unfavorited_per_run")
+    if isinstance(configured, int) and configured >= 0:
+        return configured
+    cursor = conn.cursor()
+    try:
+        cursor.execute("SELECT COUNT(*) FROM posts")
+        total = cursor.fetchone()[0]
+    finally:
+        cursor.close()
+    return max(MAX_UNFAVORITED, total // 100)
+
+
 def handle_unfavorited_posts(conn, current_favorite_ids, e621_config):
     """Handle posts that are no longer in favorites by archiving and deleting them."""
     unfavorited_posts = get_unfavorited_posts(conn, current_favorite_ids)
@@ -117,6 +153,16 @@ def handle_unfavorited_posts(conn, current_favorite_ids, e621_config):
         return
 
     logging.info(f"Found {len(unfavorited_posts)} posts in database that are no longer in favorites.")
+
+    # A partial favorites list (a fetch cut short, a bad response) makes every post missing from
+    # it look unfavorited. Real unfavorites come a few at a time; refuse an implausible number.
+    limit = unfavorite_limit(conn, e621_config)
+    if len(unfavorited_posts) > limit:
+        logging.error("%d posts are missing from the favorites list, more than the %d a run will remove "
+                      "(archive.e621.max_unfavorited_per_run). Nothing was archived, moved or deleted; "
+                      "check the favorites fetch, or raise the limit if you really unfavorited that many.",
+                      len(unfavorited_posts), limit)
+        return
 
     # First archive the information before deletion
     if archive_unfavorited_posts(conn, unfavorited_posts):
@@ -268,6 +314,15 @@ def main(argv=None):
             except Exception as e:
                 logging.error("Error fetching favorites: %s", e)
                 sys.exit(1)
+
+    malformed = malformed_favorites(favorite_posts)
+    if malformed:
+        logging.error("%d of %d favorites arrived without an id or a deleted flag (first: %s). e621's response "
+                      "format may have changed; nothing was written. A missing flag would read as 'not deleted' "
+                      "and un-delete posts, and a missing post would look unfavorited.",
+                      len(malformed), len(favorite_posts), ", ".join(map(str, malformed[:5])))
+        conn.close()
+        sys.exit(1)
 
     # Reverse to process older posts first. A favorite added while the pages were being fetched
     # shifts the list and puts one post on two pages; keep each post once.

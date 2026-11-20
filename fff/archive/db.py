@@ -2480,153 +2480,161 @@ def backfill_missing_file_paths(conn, mysql_config, batch_limit: int | None = No
     finally:
         cursor.close()
 
-def verify_and_repair_file_paths(conn, mysql_config, batch_limit: int | None = None):
+# More missing files than this in one run (or 2% of the paths checked) means the library is not
+# all there (a drive offline, a folder renamed), not that that many files went away.
+MAX_MISSING_PATHS = 200
+
+
+def _library_root(path: str) -> str:
+    """The drive (or share) and first folder of a path: ``P:\\IPL`` for ``P:\\IPL\\Pictures\\a.png``."""
+    drive, rest = os.path.splitdrive(os.path.normpath(path))
+    first = rest.lstrip("\\/").split(os.sep, 1)[0]
+    return os.path.join(drive + os.sep, first) if first else drive + os.sep
+
+
+def verify_and_repair_file_paths(conn, mysql_config, batch_limit: int | None = None,
+                                 clear_missing: bool = True, dry_run: bool = False):
+    """Check that every recorded posts.file_path exists, and repair the ones that do not.
+
+    A missing file is looked up in the sorter database (by post id, then by MD5). Found: the
+    path is updated. Not found: with ``clear_missing`` the path is set to NULL so the sync
+    downloads the file again; otherwise it is left as it is.
+
+    Nothing is cleared when the library looks absent rather than files gone:
+    - a missing file whose drive or top folder does not exist (an unplugged drive, a renamed
+      folder) is left alone;
+    - more than ``MAX_MISSING_PATHS`` missing files (or 2% of the paths checked) stops the
+      repair before it changes anything;
+    - if the sorter database cannot be reached at the end, no path is cleared (a failed lookup
+      would otherwise read as "not found").
+
+    Returns counts: checked, missing, repaired, not_found (cleared, or kept when not clearing),
+    skipped (left alone because the library looked absent), and aborted (True when the
+    threshold stopped it).
     """
-    Verify that files at recorded file_path locations actually exist.
-    If not, attempt to find the file in image_sorting_hashes database using MD5.
-
-    This handles cases where files have been moved or the database has stale paths.
-
-    Args:
-        conn: Database connection to e621_posts_db
-        mysql_config: MySQL configuration dict (for connecting to image_sorting_hashes)
-        batch_limit: Optional limit on number of posts to check
-
-    Returns:
-        Dict with statistics: checked, missing, repaired, not_found
-    """
+    stats = {'checked': 0, 'missing': 0, 'repaired': 0, 'not_found': 0, 'skipped': 0, 'aborted': False}
     if not mysql_config:
         logging.warning("No mysql_config provided, cannot check image_sorting_hashes database")
-        return {'checked': 0, 'missing': 0, 'repaired': 0, 'not_found': 0}
+        return stats
 
-    # Check if image_sorting_hashes database is available
-    test_conn = connect_to_image_sorting_hashes_db(mysql_config)
-    if not test_conn:
+    def sorter_reachable():
+        test_conn = connect_to_image_sorting_hashes_db(mysql_config)
+        if not test_conn:
+            return False
+        test_conn.close()
+        return True
+
+    if not sorter_reachable():
         logging.info("image_sorting_hashes database not available, skipping file path verification")
-        return {'checked': 0, 'missing': 0, 'repaired': 0, 'not_found': 0}
-    test_conn.close()
+        return stats
 
     cursor = conn.cursor()
     try:
-        # Get posts that have a file_path recorded, including deleted posts.
-        query = """
-        SELECT id, file_path, md5, file_name
-        FROM posts
-        WHERE file_path IS NOT NULL
-        AND file_path != ''
-        """
-
+        query = "SELECT id, file_path, md5 FROM posts WHERE file_path IS NOT NULL AND file_path != ''"
         if batch_limit:
-            query += f" LIMIT {batch_limit}"
-
+            query += f" LIMIT {int(batch_limit)}"
         cursor.execute(query)
         posts_with_paths = cursor.fetchall()
-
         if not posts_with_paths:
             logging.info("No posts with file_path to verify")
-            return {'checked': 0, 'missing': 0, 'repaired': 0, 'not_found': 0}
-
+            return stats
         logging.info(f"Verifying file paths for {len(posts_with_paths)} posts...")
 
-        stats = {
-            'checked': 0,
-            'missing': 0,
-            'repaired': 0,
-            'not_found': 0
-        }
-
-        update_cursor = conn.cursor()
-
-        for post_id, file_path, md5_hash, file_name in posts_with_paths:
+        # Pass 1, disk only: which recorded files are there.
+        updates, missing = [], []
+        root_present = {}
+        for post_id, file_path, md5_hash in posts_with_paths:
             stats['checked'] += 1
-
             try:
-                # Check if file exists at recorded path (ignoring extension)
-                resolved_file_path = resolve_existing_file_path(file_path)
-
-                # First check if the recorded path, or the same file with a different extension, exists.
-                if resolved_file_path == file_path:
-                    # File exists, no action needed
-                    if stats['checked'] % 1000 == 0:
-                        logging.info(f"Progress: Verified {stats['checked']} posts...")
-                    continue
-
-                if resolved_file_path:
-                    update_cursor.execute(
-                        "UPDATE posts SET file_path = %s WHERE id = %s",
-                        (normalize_file_path(resolved_file_path), post_id)
-                    )
-                    stats['repaired'] += 1
-                    logging.info(f"Updated file_path for post {post_id} to file with different extension: {resolved_file_path} (was: {file_path})")
-                    if (stats['repaired'] + stats['not_found']) % 100 == 0 and (stats['repaired'] + stats['not_found']) > 0:
-                        conn.commit()
-                        logging.info(f"Progress: Processed {stats['repaired'] + stats['not_found']} missing files ({stats['repaired']} repaired, {stats['not_found']} marked for redownload)...")
-                    continue
-
-                # File is missing at recorded path (and no alternative extension found)
-                stats['missing'] += 1
-                logging.warning(f"File not found for post {post_id} at recorded path: {file_path}")
-
-                # First, try to find it by e621_post_id in image_sorting_hashes database
-                new_file_path = get_file_path_from_image_sorting_hashes_by_post_id(mysql_config, post_id)
-
-                # If not found by post_id, try MD5 hash (if available)
-                if not new_file_path:
-                    if not md5_hash or md5_hash == '':
-                        # Clear the file_path so download_missing_files can redownload it
-                        update_cursor.execute(
-                            "UPDATE posts SET file_path = NULL WHERE id = %s",
-                            (post_id,)
-                        )
-                        logging.debug(f"Post {post_id} has no MD5 hash, cannot search for file - cleared file_path for redownload")
-                        stats['not_found'] += 1
-                        continue
-
-                    new_file_path = get_file_path_from_image_sorting_hashes(mysql_config, md5_hash)
-
-                if new_file_path:
-                    # Update the post with the new file_path
-                    update_cursor.execute(
-                        "UPDATE posts SET file_path = %s WHERE id = %s",
-                        (normalize_file_path(new_file_path), post_id)
-                    )
-                    stats['repaired'] += 1
-                    logging.info(f"Repaired file_path for post {post_id} (MD5: {md5_hash[:8]}...): {new_file_path}")
-                else:
-                    # Clear the file_path so download_missing_files can redownload it
-                    update_cursor.execute(
-                        "UPDATE posts SET file_path = NULL WHERE id = %s",
-                        (post_id,)
-                    )
-                    stats['not_found'] += 1
-                    logging.warning(f"Could not find file for post {post_id} (MD5: {md5_hash[:8]}...) in image_sorting_hashes database - cleared file_path for redownload")
-
-                # Commit every 100 updates for safety
-                if (stats['repaired'] + stats['not_found']) % 100 == 0 and (stats['repaired'] + stats['not_found']) > 0:
-                    conn.commit()
-                    logging.info(f"Progress: Processed {stats['repaired'] + stats['not_found']} missing files ({stats['repaired']} repaired, {stats['not_found']} marked for redownload)...")
-
-            except Exception as e:
-                logging.error(f"Error verifying post {post_id}: {e}")
+                resolved = resolve_existing_file_path(file_path)
+            except OSError:
+                resolved = None
+            if resolved == file_path:
                 continue
+            if resolved:      # the same file with another extension
+                updates.append((normalize_file_path(resolved), post_id))
+                logging.info(f"Updated file_path for post {post_id} to file with different extension: "
+                             f"{resolved} (was: {file_path})")
+                stats['repaired'] += 1
+                continue
+            root = _library_root(file_path)
+            if root not in root_present:
+                root_present[root] = os.path.isdir(root)
+                if not root_present[root]:
+                    logging.error(f"Library folder {root} is not reachable; leaving the paths under it as they are")
+            if not root_present[root]:
+                stats['skipped'] += 1
+                continue
+            missing.append((post_id, file_path, md5_hash))
 
-        # Final commit
-        conn.commit()
-        update_cursor.close()
+        stats['missing'] = len(missing) + stats['skipped']
+        limit = max(MAX_MISSING_PATHS, stats['checked'] // 50)
+        if len(missing) > limit:
+            logging.error(f"{len(missing)} recorded files are missing, more than the {limit} a run will repair. "
+                          "Nothing was changed: check that the library drives and folders are all there.")
+            stats.update(aborted=True, repaired=0)
+            return stats
+
+        # Pass 2: look the missing ones up in the sorter database.
+        clears = []
+        for post_id, file_path, md5_hash in missing:
+            logging.warning(f"File not found for post {post_id} at recorded path: {file_path}")
+            try:
+                new_file_path = get_file_path_from_image_sorting_hashes_by_post_id(mysql_config, post_id)
+                if not new_file_path and md5_hash:
+                    new_file_path = get_file_path_from_image_sorting_hashes(mysql_config, md5_hash)
+            except Exception as e:
+                logging.error(f"Error looking up post {post_id}: {e}")
+                stats['skipped'] += 1
+                continue
+            if new_file_path:
+                updates.append((normalize_file_path(new_file_path), post_id))
+                stats['repaired'] += 1
+                logging.info(f"Repaired file_path for post {post_id}: {new_file_path}")
+            else:
+                clears.append((post_id,))
+                stats['not_found'] += 1
+
+        if clears and clear_missing and not sorter_reachable():
+            logging.error(f"image_sorting_hashes database stopped answering; not clearing the paths of "
+                          f"{len(clears)} posts whose files were not found")
+            stats['skipped'] += len(clears)
+            stats['not_found'] = 0
+            clears = []
+
+        if dry_run:
+            logging.info(f"[DRY RUN] Would repair {stats['repaired']} paths"
+                         + (f" and clear {len(clears)}" if clear_missing else ""))
+        else:
+            update_cursor = conn.cursor()
+            try:
+                if updates:
+                    update_cursor.executemany("UPDATE posts SET file_path = %s WHERE id = %s", updates)
+                if clears and clear_missing:
+                    update_cursor.executemany("UPDATE posts SET file_path = NULL WHERE id = %s", clears)
+                    for (post_id,) in clears:
+                        logging.warning(f"Could not find file for post {post_id} in image_sorting_hashes database "
+                                        "- cleared file_path for redownload")
+                conn.commit()
+            finally:
+                update_cursor.close()
 
         logging.info("File path verification complete:")
         logging.info(f"  Checked: {stats['checked']} posts")
         logging.info(f"  Missing files: {stats['missing']}")
         logging.info(f"  Repaired paths: {stats['repaired']}")
-        logging.info(f"  Could not repair: {stats['not_found']}")
-
+        logging.info(f"  Could not repair: {stats['not_found']}" + ("" if clear_missing else " (paths kept)"))
+        if stats['skipped']:
+            logging.info(f"  Left alone (library folder unreachable or lookup failed): {stats['skipped']}")
         return stats
 
     except Exception as e:
+        conn.rollback()
         logging.error(f"Error in verify_and_repair_file_paths: {e}")
-        return {'checked': 0, 'missing': 0, 'repaired': 0, 'not_found': 0}
+        return {'checked': 0, 'missing': 0, 'repaired': 0, 'not_found': 0, 'skipped': 0, 'aborted': False}
     finally:
         cursor.close()
+
 
 def get_or_compute_e621_perceptual_hash(conn, post_id, file_url, e621_config, temp_dir="temp_downloads"):
     """

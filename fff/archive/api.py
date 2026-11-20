@@ -3,6 +3,7 @@ import time
 import logging
 import json
 import os
+import re
 from datetime import datetime
 from typing import List, Optional
 from fff.archive.download import api_get
@@ -116,6 +117,7 @@ def fetch_favorites(e621_config):
         page += 1
 
     logging.info("Total favorites retrieved: %s", len(favorites))
+    _mark_session_complete(temp_response_folder, session_timestamp, page, len(favorites))
 
     # Store session info for later use
     e621_config['_temp_session_timestamp'] = session_timestamp
@@ -124,53 +126,81 @@ def fetch_favorites(e621_config):
     return favorites
 
 
+_PAGE_FILE = re.compile(r"^temp_page_(\d+)_(\d{8}_\d{6})\.json$")
+_COMPLETE_FILE = re.compile(r"^temp_page_complete_(\d{8}_\d{6})\.json$")
+
+
+def _mark_session_complete(folder, session_timestamp, last_page, post_count) -> None:
+    """Record that a fetch reached its end, so only a whole favorites list is ever reused.
+
+    Named like the page files so the cache cleanups remove it with them.
+    """
+    path = os.path.join(folder, f"temp_page_complete_{session_timestamp}.json")
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump({"pages": last_page, "posts": post_count, "finished": datetime.now().isoformat()}, f)
+    except Exception as e:
+        logging.error("Failed to mark the favorites fetch %s complete: %s", session_timestamp, e)
+
+
 def load_recent_favorites_from_temp(e621_config, max_age_minutes: int = 15) -> Optional[List[dict]]:
-    """Load cached favorites from temp responses if they are recent enough."""
+    """Load the favorites list of a recent fetch from the page cache, or None.
+
+    A cached fetch is reused only when it is whole: it finished (a completion marker exists),
+    it started within ``max_age_minutes`` (its pages age together, so none of them was cleaned
+    up), and every page it recorded is there and readable. Anything less returns None and the
+    caller fetches again. A partial list must never be used: every favorite missing from it
+    would be handled as unfavorited.
+    """
     temp_folder = e621_config.get('_temp_response_folder', 'temp_responses')
     if not os.path.exists(temp_folder):
         return None
 
-    cutoff_ts = time.time() - (max_age_minutes * 60)
-    candidates = []
-
-    for fname in os.listdir(temp_folder):
-        if not (fname.startswith('temp_page_') and fname.endswith('.json')):
-            continue
-        path = os.path.join(temp_folder, fname)
-        try:
-            mtime = os.path.getmtime(path)
-        except OSError:
-            continue
-        if mtime >= cutoff_ts:
-            candidates.append((path, fname, mtime))
-
-    if not candidates:
+    names = os.listdir(temp_folder)
+    sessions = sorted((m.group(1) for m in map(_COMPLETE_FILE.match, names) if m), reverse=True)
+    if not sessions:
+        return None
+    session_id = sessions[0]         # newest finished fetch
+    try:
+        started = datetime.strptime(session_id, "%Y%m%d_%H%M%S")
+    except ValueError:
+        return None
+    if (datetime.now() - started).total_seconds() > max_age_minutes * 60:
         return None
 
-    # Choose the most recent session based on mtime, then load all files with that session id
-    latest = max(candidates, key=lambda x: x[2])
-    session_id = latest[1].rsplit('_', 1)[-1].removesuffix('.json')
-    session_files = [c for c in candidates if c[1].endswith(f"_{session_id}.json")]
+    try:
+        with open(os.path.join(temp_folder, f"temp_page_complete_{session_id}.json"), encoding="utf-8") as f:
+            marker = json.load(f)
+        expected_pages, expected_posts = int(marker["pages"]), int(marker["posts"])
+    except Exception as exc:
+        logging.warning("Not reusing cached favorites %s: unreadable completion marker (%s)", session_id, exc)
+        return None
 
-    if not session_files:
+    pages = {int(m.group(1)): name for m in map(_PAGE_FILE.match, names) if m and m.group(2) == session_id
+             for name in [m.group(0)]}
+    if sorted(pages) != list(range(1, expected_pages + 1)):
+        logging.warning("Not reusing cached favorites %s: %d of %d pages are left", session_id,
+                        len(pages), expected_pages)
         return None
 
     posts = []
-    for path, _, _ in sorted(session_files, key=lambda x: x[1]):
+    for page in range(1, expected_pages + 1):
         try:
-            with open(path, 'r', encoding='utf-8') as f:
+            with open(os.path.join(temp_folder, pages[page]), 'r', encoding='utf-8') as f:
                 data = json.load(f)
-                _resp = data.get('response', data)
-                page_posts = _resp if isinstance(_resp, list) else (_resp.get('posts') or [])
-                posts.extend(page_posts)
+            _resp = data.get('response', data)
+            posts.extend(_resp if isinstance(_resp, list) else (_resp.get('posts') or []))
         except Exception as exc:
-            logging.debug("Skipping temp file %s due to error: %s", path, exc)
+            logging.warning("Not reusing cached favorites %s: page %s is unreadable (%s)", session_id, page, exc)
+            return None
 
-    if posts:
-        logging.info("Loaded %s posts from recent temp responses (session %s)", len(posts), session_id)
-        return posts
-
-    return None
+    if len(posts) < expected_posts:
+        logging.warning("Not reusing cached favorites %s: %d of %d posts", session_id, len(posts), expected_posts)
+        return None
+    if not posts:
+        return None
+    logging.info("Loaded %s posts from recent temp responses (session %s)", len(posts), session_id)
+    return posts[:expected_posts]
 
 def get_post_data_from_temp(post_id, e621_config):
     """Get post data from saved temp response files instead of making API calls.

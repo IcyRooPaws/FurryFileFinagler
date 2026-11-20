@@ -17,7 +17,7 @@ the same scale: **S** is an evening, **M** a few sessions, **L** a week or more.
 |---|---|---|
 | 1 | 0. Tag sort writes the new path through | Done, committed (`db5c1b9`) |
 | 2 | 1. Posts that already have a file follow e621 | Committed; not yet run for real |
-| 3 | 4. Safety guards | Open, next |
+| 3 | 4. Safety guards | In progress (items 1, 2 and 4 done) |
 | 4 | 2. Re-evaluate files already in tag folders | Open |
 | 5 | 3. Guarantee paths at the end of a run | Open |
 | 6 | 5. Remaining small fixes | Open |
@@ -162,12 +162,24 @@ post's stored md5 differs from e621's except the ones the log names as skipped.
 
 ## Phase 4. Safety guards (M)
 
-**Status: open, next.**
+**Status: in progress.** Items 1, 2 and 4 are done (not yet committed); item 3 is open.
 
 1. **Unreachable library drive (S).** `verify_and_repair_file_paths` sets `file_path` to NULL for
    every post whose file it cannot find, with no check that the library root is reachable. A
    sync with the drive offline would clear every path and queue the whole library for download.
    Add an abort threshold, and treat a failed sorter lookup as "unknown", not "not found".
+
+   **Done.** The repair first checks every path on disk, then decides:
+   - a missing file whose drive or top folder (`P:\IPL`, `P:\Archive`) does not exist is left
+     alone and logged;
+   - more than 200 missing files, or 2% of the paths checked (792 today), stops the repair before
+     it changes anything;
+   - if the sorter database stops answering, no path is cleared.
+
+   `fff e621 verify file-paths` (the manager's "Verify file paths") was a separate older copy
+   without the sync's checks; it now runs the same function, writes the archive's path format,
+   and gained `--keep-missing`. A read-only dry run on 2026-11-20 checked 39,616 paths and found
+   1 missing (repairable).
 2. **Partial favorites list (S).** A partial or stale page cache is accepted as the full list, so
    every post missing from it is handled as unfavorited: archived, its files moved, its row
    deleted. The cache cleanup runs in the wrong order, which disables the existing "any stale
@@ -176,9 +188,14 @@ post's stored md5 differs from e621's except the ones the log names as skipped.
    leaves the same kind of partial set. Accept a cached session only when it is complete (a
    completion marker, or pages 1..N with an empty last page, all inside the age limit), or drop
    cache reuse. Also refuse the unfavorite step when the fetched count is well below the number
-   of posts in the database. Until this is done, do not start a second `fff e621 sync` within
-   20 minutes of the previous one. Four posts in `unfavorited_posts_archive` are favorites again
-   and may be earlier victims of this.
+   of posts in the database. Four posts in `unfavorited_posts_archive` are favorites again and
+   may be earlier victims of this.
+
+   **Done.** A finished fetch now writes a completion marker, and a cached list is reused only
+   when its fetch finished, started within 15 minutes, and every page is present and readable;
+   anything else is fetched again. The unfavorite step refuses to remove more than 100 posts or
+   1% of the database in one run, whichever is more (`archive.e621.max_unfavorited_per_run`
+   overrides it); the 75 logged syncs removed at most 4.
 3. **e621 v2 API (M).** The fluffle e621 client reads only the old response shape, and several
    single-post calls do not ask for the extended tag format. When v2 becomes the default these
    stop seeing tags. Make them read both shapes, with fixture tests for each, and make the tag
@@ -186,6 +203,11 @@ post's stored md5 differs from e621's except the ones the log names as skipped.
 4. **A response without `flags` (S).** The full ingest reads a missing flags object as "not
    deleted", which would un-delete a deleted post and drop its placeholder URL. Refuse the run
    when posts arrive without it.
+
+   **Done.** Right after the favorites are fetched, the sync checks that every post has an
+   integer id and a `flags` object with a true/false `deleted`. If any does not, it logs which
+   ones, writes nothing, and exits with an error, so `fff daily` shows the stage as failed. All
+   39,614 posts in the 2026-11-19 response pass.
 
 *Done when:* a sync started with the library drive disconnected changes no paths, a sync fed a
 truncated favorites list unfavorites nothing, and the fluffle client passes its tests on both
