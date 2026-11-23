@@ -23,7 +23,6 @@ without the field must never read as "e621 has none".
 """
 from __future__ import annotations
 
-import hashlib
 import logging
 import os
 import shutil
@@ -37,7 +36,7 @@ from fff.archive.config import normalize_file_path
 from fff.archive.db import (_get_file_ext, _get_file_md5, _get_file_url, _has_tag_list, get_tag_type,
                             insert_or_update_posts_bulk, resolve_existing_file_path)
 from fff.clients.e621 import api_get
-from fff.common import protected
+from fff.common import fileops, protected
 from fff.common.naming import windows_safe_filename
 
 RATINGS = {"s": "safe", "q": "questionable", "e": "explicit"}
@@ -373,12 +372,7 @@ def sync_tag_types(conn, posts_data) -> int:
 
 # --- files e621 has replaced ---------------------------------------------------------------
 
-def _md5_of(path) -> str:
-    digest = hashlib.md5()
-    with open(path, "rb") as f:
-        for chunk in iter(lambda: f.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
+_md5_of = fileops.md5_of_file
 
 
 def _key(path) -> str:

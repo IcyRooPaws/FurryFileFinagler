@@ -2,6 +2,7 @@
 # fff: post file names are made Windows-safe (invalid characters -> _) wherever they are built.
 import logging
 import os
+import re
 import time
 from mysql.connector import Error
 from datetime import datetime
@@ -10,6 +11,7 @@ from datetime import datetime
 from fff.archive.config import normalize_file_path
 from fff.clients import http
 from fff.common import db as fff_db
+from fff.common.fileops import md5_of_file
 from fff.common.naming import clean_artist_names, windows_safe_filename
 
 
@@ -71,8 +73,13 @@ def strip_flag_tokens(name: str) -> str:
     return new_name or name
 
 
-def resolve_existing_file_path(file_path: str | None) -> str | None:
-    """Return a verified local file path, allowing for extension changes."""
+def resolve_existing_file_path(file_path: str | None, md5: str | None = None) -> str | None:
+    """Return a verified local file path, allowing for extension changes.
+
+    With ``md5``, a file found under the same name with another extension counts only when
+    its contents match. A same-named file can be a different post's: a parent and its child
+    variant once ended up linked to one file this way.
+    """
     if not file_path:
         return None
 
@@ -87,7 +94,11 @@ def resolve_existing_file_path(file_path: str | None) -> str | None:
     base_name = os.path.basename(base_path)
     for file_name in os.listdir(dir_path):
         if os.path.splitext(file_name)[0] == base_name:
-            return os.path.join(dir_path, file_name)
+            candidate = os.path.join(dir_path, file_name)
+            if md5 and md5_of_file(candidate) != md5.lower():
+                logging.info("Not using %s for %s: its contents are a different file", candidate, file_path)
+                continue
+            return candidate
 
     return None
 
@@ -856,6 +867,26 @@ def validate_post_id_in_filename(post_id, filename):
     else:
         return False, extracted_id, f"Post ID mismatch: Database={post_id}, Filename={extracted_id}"
 
+
+# An e621-style name, possibly with extra bits after the ID ("-1", ".mp4.webm")
+_E621_STYLE_NAME = re.compile(r"^.+-(safe|questionable|explicit)-\d+([-.].*)?$", re.IGNORECASE)
+
+
+def file_belongs_to_post(file_path, filename, post_md5) -> bool:
+    """True when a file whose name doesn't carry its post's ID is still that post's file.
+
+    The name must be e621-style (artist-rating-id...) and the contents must match the post's
+    md5. Such a file is misnamed: a child variant saved under its parent's ID, a "-1" copy, or
+    a double extension. Files with other names (another site's, an artist's own) are left as
+    they are.
+    """
+    if not post_md5 or not _E621_STYLE_NAME.match(filename):
+        return False
+    try:
+        return md5_of_file(file_path) == post_md5.lower()
+    except OSError:
+        return False
+
 def log_artist_file_rename(conn, post_id, old_file_name, new_file_name, old_file_path, new_file_path, old_artists, new_artists, commit=True):
     """Log a file rename due to artist name changes."""
     cursor = conn.cursor()
@@ -902,13 +933,14 @@ def check_and_update_file_artist_names(conn, batch_limit=None, dry_run=False):
         "skipped_no_change": 0,
         "post_id_mismatch_skipped": 0,
         "post_id_extraction_failed": 0,
-        "file_name_column_fixed": 0
+        "file_name_column_fixed": 0,
+        "misnamed_reclaimed": 0
     }
 
     try:
         # Get posts with file paths
         query = """
-        SELECT p.id, p.file_name, p.file_path, p.rating, p.file_type
+        SELECT p.id, p.file_name, p.file_path, p.rating, p.file_type, p.md5
         FROM posts p
         WHERE p.file_path IS NOT NULL
         AND p.file_path != ''
@@ -963,8 +995,14 @@ def check_and_update_file_artist_names(conn, batch_limit=None, dry_run=False):
             # **VALIDATION: Check if post ID in filename matches database post ID**
             current_base_name = os.path.basename(current_file_path)
             is_valid, extracted_id, validation_msg = validate_post_id_in_filename(post_id, current_base_name)
-            
-            if not is_valid:
+            # The name says another post (or nothing readable), but the contents may still be
+            # this post's; then the name is what's wrong, and the rename below fixes it.
+            reclaim = not is_valid and file_belongs_to_post(current_file_path, current_base_name, post.get("md5"))
+
+            if reclaim:
+                logging.info(f"Post {post_id}: {validation_msg}, but the file's contents are this post's "
+                             f"(md5 match) - renaming it")
+            elif not is_valid:
                 if extracted_id is not None:
                     # A mismatched post ID means this file may belong to a different post.
                     logging.warning(f"Post {post_id}: {validation_msg} - SKIPPING RENAME")
@@ -1027,12 +1065,27 @@ def check_and_update_file_artist_names(conn, batch_limit=None, dry_run=False):
             directory = os.path.dirname(current_file_path)
             new_file_path = os.path.join(directory, expected_file_name)
 
+            # Other posts recorded with this file (the post whose ID the name had) lose the link,
+            # so the missing-file download fetches their own files.
+            other_posts = []
+            if reclaim:
+                other_cursor = conn.cursor()
+                try:
+                    other_cursor.execute("SELECT id FROM posts WHERE file_path = %s AND id <> %s",
+                                         (current_file_path, post_id))
+                    other_posts = [row[0] for row in other_cursor.fetchall()]
+                finally:
+                    other_cursor.close()
+
             if dry_run:
                 logging.info(f"[DRY RUN] Would rename post {post_id}:")
                 logging.info(f"  Old: {current_base_name}")
                 logging.info(f"  New: {expected_file_name}")
                 logging.info(f"  Artists: {old_artists} -> {current_artists}")
+                if other_posts:
+                    logging.info(f"  Would unlink the file from post(s) {other_posts}: it isn't theirs")
                 stats["renamed"] += 1
+                stats["misnamed_reclaimed"] += int(reclaim)
                 continue
 
             # Perform the rename
@@ -1050,11 +1103,19 @@ def check_and_update_file_artist_names(conn, batch_limit=None, dry_run=False):
                 update_cursor = conn.cursor()
                 recorded = False
                 try:
+                    if other_posts:
+                        update_cursor.execute(
+                            f"UPDATE posts SET file_path = NULL, file_name = NULL "
+                            f"WHERE id IN ({','.join(['%s'] * len(other_posts))})", tuple(other_posts))
                     update_cursor.execute(
                         "UPDATE posts SET file_path = %s, file_name = %s WHERE id = %s",
                         (normalize_file_path(new_file_path), expected_file_name, post_id)
                     )
                     conn.commit()
+                    if other_posts:
+                        logging.info(f"Post {post_id}: unlinked {current_base_name} from post(s) {other_posts}; "
+                                     "it is not their file, so their own will be downloaded")
+                    stats["misnamed_reclaimed"] += int(reclaim)
 
                     # Log the rename
                     log_artist_file_rename(
@@ -1071,6 +1132,10 @@ def check_and_update_file_artist_names(conn, batch_limit=None, dry_run=False):
 
                 except Exception as db_error:
                     logging.error(f"Failed to update database for post {post_id}: {db_error}")
+                    try:
+                        conn.rollback()
+                    except Exception:
+                        pass
                     # Try to rename file back
                     try:
                         os.rename(new_file_path, current_file_path)
@@ -1084,7 +1149,8 @@ def check_and_update_file_artist_names(conn, batch_limit=None, dry_run=False):
                     # The sorter's row and the move log follow the rename. Outside the try above:
                     # nothing here may ever trigger its rename-back.
                     from fff.archive.post_files import record_rename
-                    record_rename(conn, current_file_path, new_file_path, reason="artist_rename")
+                    record_rename(conn, current_file_path, new_file_path,
+                                  reason="misnamed_post_file" if reclaim else "artist_rename")
 
             except Exception as e:
                 logging.error(f"Failed to rename file for post {post_id}: {e}")
@@ -2505,12 +2571,12 @@ def verify_and_repair_file_paths(conn, mysql_config, batch_limit: int | None = N
         for post_id, file_path, md5_hash in posts_with_paths:
             stats['checked'] += 1
             try:
-                resolved = resolve_existing_file_path(file_path)
+                resolved = resolve_existing_file_path(file_path, md5=md5_hash)
             except OSError:
                 resolved = None
             if resolved == file_path:
                 continue
-            if resolved:      # the same file with another extension
+            if resolved:      # the same file with another extension (same md5, when the post has one)
                 updates.append((normalize_file_path(resolved), post_id))
                 logging.info(f"Updated file_path for post {post_id} to file with different extension: "
                              f"{resolved} (was: {file_path})")

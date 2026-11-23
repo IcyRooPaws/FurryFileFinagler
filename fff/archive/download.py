@@ -1,6 +1,5 @@
 # fff: MediaHasher is the archive hash profile (fff.hashing.archive_hasher).
 # fff: characters Windows doesn't allow in file names are replaced with _ (windows_safe_filename).
-import hashlib
 import os
 import re
 import time
@@ -11,6 +10,7 @@ from urllib3.exceptions import ProtocolError
 from fff.archive.db import strip_flag_tokens
 from fff.clients.e621 import api_get  # noqa: F401  (re-exported: fff.archive modules import it from here)
 from fff.archive.config import normalize_file_path
+from fff.common.fileops import md5_of_file
 from fff.common.naming import windows_safe_filename
 
 # Optional import for media hashing
@@ -77,12 +77,7 @@ def find_file_with_post_id(post_id, search_dirs):
 
     return None
 
-def _md5_of_file(path) -> str:
-    digest = hashlib.md5()
-    with open(path, "rb") as f:
-        for chunk in iter(lambda: f.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
+_md5_of_file = md5_of_file
 
 
 def generate_media_hash(file_path, mysql_config=None):

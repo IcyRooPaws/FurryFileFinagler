@@ -5,6 +5,7 @@ The ``*_with_logging`` helpers are copied verbatim from FFF/_handlers/utils.py.
 which writes ``file_operations`` rows without the rest of the sorter's DB layer. Search
 workflows use the latter.
 """
+import hashlib
 import logging
 import os
 import subprocess
@@ -46,6 +47,15 @@ def restrict_to_owner(path) -> bool:
         return True
     except (OSError, subprocess.CalledProcessError):
         return False
+
+def md5_of_file(path) -> str:
+    """Lower-case hex MD5 of a file's contents (e621 identifies a post's file by it)."""
+    digest = hashlib.md5()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
 
 # --- e621 archive/modules/config.py: backslash paths for e621_posts_db ---
 

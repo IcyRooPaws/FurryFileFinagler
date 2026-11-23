@@ -1,6 +1,8 @@
 """The posts.file_path repair never mistakes a missing library (drive offline, folder renamed,
 sorter database down) for missing files, which would clear every path and queue the whole
 library for download."""
+import hashlib
+
 import pytest
 
 from fff.archive import db
@@ -150,8 +152,20 @@ def test_a_file_with_another_extension_is_adopted(tmp_path, sorter):
     rows = library(tmp_path, present=0, gone=1)
     actual = tmp_path / "Library" / "Pictures" / "a-safe-1.webm"
     actual.write_bytes(b"x")
+    rows[0] = (1, rows[0][1], hashlib.md5(b"x").hexdigest())
     conn = Conn(rows)
     assert run(conn)["repaired"] == 1 and conn.paths[1].endswith("a-safe-1.webm")
+
+
+def test_a_same_named_file_with_other_contents_is_not_adopted(tmp_path, sorter):
+    """A parent post's .jpg went missing and its child variant sat there as a .png under the
+    parent's name; the parent was linked to the child's file."""
+    rows = library(tmp_path, present=0, gone=1)
+    (tmp_path / "Library" / "Pictures" / "a-safe-1.webm").write_bytes(b"the child's image")
+    rows[0] = (1, rows[0][1], hashlib.md5(b"the parent's image").hexdigest())
+    conn = Conn(rows)
+    stats = run(conn)
+    assert stats["repaired"] == 0 and stats["not_found"] == 1 and conn.paths[1] is None
 
 
 def test_library_root():
