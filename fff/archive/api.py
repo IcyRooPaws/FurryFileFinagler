@@ -7,6 +7,7 @@ import re
 from datetime import datetime
 from typing import List, Optional
 from fff.archive.download import api_get
+from fff.clients.e621 import V2_PARAMS
 from requests.exceptions import ConnectionError
 from urllib3.exceptions import ProtocolError
 
@@ -44,7 +45,7 @@ def fetch_favorites(e621_config):
     page_limit = min(e621_config.get("api_page_limit", 320), 320)
 
     while True:
-        params = {"page": page, "tags": search_tag, "limit": page_limit, "v2": "true", "mode": "extended"}
+        params = {"page": page, "tags": search_tag, "limit": page_limit, **V2_PARAMS}
         logging.info("Fetching favorites page %s with tag '%s'", page, search_tag)
 
         # Retry logic for connection issues

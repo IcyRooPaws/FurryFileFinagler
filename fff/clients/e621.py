@@ -6,7 +6,8 @@ error behavior:
     * Search helpers (``get_post_data``, ``add_to_favorites`` ...): print and return
     None/False on failure.
 Both go through fff.clients.http (shared rate limit and retries).
-v1/v2 response helpers normalize the supported API response shapes.
+Every request that returns posts asks for the v2 format (``V2_PARAMS``). The response
+helpers below still read v1 too, because older cached responses are v1.
 """
 import json
 import re
@@ -17,7 +18,18 @@ from typing import Any, Dict, List, Optional
 
 from fff.clients import http
 
-# --- e621 archive/modules/db.py: v1/v2 response helpers -----------------
+# --- e621 API v2 -----------------------------------------------------------
+# e621's v2 post format (forum topic #63849) became the default in Nov 2026; v1 is removed
+# ~May 2027. v2 changes:
+#   - List endpoints return a bare array instead of {"posts": [...]}
+#   - Single-post endpoints return a bare object instead of {"post": {...}}
+#   - File fields move from post["file"] to post["files"]["original"] / post["files"]["meta"]
+#   - score, fav_count, is_favorited and comment_count move under post["stats"]
+#   - Tags are a flat list unless mode=extended is asked for, which keeps the category dict
+# Send V2_PARAMS on every request that returns posts (posts.json, posts/<id>.json,
+# favorites.json). Without mode=extended the artist and blacklist checks see no tags.
+V2_PARAMS = {"v2": "true", "mode": "extended"}
+
 
 def _parse_post_list(data):
     """Return the list of posts from either a v1 or v2 API response."""
@@ -55,6 +67,31 @@ def _get_file_ext(post):
     if "files" in post:
         return post["files"].get("meta", {}).get("ext", "")
     return post.get("file", {}).get("ext", "")
+
+
+def _get_is_favorited(post):
+    """Whether the logged-in user has favorited the post (v2 stats.is_favorited, v1
+    is_favorited), or None when the response doesn't say (e.g. the request wasn't logged in)."""
+    stats = post.get("stats")
+    if isinstance(stats, dict) and "is_favorited" in stats:
+        return bool(stats["is_favorited"])
+    if "is_favorited" in post:
+        return bool(post["is_favorited"])
+    return None
+
+
+def _has_tag_categories(post):
+    """True when the post's tags are grouped by category (v1, or v2 with mode=extended)."""
+    tags = post.get("tags")
+    return isinstance(tags, dict) and any(tags.values())
+
+
+def _all_tags(post):
+    """Every tag on the post, whether the tags are grouped by category or a flat list."""
+    tags = post.get("tags") or []
+    if isinstance(tags, dict):
+        return [tag for category in tags.values() if isinstance(category, list) for tag in category]
+    return list(tags)
 
 
 # --- e621 archive/modules/api.py + download.py -------------------------
@@ -95,7 +132,8 @@ def get_all_favorites(login: str, api_key: str, user_agent: str) -> set:
             url = "https://e621.net/favorites.json"
             params = {
                 "page": page,
-                "limit": 320  # Max allowed by e621
+                "limit": 320,  # Max allowed by e621
+                **V2_PARAMS,
             }
 
             response = http.get("e621", url, headers=headers, auth=auth, params=params, timeout=30)
@@ -105,8 +143,7 @@ def get_all_favorites(login: str, api_key: str, user_agent: str) -> set:
                 print(f"  Warning: Failed to fetch favorites page {page}")
                 break
 
-            data = response.json()
-            posts = data.get('posts', [])
+            posts = _parse_post_list(response.json())
 
             if not posts:
                 # No more posts, we've reached the end
@@ -149,19 +186,16 @@ def check_if_favorited(post_id: str, login: str, api_key: str, user_agent: str,
         if favorites_cache is not None:
             return post_id in favorites_cache
 
-        # Fallback to API call if no cache
-        # Get the post data - it includes is_favorited flag
+        # Fallback to API call if no cache: the post data says whether the logged-in user
+        # has favorited it
         url = f"https://e621.net/posts/{post_id}.json"
         headers = {"User-Agent": user_agent}
         auth = (login, api_key)
 
-        response = http.get("e621", url, headers=headers, auth=auth, timeout=10)
+        response = http.get("e621", url, headers=headers, auth=auth, params=V2_PARAMS, timeout=10)
 
         if response.status_code == 200:
-            data = response.json()
-            post_data = data.get('post', {})
-            # The is_favorited flag tells us if the authenticated user has favorited this post
-            return post_data.get('is_favorited', False)
+            return bool(_get_is_favorited(_parse_single_post(response.json())))
 
         return False
     except Exception as e:
@@ -319,9 +353,12 @@ def get_post_data(post_id: str, login: str, api_key: str, user_agent: str,
                         try:
                             with open(newest_file, 'r', encoding='utf-8') as f:
                                 data = json.load(f)
-                            age_minutes = int(file_age_seconds / 60)
-                            print(f"[CACHED - {age_minutes}m old]", end=" ")
-                            return data
+                            # A response saved without mode=extended has no tag categories, so
+                            # the artist and blacklist checks can't use it; fetch it again
+                            if _has_tag_categories(_parse_single_post(data)):
+                                age_minutes = int(file_age_seconds / 60)
+                                print(f"[CACHED - {age_minutes}m old]", end=" ")
+                                return data
                         except Exception as e:
                             print(f"    Warning: Could not load cached response: {e}")
                             # Continue to API call if cache load fails
@@ -338,7 +375,7 @@ def get_post_data(post_id: str, login: str, api_key: str, user_agent: str,
         headers = {"User-Agent": user_agent}
         auth = (login, api_key)
 
-        response = http.get("e621", url, headers=headers, auth=auth, timeout=10)
+        response = http.get("e621", url, headers=headers, auth=auth, params=V2_PARAMS, timeout=10)
 
         if response.status_code == 200:
             data = response.json()
@@ -369,11 +406,11 @@ def get_post_data(post_id: str, login: str, api_key: str, user_agent: str,
 
 def generate_filename(post_data: Dict[str, Any], login: str = None, api_key: str = None, user_agent: str = None) -> str:
     """Generate filename based on e621 naming convention matching FA format."""
-    post = post_data.get('post', {})
+    post = _parse_single_post(post_data)
 
-    # Get artists
-    tags = post.get('tags', {})
-    artists = tags.get('artist', [])
+    # Get artists (a flat tag list has no categories to find them in)
+    tags = post.get('tags') or {}
+    artists = tags.get('artist', []) if isinstance(tags, dict) else []
 
     # Filter out "avoid_posting"
     artists = [a for a in artists if a != 'avoid_posting']
@@ -408,12 +445,11 @@ def generate_filename(post_data: Dict[str, Any], login: str = None, api_key: str
     post_id = post.get('id', '')
 
     # Get extension
-    file_info = post.get('file', {})
-    extension = file_info.get('ext', '')
+    extension = _get_file_ext(post)
 
     if not extension:
         # Try to get from URL
-        file_url = file_info.get('url', '')
+        file_url = _get_file_url(post)
         if file_url:
             extension = file_url.split('.')[-1].lower()
 
@@ -457,8 +493,8 @@ def _post_output_path(filename: str, output_dir: Path, original_image_path: Path
 
 def is_deleted_without_file(post_data: Dict[str, Any]) -> bool:
     """True when e621 deleted the post, so it no longer hands out the file URL."""
-    post = post_data.get('post', {})
-    return bool(post.get('flags', {}).get('deleted')) and not post.get('file', {}).get('url')
+    post = _parse_single_post(post_data)
+    return bool(post.get('flags', {}).get('deleted')) and not _get_file_url(post)
 
 
 def keep_local_file_as_post(post_data: Dict[str, Any], image_path: Path, output_dir: Path, login: str,
@@ -501,9 +537,7 @@ def download_post(post_data: Dict[str, Any], output_dir: Path, login: str, api_k
         preserve_structure: If True, preserve subdirectory structure
     """
     try:
-        post = post_data.get('post', {})
-        file_info = post.get('file', {})
-        file_url = file_info.get('url')
+        file_url = _get_file_url(_parse_single_post(post_data))
 
         if not file_url:
             print("    Error: No file URL found in post data")
@@ -548,17 +582,8 @@ def check_blacklisted_tags(post_data: Dict[str, Any], blacklist: List[str]) -> O
     if not blacklist:
         return None
 
-    post = post_data.get('post', {})
-    tags = post.get('tags', {})
-
-    # Flatten all tag categories into a single list
-    all_tags = []
-    for tag_category in tags.values():
-        if isinstance(tag_category, list):
-            all_tags.extend(tag_category)
-
     # Convert to lowercase for case-insensitive matching
-    all_tags_lower = [tag.lower() for tag in all_tags]
+    all_tags_lower = [tag.lower() for tag in _all_tags(_parse_single_post(post_data))]
     blacklist_lower = [tag.lower() for tag in blacklist]
 
     # Find matching blacklisted tags

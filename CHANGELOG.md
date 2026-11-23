@@ -15,6 +15,32 @@ Version numbers follow [Semantic Versioning](https://semver.org/):
 The version lives in `fff/__init__.py` (`fff --version` prints it). `pyproject.toml` reads it
 from there, and a test checks that the newest entry here matches it.
 
+## [1.33.1] - 2026-11-23
+
+### Fixed
+- Reverse search stopped handling e621 matches on 2026-11-19, when e621 switched to its new
+  v2 response format by default. The e621 step only read the old format, so for every match
+  it reported "Not favorited", tried to favorite the post again (e621 answered 422), and
+  then failed with "No file URL found in post data". Nothing was downloaded. It now reads
+  v2: the favorite flag in `stats.is_favorited` and the file at `files.original.url`.
+- v2 sends tags as one flat list unless asked to group them by category. Without the
+  groups, the e621 blacklist check saw no tags and let every post through, and file names
+  had no artist (`unknown-...`). Every request that returns posts now asks for v2 with
+  grouped tags (`v2=true&mode=extended`). A cached post response without grouped tags is
+  fetched again instead of reused.
+- `favorite_missing_posts`, `move_orphaned_files` and `swap_duplicate_favorites` reported
+  every post's favorite status as unknown, because they looked for the favorite flag at the
+  top level, where v2 doesn't put it.
+- The conditional-DNP backfill and the deletion checks for posts and `old_favs` asked e621
+  for posts without grouped tags; the conditional-DNP backfill found no artists as a
+  result. They now ask for v2 with grouped tags.
+
+### Changed
+- The v2 request flags and the code that reads e621 posts (old and new format) are in one
+  place, `fff/clients/e621.py`. The archive's own copy in `fff/archive/db.py` is gone, and
+  the favorites sync, `md5_favorite_checker` and file verification use the shared versions.
+  Responses in the old format, such as older cached files, are still read.
+
 ## [1.33.0] - 2026-11-16
 
 ### Added

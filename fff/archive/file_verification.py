@@ -3,6 +3,7 @@
 import os
 import logging
 from fff.clients import http
+from fff.clients.e621 import V2_PARAMS, _get_file_url, _parse_single_post
 import time
 import concurrent.futures
 from datetime import datetime
@@ -45,7 +46,7 @@ def process_orphan_file(conn, filepath, e621_config):
         logging.error("Could not extract post id from file_name: %s", filepath)
         return
 
-    post_url = f"https://e621.net/posts/{post_id}.json?v2=true&mode=extended"
+    post_url = f"https://e621.net/posts/{post_id}.json"
     headers = {"User-Agent": e621_config.get("user_agent", "MyE621FavoritesDownloader/1.0")}
     auth = (e621_config.get("login"), e621_config.get("api_key"))
     
@@ -56,10 +57,9 @@ def process_orphan_file(conn, filepath, e621_config):
     
     while retry_count < max_retries:
         try:
-            response = http.get("e621", post_url, headers=headers, auth=auth, timeout=30)
+            response = http.get("e621", post_url, headers=headers, auth=auth, params=V2_PARAMS, timeout=30)
             response.raise_for_status()
-            data = response.json()
-            post = data if "id" in data else data.get("post", {})
+            post = _parse_single_post(response.json())
             if not post:
                 logging.error("No post data found for post id %s", post_id)
                 return
@@ -87,11 +87,7 @@ def process_orphan_file(conn, filepath, e621_config):
         logging.error("Could not get modification time for %s: %s", filepath, e)
         orphan_mtime = None
 
-    # Handle v1 file.url and v2 files.original.url
-    if "files" in post:
-        file_url = post["files"].get("original", {}).get("url", "")
-    else:
-        file_url = post.get("file", {}).get("url", "")
+    file_url = _get_file_url(post)
     if not file_url:
         logging.error("No file URL found for post %s", post_id)
         return

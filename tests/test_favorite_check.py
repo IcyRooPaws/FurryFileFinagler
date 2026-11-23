@@ -26,16 +26,18 @@ def calls(monkeypatch):
 
 
 @pytest.mark.parametrize("body, expected", [
-    ({"post": {"id": 1, "is_favorited": True}}, True),
+    ({"id": 1, "files": {}, "stats": {"is_favorited": True}}, True),     # v2: the flag is in stats
+    ({"id": 1, "files": {}, "stats": {"is_favorited": False}}, False),
+    ({"id": 1, "files": {}, "stats": {"fav_count": 3}}, None),          # not logged in: no flag
+    ({"post": {"id": 1, "is_favorited": True}}, True),                  # v1
     ({"post": {"id": 1, "is_favorited": False}}, False),
-    ({"id": 1, "files": {}}, None),            # the ?v2=true format: no is_favorited at all
 ])
 def test_is_favorited(monkeypatch, calls, body, expected):
     def get(service, url, **kw):
         assert service == "e621"
-        calls.append(url)
+        calls.append(kw.get("params"))
         return Resp(body)
 
     monkeypatch.setattr(fmp.http, "get", get)
     assert fmp.check_if_favorited(1, {}) is expected
-    assert "v2=true" not in calls[0]
+    assert calls[0] == {"v2": "true", "mode": "extended"}
