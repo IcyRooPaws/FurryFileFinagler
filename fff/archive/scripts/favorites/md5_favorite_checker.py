@@ -19,6 +19,7 @@ from pathlib import Path
 
 import requests
 from fff.clients import http
+from fff.clients.e621 import V2_PARAMS, _get_is_favorited, _parse_post_list
 
 from fff.archive import paths as archive_paths
 
@@ -62,15 +63,14 @@ def fetch_post_by_md5(md5_hash: str, e621_config):
     """Fetch the first post matching the md5 hash. Returns the post dict or None."""
     headers = {"User-Agent": e621_config.get("user_agent", "MyE621FavoritesDownloader/1.0")}
     auth = get_auth(e621_config)
-    params = {"tags": f"md5:{md5_hash}", "limit": 1, "v2": "true", "mode": "extended"}
+    params = {"tags": f"md5:{md5_hash}", "limit": 1, **V2_PARAMS}
     url = "https://e621.net/posts.json"
 
     try:
         time.sleep(e621_config.get("rate_limit_sleep", 1))
         response = http.get("e621", url, headers=headers, auth=auth, params=params, timeout=30)
         response.raise_for_status()
-        data = response.json()
-        posts = data if isinstance(data, list) else data.get("posts", [])
+        posts = _parse_post_list(response.json())
         if not posts:
             logging.info("No post found for md5 %s", md5_hash)
             return None
@@ -116,7 +116,7 @@ def process_md5s(md5_list, e621_config, dry_run: bool = False, limit: int | None
             continue
 
         # Prefer the search response flag; fall back to explicit check if absent
-        is_favorited = post.get("is_favorited")
+        is_favorited = _get_is_favorited(post)
         if is_favorited is None:
             is_favorited = check_if_favorited(post_id, e621_config)
 

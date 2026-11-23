@@ -26,57 +26,17 @@ FLAG_TOKENS = [
     "third-party_edit",
 ]
 
-# ---------------------------------------------------------------------------
-# e621 API v1/v2 compatibility helpers
-# ---------------------------------------------------------------------------
-# e621 is rolling out a new v2 API format (see forum topic #63849).
-# v2 changes:
-#   - List endpoints return a bare array instead of {"posts": [...]}
-#   - Single-post endpoints return a bare object instead of {"post": {...}}
-#   - File fields move from post["file"] to post["files"]["original"] / post["files"]["meta"]
-#   - Tags are flat array by default; use mode=extended to keep category grouping
-# Rollout: v2 opt-in now (add v2=true), default in ~Dec 2026, v1 removed ~May 2027.
-# All API requests already include v2=true&mode=extended so that tags remain grouped.
-# These helpers handle both v1 and v2 response shapes for backwards compatibility
-# with already-cached temp response files.
-
-def _parse_post_list(data):
-    """Return the list of posts from either a v1 or v2 API response."""
-    if isinstance(data, list):
-        return data  # v2: bare array
-    return data.get("posts", [])  # v1: {"posts": [...]}
-
-
-def _parse_single_post(data):
-    """Return the post dict from either a v1 or v2 single-post API response."""
-    if isinstance(data, dict):
-        if "post" in data:
-            return data["post"]  # v1: {"post": {...}}
-        if "id" in data:
-            return data  # v2: bare object
-    return {}
-
-
-def _get_file_url(post):
-    """Return the current file URL from either v1 or v2 post dict."""
-    if "files" in post:
-        return post["files"].get("original", {}).get("url")
-    return post.get("file", {}).get("url")
-
-
-def _get_file_md5(post):
-    """Return the MD5 hash from either v1 or v2 post dict."""
-    if "files" in post:
-        return post["files"].get("meta", {}).get("md5")
-    return post.get("file", {}).get("md5")
-
-
-def _get_file_ext(post):
-    """Return the file extension from either v1 or v2 post dict."""
-    if "files" in post:
-        return post["files"].get("meta", {}).get("ext", "")
-    return post.get("file", {}).get("ext", "")
-# ---------------------------------------------------------------------------
+# e621 API v2: requests send V2_PARAMS; these read both v2 and the v1 shape of older cached
+# responses. See fff/clients/e621.py for what v2 changed.
+from fff.clients.e621 import (  # noqa: E402  (re-exported: metadata_sync and the tests use them)
+    V2_PARAMS,
+    _get_file_ext,
+    _get_file_md5,
+    _get_file_url,
+    _has_tag_categories,
+    _parse_post_list,
+    _parse_single_post,
+)
 
 
 def strip_flag_tokens(name: str) -> str:
@@ -1724,8 +1684,7 @@ def _has_tag_list(post) -> bool:
     Stale cached responses can carry a flat list (mode=basic) or nothing; pruning links
     against those would wipe a post's artists/tags, so pruning only runs when this is True.
     """
-    tags_dict = post.get("tags")
-    return isinstance(tags_dict, dict) and any(tags_dict.values())
+    return _has_tag_categories(post)
 
 
 def _prune_post_links(cursor, table, column, post_id, current_ids):
@@ -3620,7 +3579,8 @@ def backfill_deletion_status(conn, e621_config, batch_limit: int | None = None):
     for idx, post_id in enumerate(post_ids, start=1):
         url = f"https://e621.net/posts/{post_id}.json"
         try:
-            resp = http.get("e621", url, headers={"User-Agent": user_agent}, auth=auth, timeout=30)
+            resp = http.get("e621", url, headers={"User-Agent": user_agent}, auth=auth, params=V2_PARAMS,
+                            timeout=30)
             resp.raise_for_status()
             data = _parse_single_post(resp.json())
 
@@ -3908,7 +3868,8 @@ def backfill_conditional_dnp(conn, e621_config, batch_limit: int | None = None):
     for pid, current_name in targets:
         url = f"https://e621.net/posts/{pid}.json"
         try:
-            resp = http.get("e621", url, headers={"User-Agent": user_agent}, auth=auth, timeout=30)
+            resp = http.get("e621", url, headers={"User-Agent": user_agent}, auth=auth, params=V2_PARAMS,
+                            timeout=30)
             resp.raise_for_status()
             post = _parse_single_post(resp.json())
             if not post:
@@ -4014,7 +3975,8 @@ def check_old_favs_deletion_status(conn, e621_config, batch_limit: int | None = 
         url = f"https://e621.net/posts/{post_id}.json"
         try:
             # Use GET request to get post data and check deleted flag
-            resp = http.get("e621", url, headers={"User-Agent": user_agent}, auth=auth, timeout=30)
+            resp = http.get("e621", url, headers={"User-Agent": user_agent}, auth=auth, params=V2_PARAMS,
+                            timeout=30)
 
             cursor = conn.cursor()
             current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")

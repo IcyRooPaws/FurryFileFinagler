@@ -21,6 +21,7 @@ import argparse
 import time
 import requests
 from fff.clients import http
+from fff.clients.e621 import V2_PARAMS, _get_is_favorited, _parse_single_post
 
 from fff.archive import paths as archive_paths
 
@@ -70,29 +71,27 @@ def check_if_favorited(post_id, e621_config):
     headers = {"User-Agent": e621_config.get("user_agent", "MyE621FavoritesDownloader/1.0")}
     auth = get_auth(e621_config)
 
-    # Get post details to check if it's favorited
-    # Not ?v2=true: that response format has no is_favorited field, which read as "not favorited".
+    # Get post details to check if it's favorited (v2 keeps the flag in stats.is_favorited)
     url = f"https://e621.net/posts/{post_id}.json"
 
     try:
         # Rate limit: 1 second between API calls
         time.sleep(1)
 
-        response = http.get("e621", url, headers=headers, auth=auth, timeout=30)
+        response = http.get("e621", url, headers=headers, auth=auth, params=V2_PARAMS, timeout=30)
 
         if response.status_code == 404:
             logging.warning(f"Post {post_id} does not exist (404)")
             return None
 
         response.raise_for_status()
-        data = response.json()
-        post = data if "id" in data else data.get("post", {})
+        post = _parse_single_post(response.json())
 
         # Check if current user has favorited it; a response without the field is "unknown"
-        if "is_favorited" not in post:
+        is_favorited = _get_is_favorited(post)
+        if is_favorited is None:
             logging.error(f"No is_favorited field for post {post_id} (not logged in?)")
             return None
-        is_favorited = bool(post["is_favorited"])
         logging.debug(f"Post {post_id}: is_favorited={is_favorited}")
 
         return is_favorited
