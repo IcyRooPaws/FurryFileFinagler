@@ -97,7 +97,9 @@ def test_set_file_timestamps(tmp_path):
     timestamps.set_file_timestamps(str(f), mtime=1_600_000_000, ctime=1_500_000_000)
     assert f.stat().st_mtime == 1_600_000_000
     if os.name == "nt":
-        assert int(f.stat().st_birthtime) == 1_500_000_000
+        st = f.stat()
+        # st_birthtime exists on Windows from Python 3.12; before that, st_ctime is the creation time.
+        assert int(getattr(st, "st_birthtime", st.st_ctime)) == 1_500_000_000
 
 
 def test_path_normalizers():

@@ -15,6 +15,13 @@ Version numbers follow [Semantic Versioning](https://semver.org/):
 The version lives in `fff/__init__.py` (`fff --version` prints it). `pyproject.toml` reads it
 from there, and a test checks that the newest entry here matches it.
 
+## [1.34.1] - 2026-11-24
+
+### Fixed
+- CI failed on Python 3.11: the file-timestamp test read the creation time from
+  `st_birthtime`, which Windows only has from Python 3.12. It now falls back to `st_ctime`,
+  the creation time on Windows before 3.12. FFF itself was unaffected.
+
 ## [1.34.0] - 2026-11-24
 
 ### Added
