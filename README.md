@@ -5,11 +5,11 @@
 **Your e621 favorites, archived on your own disk · Sources for loose images · A library that sorts itself**
 
 [![CI](https://github.com/IcyRooPaws/FurryFileFinagler/actions/workflows/ci.yml/badge.svg)](https://github.com/IcyRooPaws/FurryFileFinagler/actions/workflows/ci.yml)
-![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-3776AB?logo=python&logoColor=white)
+![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-3776AB?logo=python&logoColor=white)
 ![Platform: Windows](https://img.shields.io/badge/platform-Windows-0078D6)
 ![Database: MySQL](https://img.shields.io/badge/database-MySQL-4479A1?logo=mysql&logoColor=white)
 
-Version 1.33.1 · [Changelog](CHANGELOG.md) · [Commands](docs/COMMANDS.md) · [Usage guide](docs/USAGE.md)
+Version 1.34.0 · [Changelog](CHANGELOG.md) · [Commands](docs/COMMANDS.md) · [Usage guide](docs/USAGE.md)
 
 </div>
 
@@ -45,7 +45,7 @@ flowchart LR
 
 1. Install what you need:
    - Windows 10/11
-   - Python 3.11+
+   - Python 3.11 or newer (3.15 recommended)
    - a MySQL server
    - an [e621 API key](https://e621.net/users/home)
 2. Run **`setup.bat`**. It installs FFF and opens the guided setup.
@@ -60,7 +60,6 @@ flowchart LR
 - **FuzzySearch API key:** a second reverse-image search.
 - **Firefox-based browser signed in to FurAffinity:** the FurAffinity features.
 - **`ffprobe` ([FFmpeg](https://ffmpeg.org/)) on your `PATH`:** video quality in the Duplicates tool.
-- **Python 3.10 works too**, but is stuck on an older Pillow with known security issues.
 
 </details>
 

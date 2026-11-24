@@ -207,8 +207,8 @@ and the logic can be tested.
 ## Part 8. Tooling
 
 **Status: phases 1–3 done** (branch `tooling/ci-lint`). Phase 4 (test gaps) is open.
-- CI (`.github/workflows/ci.yml`): ruff on Linux; pytest on Windows with Python 3.12 and 3.14,
-  installed like `setup.bat`, with no config.yaml or MySQL. That exposed a real bug: every
+- CI (`.github/workflows/ci.yml`): ruff on Linux; pytest on Windows with Python 3.11, 3.14 and
+  3.15, installed like `setup.bat`, with no config.yaml or MySQL. That exposed a real bug: every
   forwarded command's `--help` needed a config.yaml (fixed, with a test).
 - Ruff 0.17.3 with `E9, F, W605, E722`. Fixed on the way: 3 error handlers whose lambdas used
   `e` after Python deletes it (the error dialog itself crashed with NameError), 17 bare excepts,

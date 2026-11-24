@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "furryfilefinagler"
 dynamic = ["version"]  # from fff/__init__.py (see CHANGELOG.md)
 description = "Toolkit for e621 archiving, reverse-image source search, and media library management"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
     "PyYAML>=6.0",
     "requests>=2.31",
@@ -42,7 +42,7 @@ include = ["fff*"]
 testpaths = ["tests"]
 
 [tool.ruff]
-target-version = "py310"
+target-version = "py311"
 extend-exclude = [".venv"]
 
 [tool.ruff.lint]

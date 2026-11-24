@@ -15,6 +15,26 @@ Version numbers follow [Semantic Versioning](https://semver.org/):
 The version lives in `fff/__init__.py` (`fff --version` prints it). `pyproject.toml` reads it
 from there, and a test checks that the newest entry here matches it.
 
+## [1.34.0] - 2026-11-24
+
+### Added
+- Python 3.15 support. CI tests on Python 3.11, 3.14 and 3.15, and runs lint and the
+  vulnerability check on 3.15.
+
+### Changed
+- PyYAML 6.0.4 and MarkupSafe 3.0.4, the first releases with Python 3.15 wheels. Without
+  them, installing on 3.15 needed the Microsoft C++ Build Tools. PyYAML 6.0.4 came out on
+  2026-11-20, so it's pinned before the usual two-week wait (see `requirements.txt`).
+- Soup Sieve 4.1 (used by Beautiful Soup) on Python 3.11.5 and newer, which fixes three
+  published denial-of-service vulnerabilities. CI's vulnerability check had failed since they
+  were published on 2026-11-13. Python 3.11.0 to 3.11.4 stay on 2.10, the last release that
+  supports them.
+
+### Removed
+- Python 3.10, which reached end of life in October 2026 and was stuck on an older Pillow
+  with known security issues. FFF now needs Python 3.11 or newer. On 3.10, install a newer
+  Python, delete the `.venv` folder and run `setup.bat` again.
+
 ## [1.33.1] - 2026-11-23
 
 ### Fixed

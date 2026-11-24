@@ -2,8 +2,10 @@
 # setup.bat and CI install this file, then 'pip install -e . --no-deps'.
 # Regenerate after changing dependencies in pyproject.toml (keeps current pins where possible;
 # --exclude-newer skips releases from the last two weeks):
-#   uv pip compile pyproject.toml --extra dev --universal --python-version 3.10 \
+#   uv pip compile pyproject.toml --extra dev --universal --python-version 3.11 \
 #       --exclude-newer <date two weeks ago> --no-header -o requirements.txt
+# Until 2026-12-04, also pass --exclude-newer-package pyyaml=2026-11-21: PyYAML 6.0.4
+# (2026-11-20) is the first release with Python 3.15 wheels, so it's pinned early.
 # Optional, not pinned here: pygame-ce>=2.4 for audio in the blacklist review GUI
 # ('pip install -e .[audio]').
 beautifulsoup4==4.15.0
@@ -20,8 +22,6 @@ colorama==0.4.6
     # via
     #   furryfilefinagler (pyproject.toml)
     #   pytest
-exceptiongroup==1.3.1 ; python_full_version < '3.11'
-    # via pytest
 flask==3.1.3
     # via furryfilefinagler (pyproject.toml)
 idna==3.20
@@ -34,21 +34,14 @@ itsdangerous==2.2.0
     # via flask
 jinja2==3.1.6
     # via flask
-markupsafe==3.0.3
+markupsafe==3.0.4
     # via
     #   flask
     #   jinja2
     #   werkzeug
 mysql-connector-python==26.7.0
     # via furryfilefinagler (pyproject.toml)
-numpy==2.2.6 ; python_full_version < '3.11'
-    # via
-    #   furryfilefinagler (pyproject.toml)
-    #   imagehash
-    #   opencv-python
-    #   pywavelets
-    #   scipy
-numpy==2.4.6 ; python_full_version == '3.11.*'
+numpy==2.4.6 ; python_full_version < '3.12'
     # via
     #   furryfilefinagler (pyproject.toml)
     #   imagehash
@@ -66,11 +59,7 @@ opencv-python==5.0.0.93
     # via furryfilefinagler (pyproject.toml)
 packaging==26.3
     # via pytest
-pillow==12.3.0 ; python_full_version < '3.11'
-    # via
-    #   furryfilefinagler (pyproject.toml)
-    #   imagehash
-pillow==13.0.0 ; python_full_version >= '3.11'
+pillow==13.0.0
     # via
     #   furryfilefinagler (pyproject.toml)
     #   imagehash
@@ -80,11 +69,7 @@ pygments==2.21.0
     # via pytest
 pytest==9.1.1
     # via furryfilefinagler (pyproject.toml)
-pywavelets==1.8.0 ; python_full_version < '3.11'
-    # via
-    #   furryfilefinagler (pyproject.toml)
-    #   imagehash
-pywavelets==1.9.0 ; python_full_version == '3.11.*'
+pywavelets==1.9.0 ; python_full_version < '3.12'
     # via
     #   furryfilefinagler (pyproject.toml)
     #   imagehash
@@ -92,17 +77,13 @@ pywavelets==1.10.0 ; python_full_version >= '3.12'
     # via
     #   furryfilefinagler (pyproject.toml)
     #   imagehash
-pyyaml==6.0.3
+pyyaml==6.0.4
     # via furryfilefinagler (pyproject.toml)
 requests==2.34.2
     # via furryfilefinagler (pyproject.toml)
 ruff==0.17.3
     # via furryfilefinagler (pyproject.toml)
-scipy==1.15.3 ; python_full_version < '3.11'
-    # via
-    #   furryfilefinagler (pyproject.toml)
-    #   imagehash
-scipy==1.17.1 ; python_full_version == '3.11.*'
+scipy==1.17.1 ; python_full_version < '3.12'
     # via
     #   furryfilefinagler (pyproject.toml)
     #   imagehash
@@ -112,14 +93,12 @@ scipy==1.18.1 ; python_full_version >= '3.12'
     #   imagehash
 send2trash==2.1.0
     # via furryfilefinagler (pyproject.toml)
-soupsieve==2.10
+soupsieve==2.10 ; python_full_version < '3.11.5'
     # via beautifulsoup4
-tomli==2.5.0 ; python_full_version < '3.11'
-    # via pytest
+soupsieve==4.1 ; python_full_version >= '3.11.5'
+    # via beautifulsoup4
 typing-extensions==4.16.0
-    # via
-    #   beautifulsoup4
-    #   exceptiongroup
+    # via beautifulsoup4
 urllib3==2.8.0
     # via
     #   furryfilefinagler (pyproject.toml)
