@@ -2788,6 +2788,9 @@ class TagSortConfigApp:
         self._counting:    bool      = False
         self._out_of_sync_ids: set   = set()  # rule_id set (masters needing sync)
         self._base_dirs: dict        = {}  # pictures/videos/gifs -> path (from config.yaml)
+        # Rule folders as of the last load/save; on save, folders that dropped out of this
+        # set have their files sent back to "Need to be Sorted" (_send_removed_rule_files).
+        self._saved_rule_dirs: list  = []
 
         root.title(f'Tag Sort Configuration — {config_path.name}')
         root.geometry('1280x740')
@@ -3695,6 +3698,7 @@ class TagSortConfigApp:
         enforce_tab_order(self._rules)
         self._flat  = build_flat_list(self._rules)
         self._recompute_base_dirs()
+        self._saved_rule_dirs = self._current_rule_dirs()
         self._recompute_sync_status()
         self._tree.set_category(self._active_tab)
         self._tree.refresh(self._flat)
@@ -3730,6 +3734,90 @@ class TagSortConfigApp:
             self._status(f'Saved to {self.config_path.name}')
         except Exception as exc:
             messagebox.showerror('Save Error', f'Failed to save:\n{exc}')
+            return
+        old_dirs, self._saved_rule_dirs = self._saved_rule_dirs, self._current_rule_dirs()
+        self._send_removed_rule_files(old_dirs, self._saved_rule_dirs)
+
+    # ------------------------------------------------------------------
+    # Removed rules: send their files back to "Need to be Sorted"
+    # ------------------------------------------------------------------
+
+    def _current_rule_dirs(self) -> list:
+        """Every folder the rules (and sub-rules) sort into, as the sorter sees them
+        (rerouted under the test root in the test environment)."""
+        try:
+            cfg = fff_config.load()
+        except Exception:
+            cfg = None
+        dirs = []
+        for node in build_flat_list(self._rules):
+            for d in resolve_node_directories(node, self._base_dirs):
+                dirs.append(fff_config.test_path(d, cfg) if cfg else d)
+        return dirs
+
+    def _send_removed_rule_files(self, old_dirs: list, new_dirs: list) -> None:
+        """Offer to move the files in folders no rule uses any more into the first source
+        directory ("Need to be Sorted"), so the next sort files them again."""
+        from tkinter import messagebox
+        from fff.sorter.features import removed_rule_dirs as rrd
+
+        main_cfg = _load_main_config()
+        other = main_cfg.get('other', {}) or {}
+        raw_sources = (main_cfg.get('SortMobileDownloadFolder', {}) or {}).get('source_directories') or ''
+        sources = [s.strip() for s in str(raw_sources).splitlines() if s.strip()]
+        core = (sources + list(self._base_dirs.values())
+                + list((main_cfg.get('destination_directories') or {}).values())
+                + [v for k, v in other.items() if k.endswith('_directory') and isinstance(v, str)])
+
+        removed = rrd.find_removed_directories(old_dirs, new_dirs, never_empty=core)
+        files = rrd.list_files(removed, keep_dirs=new_dirs)
+        if not files:
+            return
+        if not sources:
+            messagebox.showwarning(
+                'Removed Rules',
+                f'{len(files):,} file(s) are left in folders no rule uses any more, but no '
+                'source directory is set in config.yaml to send them to. They were left where '
+                'they are.', parent=self.root)
+            return
+
+        queue = sources[0]
+        shown = [d for d in removed if os.path.isdir(d)]
+        listing = '\n'.join(f'  • {_short_path(d, 70)}' for d in shown[:12])
+        if len(shown) > 12:
+            listing += f'\n  … and {len(shown) - 12} more'
+        if not messagebox.askyesno(
+                'Removed Rules',
+                f'These folders are no longer used by any tag rule:\n\n{listing}\n\n'
+                f'Move their {len(files):,} file(s) to\n  {queue}\n'
+                'so the next sort files them again?\n\n'
+                'Choose No to leave them where they are (you won\'t be asked again).',
+                parent=self.root):
+            return
+
+        db_manager = None
+        try:
+            from fff.sorter.config import Config as FFFConfig
+            from fff.sorter.handlers.database_manager import DatabaseManager
+            db_manager = DatabaseManager(FFFConfig(str(DEFAULT_MAIN_CONFIG_PATH)))
+        except Exception as exc:  # moving still works; the next maintenance run fixes paths
+            logger.warning('No database for removed-rule moves: %s', exc)
+
+        self.root.config(cursor='watch')
+        self._status(f'Moving {len(files):,} file(s) to {queue}…')
+        self.root.update_idletasks()
+        try:
+            moved, failed = rrd.move_files_to_queue(files, queue, db_manager=db_manager)
+            rrd.remove_empty_folders(removed)
+        finally:
+            self.root.config(cursor='')
+        self._status(f'Moved {moved:,} file(s) from removed rules to {_short_path(queue, 50)}'
+                     + (f' — {len(failed)} failed' if failed else ''))
+        if failed:
+            messagebox.showwarning(
+                'Removed Rules',
+                f'{len(failed):,} file(s) could not be moved (see the log). First one:\n'
+                f'{failed[0]}', parent=self.root)
 
     def _on_filter(self):
         self._tree.set_filter(self._filter_var.get())

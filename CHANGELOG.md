@@ -15,6 +15,17 @@ Version numbers follow [Semantic Versioning](https://semver.org/):
 The version lives in `fff/__init__.py` (`fff --version` prints it). `pyproject.toml` reads it
 from there, and a test checks that the newest entry here matches it.
 
+## [1.36.0] - 2026-11-25
+
+### Added
+- Deleting a tag rule in the tag-sort GUI no longer strands its files. On save, the GUI lists
+  the folders that no rule uses any more and offers to move their files to the first source
+  folder ("Need to be Sorted"), so the next sort files them again. It then removes the
+  emptied folders. This also covers deleted sub-rules and rules whose folder was changed.
+  Subfolders another rule still uses, protected folders and core folders (source,
+  destinations, favourites, artists, Tag Sorted roots) are never emptied. Choosing No leaves
+  the files where they are, and that save won't ask about them again.
+
 ## [1.35.0] - 2026-11-25
 
 ### Changed
