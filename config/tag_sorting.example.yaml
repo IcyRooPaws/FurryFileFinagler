@@ -29,6 +29,10 @@ e621_database:
 #   exclude_tags:  none may be present
 #   tags + match_all: legacy form (match_all true = AND, false = OR)
 #   pool_ids:      sort a pool's posts (sort_group: pool)
+#   exclude_favorite_artists: who wins for artists listed in sort_artists.yaml
+#     (GUI shows the inverse as "Allow Files from Fav Artists": checked = false)
+#     true  = sort by ARTIST: their files go to the artist folder, not this tag folder
+#     false = sort by TAG:    their files stay in this tag folder (artist sort leaves them alone)
 rules:
   - rule_id: 00000000-0000-0000-0000-000000000001
     needed_tags: [yoshi]
@@ -38,7 +42,7 @@ rules:
     pool_ids: []
     target_directory: D:/Media/- Fav/Characters/Yoshi
     folder_name: ''
-    exclude_favorite_artists: true   # skip artists listed in sort_artists.yaml
+    exclude_favorite_artists: true   # true = sort by artist, false = sort by tag
     only_fav_directory: false        # only look in the favorites folder
     enabled: false
     match_all: false

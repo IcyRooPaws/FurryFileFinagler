@@ -15,6 +15,16 @@ Version numbers follow [Semantic Versioning](https://semver.org/):
 The version lives in `fff/__init__.py` (`fff --version` prints it). `pyproject.toml` reads it
 from there, and a test checks that the newest entry here matches it.
 
+## [1.35.0] - 2026-11-25
+
+### Changed
+- The tag-sort GUI's "Exclude Favourite Artists" checkbox is now "Allow Files from Fav
+  Artists", and works the other way round. Ticked means files from artists in
+  `sort_artists.yaml` stay in the tag folder. Unticked means they go to the artist's folder.
+  The old label didn't say which one sorted by artist. `tag_sorting.yaml` keeps the same
+  `exclude_favorite_artists` setting, so existing rules behave as before and just show the
+  opposite tick. `tag_sorting.example.yaml` now explains what `true` and `false` do.
+
 ## [1.34.1] - 2026-11-24
 
 ### Fixed

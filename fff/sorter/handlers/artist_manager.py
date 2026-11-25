@@ -138,8 +138,19 @@ class ArtistManager:
 
         return archive_dirs
 
-    def _get_tag_sort_exclude_dirs(self):
-        """Return tag sorting target directories that exclude favorite artists."""
+    def _sort_favorites_by_artist(self):
+        """Global tag_sorting.yaml choice: True = artist folder wins, False = tag folder wins."""
+        getter = getattr(self.config, "sort_favorite_artists_by_artist", None)
+        if not callable(getter):
+            return True
+        try:
+            return bool(getter())
+        except Exception as e:
+            logger.warning("Could not read sort_favorite_artists_by_artist: %s", e)
+            return True
+
+    def _get_tag_sort_rule_dirs(self):
+        """Return the destination directories of every enabled tag/pool sorting rule."""
         if not hasattr(self.config, "get_tag_sorting_rules"):
             return []
 
@@ -163,9 +174,6 @@ class ArtistManager:
             if not isinstance(rule, dict):
                 continue
 
-            if not rule.get("exclude_favorite_artists", False):
-                continue
-
             folder_name = rule.get("folder_name")
             target_dir = rule.get("target_directory")
 
@@ -186,6 +194,13 @@ class ArtistManager:
                 paths.append(c_dir)
 
         return paths
+
+    def _get_tag_sort_exclude_dirs(self):
+        """Tag-sort folders the artist scan should pull favourite artists out of.
+
+        All rule folders when favourite artists are sorted by artist, otherwise none.
+        """
+        return self._get_tag_sort_rule_dirs() if self._sort_favorites_by_artist() else []
 
     def _resolve_file_path_case_insensitive(self, file_path, file_name):
         """
@@ -281,57 +296,12 @@ class ArtistManager:
         return False
 
     def _get_tag_sort_include_dirs(self):
-        """Return tag sorting target directories that do NOT exclude favorite artists.
+        """Tag-sort folders the artist scan must skip.
 
-        These should be skipped during artist scans to honor the user's preference
-        to leave artist content in those tag-sort destinations.
+        All rule folders when favourite artists are sorted by tag (the user wants
+        their files to stay in those tag folders), otherwise none.
         """
-        if not hasattr(self.config, "get_tag_sorting_rules"):
-            return []
-
-        try:
-            rules = self.config.get_tag_sorting_rules() or []
-        except Exception as e:
-            logger.warning("Could not load tag sorting rules for include list: %s", e)
-            return []
-
-        base_dirs = {}
-        try:
-            if hasattr(self.config, "get_tag_sorting_base_dirs"):
-                base_dirs = self.config.get_tag_sorting_base_dirs() or {}
-        except Exception as e:
-            logger.warning("Could not load tag sorting base directories: %s", e)
-            base_dirs = {}
-
-        paths = []
-        seen = set()
-        for rule in rules:
-            if not isinstance(rule, dict):
-                continue
-
-            if rule.get("exclude_favorite_artists", False):
-                continue
-
-            folder_name = rule.get("folder_name")
-            target_dir = rule.get("target_directory")
-
-            candidate_dirs = []
-            if folder_name and base_dirs:
-                for base in base_dirs.values():
-                    if base:
-                        candidate_dirs.append(os.path.join(base, folder_name))
-
-            if not candidate_dirs and target_dir:
-                candidate_dirs.append(target_dir)
-
-            for c_dir in candidate_dirs:
-                abs_dir = os.path.abspath(c_dir)
-                if abs_dir in seen:
-                    continue
-                seen.add(abs_dir)
-                paths.append(c_dir)
-
-        return paths
+        return [] if self._sort_favorites_by_artist() else self._get_tag_sort_rule_dirs()
 
     def _load_favorite_artists(self):
         """Load favorite artists from artists.yaml.
@@ -417,8 +387,8 @@ class ArtistManager:
             if archived_fav_dir:
                 extra_exclude_dirs.append(normalize_path(os.path.abspath(archived_fav_dir)))
 
-            # Also exclude tag/pool sorting destinations that explicitly do NOT
-            # exclude favorite artists (exclude_favorite_artists=False) — the user
+            # Also exclude tag/pool sorting destinations when favourite artists are
+            # sorted by tag (sort_favorite_artists_by_artist=False) — the user
             # wants favorite-artist content to stay there rather than being pulled
             # into the artist folder. The filesystem-walk fallback already honors
             # this via _get_tag_sort_include_dirs(); the DB-backed path needs the
@@ -853,14 +823,14 @@ class ArtistManager:
         tag_exclude_dirs = self._get_tag_sort_exclude_dirs() or []
         tag_include_dirs = self._get_tag_sort_include_dirs() or []
         if tag_exclude_dirs:
-            print(f"[TAG] Tag-sort directories marked exclude_favorite_artists: {len(tag_exclude_dirs)}")
+            print(f"[TAG] Favourite artists sorted by ARTIST — tag-sort directories to scan: {len(tag_exclude_dirs)}")
             for d in tag_exclude_dirs:
                 print(f"   [TAG] {d}")
         else:
-            print("[TAG] No tag-sort directories with exclude_favorite_artists found")
+            print("[TAG] No tag-sort directories to scan for favourite artists")
 
         if tag_include_dirs:
-            print(f"[TAG] Tag-sort directories NOT excluding artists (will be skipped): {len(tag_include_dirs)}")
+            print(f"[TAG] Favourite artists sorted by TAG — tag-sort directories skipped: {len(tag_include_dirs)}")
             for d in tag_include_dirs:
                 print(f"   [TAG-SKIP] {d}")
 

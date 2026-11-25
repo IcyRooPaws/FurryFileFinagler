@@ -2213,7 +2213,9 @@ class RuleEditPanel(tk.Frame):
         p.columnconfigure(0, weight=1)
 
         self._enabled_var  = tk.BooleanVar(value=True)
-        self._exclfav_var  = tk.BooleanVar(value=True)
+        # Checkbox shows "Allow Files from Fav Artists" — the INVERSE of the
+        # stored exclude_favorite_artists flag (checked = exclude False).
+        self._exclfav_var  = tk.BooleanVar(value=False)
         self._onlyfav_var  = tk.BooleanVar(value=False)
 
         tk.Checkbutton(
@@ -2225,7 +2227,7 @@ class RuleEditPanel(tk.Frame):
             row=0, column=0, sticky='w', padx=16, pady=(16, 0))
 
         self._exclfav_ck = tk.Checkbutton(
-            p, text='Exclude Favourite Artists  (skip files handled by artist sorter)',
+            p, text='Allow Files from Fav Artists',
             variable=self._exclfav_var, command=self._on_field_changed,
             bg=BG_PANEL, fg=TEXT_COLOR, selectcolor=BG_SURFACE,
             activebackground=BG_PANEL, activeforeground=ACCENT,
@@ -2530,7 +2532,7 @@ class RuleEditPanel(tk.Frame):
 
         # ── Options ───────────────────────────────────────────────────────
         self._enabled_var.set(bool(rule.get('enabled', True)))
-        self._exclfav_var.set(bool(rule.get('exclude_favorite_artists', True)))
+        self._exclfav_var.set(not bool(rule.get('exclude_favorite_artists', True)))
         self._onlyfav_var.set(bool(rule.get('only_fav_directory', False)))
         self._special_var.set(rule.get('sort_group') == 'special')
         self._pool_var.set(rule.get('sort_group') == 'pool')
@@ -2656,7 +2658,7 @@ class RuleEditPanel(tk.Frame):
 
         rule['enabled'] = self._enabled_var.get()
         if depth == 0:
-            rule['exclude_favorite_artists'] = self._exclfav_var.get()
+            rule['exclude_favorite_artists'] = not self._exclfav_var.get()
             rule['only_fav_directory']       = self._onlyfav_var.get()
             if self._pool_var.get():
                 rule['sort_group'] = 'pool'

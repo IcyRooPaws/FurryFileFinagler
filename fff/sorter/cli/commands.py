@@ -2748,7 +2748,8 @@ class TagSortCommand(BaseCommand):
         parser.add_argument(
             '--exclude-favorite-artists',
             action='store_true',
-            help='Exclude posts from artists in artists.yaml'
+            help='Skip posts by artists in sort_artists.yaml (already the default when '
+                 'sort_favorite_artists_by_artist is true in tag_sorting.yaml)'
         )
         parser.add_argument(
             '--exclude-tags',
@@ -2825,7 +2826,8 @@ class TagSortCommand(BaseCommand):
                 destination_dir=args.target_dir,
                 source_dirs=args.source_dirs,
                 match_all=args.match_all,
-                exclude_favorite_artists=args.exclude_favorite_artists if hasattr(args, 'exclude_favorite_artists') else False,
+                exclude_favorite_artists=(getattr(args, 'exclude_favorite_artists', False)
+                                          or config.sort_favorite_artists_by_artist()),
                 exclude_tags=args.exclude_tags if hasattr(args, 'exclude_tags') and args.exclude_tags else [],
                 exclude_higher_priority_dirs=None,  # CLI doesn't use hierarchical priority
                 only_fav_directory=args.only_fav_directory if hasattr(args, 'only_fav_directory') else False,
@@ -2884,7 +2886,8 @@ class PoolSortCommand(BaseCommand):
         parser.add_argument(
             '--exclude-favorite-artists',
             action='store_true',
-            help='Exclude posts from artists in artists.yaml'
+            help='Skip posts by artists in sort_artists.yaml (already the default when '
+                 'sort_favorite_artists_by_artist is true in tag_sorting.yaml)'
         )
         parser.add_argument(
             '--exclude-tags',
@@ -2952,7 +2955,8 @@ class PoolSortCommand(BaseCommand):
                 pool_ids=args.pool_ids,
                 destination_dir=args.target_dir,
                 source_dirs=args.source_dirs,
-                exclude_favorite_artists=args.exclude_favorite_artists if hasattr(args, 'exclude_favorite_artists') else False,
+                exclude_favorite_artists=(getattr(args, 'exclude_favorite_artists', False)
+                                          or config.sort_favorite_artists_by_artist()),
                 exclude_tags=args.exclude_tags if hasattr(args, 'exclude_tags') and args.exclude_tags else [],
                 only_fav_directory=args.only_fav_directory if hasattr(args, 'only_fav_directory') else False,
                 dry_run=args.dry_run,
